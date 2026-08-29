@@ -18,7 +18,7 @@ def test_default_world_covers_required_shapes() -> None:
         "clean",
         "refund",
         "adjustment",
-        "split_bank_credit",
+        "immediate_bank_credit",
         "missing_bank_receipt",
         "incorrect_bank_amount",
         "cross_period_refund",
@@ -71,9 +71,25 @@ def test_bank_truth_contains_resolvable_and_exception_cases() -> None:
     world = generate_world(99)
     expectations = {case.bank_expectation for case in world.cases}
     assert BankExpectation.MATCHED in expectations
-    assert BankExpectation.SPLIT_MATCHED in expectations
     assert BankExpectation.MISSING in expectations
     assert BankExpectation.MISMATCHED in expectations
+
+
+def test_standard_settlement_bank_utrs_are_unique_transactions() -> None:
+    world = generate_world(100)
+    bank_entries = [entry for case in world.cases for entry in case.bank_entries]
+    utrs = [entry.utr for entry in bank_entries]
+    assert all(utr is not None for utr in utrs)
+    assert len(utrs) == len(set(utrs))
+
+
+def test_immediate_bank_credit_respects_exact_lower_causal_boundary() -> None:
+    world = generate_world(101)
+    case = next(case for case in world.cases if case.scenario == "immediate_bank_credit")
+    assert len(case.bank_entries) == 1
+    assert case.bank_entries[0].occurred_at == case.settlement.processed_at
+    assert case.bank_entries[0].utr == case.settlement.utr
+    assert case.bank_entries[0].amount == case.settlement.amount
 
 
 def test_same_amount_collision_really_collides() -> None:
