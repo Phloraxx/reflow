@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from types import MappingProxyType
 
 from .types import (
     AdjustmentId,
@@ -42,6 +44,34 @@ def _non_negative(value: int, field_name: str) -> None:
         raise TypeError(f"{field_name} must be int")
     if value < 0:
         raise ValueError(f"{field_name} must be non-negative")
+
+
+def _freeze_json_value(value: object) -> object:
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("source payload cannot contain NaN or infinity")
+        return value
+    if isinstance(value, Mapping):
+        frozen: dict[str, object] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise TypeError("source payload object keys must be strings")
+            frozen[key] = _freeze_json_value(item)
+        return MappingProxyType(frozen)
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_json_value(item) for item in value)
+    raise TypeError(
+        "source payload must contain only JSON-compatible scalar, object and array values"
+    )
+
+
+def _freeze_payload(payload: Mapping[str, object]) -> Mapping[str, object]:
+    frozen = _freeze_json_value(payload)
+    if not isinstance(frozen, Mapping):
+        raise TypeError("source payload must be a mapping")
+    return frozen
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +141,7 @@ class SourceEnvelope:
             raise ValueError("payload_sha256 must be hexadecimal") from exc
         if not self.schema_version:
             raise ValueError("schema_version cannot be empty")
+        object.__setattr__(self, "payload", _freeze_payload(self.payload))
 
 
 @dataclass(frozen=True, slots=True)
