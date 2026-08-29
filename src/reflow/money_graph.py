@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from . import domain, ingestion
+from . import domain, ingestion, payment_state
 
 type EdgeKey = tuple[str, str, str]
 
@@ -66,38 +66,47 @@ def build_money_graph(batch: ingestion.CanonicalBatch) -> MoneyGraph:
     nodes.update(settlement.id for settlement in batch.settlements)
     nodes.update(entry.id for entry in batch.bank_entries)
 
-    order_payment_evidence: dict[
-        tuple[domain.EntityId, domain.EntityId], list[str]
-    ] = {}
+    events_by_payment: dict[domain.PaymentId, list[domain.PaymentEvent]] = {}
     for event in batch.payment_events:
-        if event.order_id is None:
-            continue
-        key = (event.order_id, event.payment_id)
-        order_payment_evidence.setdefault(key, []).append(event.source_event_id)
+        events_by_payment.setdefault(event.payment_id, []).append(event)
 
     edges: list[domain.EvidenceEdge] = []
-    for (order_id, payment_id), evidence_ids in sorted(
-        order_payment_evidence.items(),
-        key=lambda item: (str(item[0][0]), str(item[0][1])),
-    ):
+    for state in payment_state.reduce_all_payments(batch.payment_events):
+        if state.order_id is None:
+            continue
+        nodes.add(state.order_id)
+        evidence_ids = tuple(
+            event.source_event_id
+            for event in events_by_payment[state.payment_id]
+            if event.order_id == state.order_id
+        )
         edges.append(
             _edge(
                 relationship="order_has_payment",
-                from_id=order_id,
-                to_id=payment_id,
-                evidence_ids=tuple(evidence_ids),
+                from_id=state.order_id,
+                to_id=state.payment_id,
+                evidence_ids=evidence_ids,
             )
         )
 
     for recon in sorted(batch.recon_entries, key=lambda row: str(row.id)):
         nodes.add(recon.entity_id)
+        nodes.add(recon.id)
         nodes.add(recon.settlement_id)
-        edges.append(
-            _edge(
-                relationship="movement_in_settlement",
-                from_id=recon.entity_id,
-                to_id=recon.settlement_id,
-                evidence_ids=(str(recon.id),),
+        edges.extend(
+            (
+                _edge(
+                    relationship="entity_has_recon_entry",
+                    from_id=recon.entity_id,
+                    to_id=recon.id,
+                    evidence_ids=(str(recon.id),),
+                ),
+                _edge(
+                    relationship="recon_entry_contributes_to_settlement",
+                    from_id=recon.id,
+                    to_id=recon.settlement_id,
+                    evidence_ids=(str(recon.id),),
+                ),
             )
         )
 
