@@ -139,9 +139,10 @@ def _prove_from_candidates(
             key=lambda row: str(row.id),
         )
     )
+    identity_ambiguous = settlement_utr_reused or bool(reused_bank_utr_entries)
     accepted_entries = (
         ()
-        if reused_bank_utr_entries
+        if identity_ambiguous
         else tuple(
             entry
             for entry in exact_utr_entries
@@ -163,7 +164,7 @@ def _prove_from_candidates(
     if early_entries:
         reason_codes.add("BANK_CREDIT_PRECEDES_SETTLEMENT")
 
-    if settlement_utr_reused or reused_bank_utr_entries or early_entries:
+    if identity_ambiguous or early_entries:
         status = BankReceiptStatus.CONTRADICTED
     elif settlement.utr is None:
         status = BankReceiptStatus.INCOMPLETE
