@@ -20,6 +20,8 @@ from reflow.domain import (
     Settlement,
     SettlementId,
     SettlementReconEntry,
+    SourceEnvelopeId,
+    SourceKind,
     TransferId,
 )
 from reflow.domain.types import EntityId
@@ -30,6 +32,20 @@ class AdapterError(ValueError):
     """Known source did not satisfy its declared deterministic contract."""
 
 
+type SourceIdentity = tuple[SourceKind, str]
+
+
+@dataclass(frozen=True, slots=True)
+class SourceLink:
+    source_kind: SourceKind
+    source_record_id: str
+    envelope_id: SourceEnvelopeId
+
+    @property
+    def identity(self) -> SourceIdentity:
+        return (self.source_kind, self.source_record_id)
+
+
 @dataclass(frozen=True, slots=True)
 class CanonicalBatch:
     orders: tuple[MerchantOrder, ...]
@@ -37,6 +53,64 @@ class CanonicalBatch:
     recon_entries: tuple[SettlementReconEntry, ...]
     settlements: tuple[Settlement, ...]
     bank_entries: tuple[BankEntry, ...]
+    source_links: tuple[SourceLink, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.source_links:
+            return
+
+        indexed: dict[SourceIdentity, SourceEnvelopeId] = {}
+        for link in self.source_links:
+            if link.identity in indexed:
+                raise ValueError(
+                    "canonical batch contains duplicate source provenance identity: "
+                    f"{link.source_kind.value}/{link.source_record_id}"
+                )
+            indexed[link.identity] = link.envelope_id
+
+        expected: set[SourceIdentity] = set()
+        expected.update((SourceKind.MERCHANT, str(row.id)) for row in self.orders)
+        expected.update(
+            (SourceKind.RAZORPAY_EVENT, row.source_event_id)
+            for row in self.payment_events
+        )
+        expected.update(
+            (SourceKind.RAZORPAY_RECON, str(row.id)) for row in self.recon_entries
+        )
+        expected.update(
+            (SourceKind.RAZORPAY_SETTLEMENT, str(row.id)) for row in self.settlements
+        )
+        expected.update((SourceKind.BANK, str(row.id)) for row in self.bank_entries)
+
+        actual = set(indexed)
+        missing = expected - actual
+        extra = actual - expected
+        if missing or extra:
+            detail: list[str] = []
+            if missing:
+                detail.append(
+                    "missing="
+                    + ",".join(
+                        f"{kind.value}/{record_id}"
+                        for kind, record_id in sorted(
+                            missing, key=lambda item: (item[0].value, item[1])
+                        )
+                    )
+                )
+            if extra:
+                detail.append(
+                    "extra="
+                    + ",".join(
+                        f"{kind.value}/{record_id}"
+                        for kind, record_id in sorted(
+                            extra, key=lambda item: (item[0].value, item[1])
+                        )
+                    )
+                )
+            raise ValueError("canonical source provenance mismatch: " + "; ".join(detail))
+
+    def source_index(self) -> dict[SourceIdentity, SourceEnvelopeId]:
+        return {link.identity: link.envelope_id for link in self.source_links}
 
 
 def _required(row: RawRecord, key: str) -> object:
