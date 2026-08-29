@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeAlias
 
-RawRecord: TypeAlias = dict[str, object]
+type RawRecord = dict[str, object]
 
 
 @dataclass(frozen=True, slots=True)
