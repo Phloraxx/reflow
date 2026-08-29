@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from itertools import permutations
 
@@ -46,6 +47,24 @@ def test_exact_duplicate_event_does_not_change_state() -> None:
     once = reduce_payment_events((captured,))
     twice = reduce_payment_events((captured, captured))
     assert once == twice
+
+
+def test_retry_with_later_local_received_at_is_still_idempotent() -> None:
+    captured = _event("evt_captured", PaymentEventKind.CAPTURED, 3)
+    retry = replace(captured, received_at=captured.received_at + timedelta(minutes=5))
+    once = reduce_payment_events((captured,))
+    retried = reduce_payment_events((retry, captured))
+    assert retried == once
+
+
+def test_late_delivery_does_not_change_event_time_truth() -> None:
+    created = _event("evt_created", PaymentEventKind.CREATED, 1)
+    captured = _event("evt_captured", PaymentEventKind.CAPTURED, 3)
+    delayed = replace(captured, received_at=captured.received_at + timedelta(days=2))
+    state = reduce_payment_events((delayed, created))
+    assert state.status is PaymentStatus.CAPTURED
+    assert state.last_occurred_at == captured.occurred_at
+    assert state.captured_at == captured.occurred_at
 
 
 def test_replay_is_pure_and_repeatable() -> None:
