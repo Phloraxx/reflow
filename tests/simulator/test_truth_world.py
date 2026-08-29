@@ -51,6 +51,23 @@ def test_cross_period_refund_targets_prior_payment_before_current_settlement() -
     assert refund.created_at <= case.settlement.processed_at
 
 
+def test_low_cardinality_world_keeps_cross_period_refund_settlement_positive() -> None:
+    config = WorldConfig(
+        settlement_count=1_000,
+        min_payments=1,
+        max_payments=1,
+        high_cardinality_payments=1,
+    )
+    world = generate_world(900, config)
+    world.validate()
+    assert len(world.cases) == 1_000
+    assert all(case.settlement.amount.amount_paise > 0 for case in world.cases)
+    for case in world.cases:
+        if case.scenario == "cross_period_refund":
+            assert case.refunds
+            assert case.settlement.amount.amount_paise >= 1
+
+
 def test_high_cardinality_case_is_real_not_label_only() -> None:
     config = WorldConfig(high_cardinality_payments=400)
     world = generate_world(7, config)
