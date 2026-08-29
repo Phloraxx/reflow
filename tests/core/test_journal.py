@@ -8,16 +8,22 @@ from reflow.journal import (
     InMemoryJournal,
     JournalConflictError,
     make_source_envelope,
+    payload_sha256,
 )
 
 NOW = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
 
 
-def _envelope(payload: dict[str, object], *, received_offset: int = 0):
+def _envelope(
+    payload: dict[str, object],
+    *,
+    occurred_offset: int = 0,
+    received_offset: int = 0,
+):
     return make_source_envelope(
         source_kind=SourceKind.RAZORPAY_EVENT,
         source_record_id="evt_1",
-        occurred_at=NOW,
+        occurred_at=NOW + timedelta(seconds=occurred_offset),
         received_at=NOW + timedelta(seconds=received_offset),
         schema_version="rzp-event-v1",
         payload=payload,
@@ -43,8 +49,26 @@ def test_same_source_identity_with_changed_payload_fails_closed() -> None:
     assert len(journal) == 1
 
 
+def test_same_payload_with_changed_source_occurrence_time_is_conflict() -> None:
+    journal = InMemoryJournal()
+    payload = {"payment_id": "pay_1", "status": "captured"}
+    journal.append(_envelope(payload))
+    with pytest.raises(JournalConflictError):
+        journal.append(_envelope(payload, occurred_offset=1, received_offset=1))
+
+
 def test_payload_hash_is_independent_of_mapping_key_order() -> None:
     first = _envelope({"a": 1, "b": 2})
     second = _envelope({"b": 2, "a": 1})
     assert first.payload_sha256 == second.payload_sha256
     assert first.id == second.id
+
+
+def test_frozen_nested_payload_can_be_rehashed_identically() -> None:
+    envelope = _envelope({"nested": {"a": 1}, "items": [{"b": 2}]})
+    assert payload_sha256(envelope.payload) == envelope.payload_sha256
+
+
+def test_nan_payload_is_rejected_as_non_deterministic_json() -> None:
+    with pytest.raises(TypeError):
+        _envelope({"value": float("nan")})
