@@ -187,14 +187,15 @@ def _validate_recon_signs(
     tax: int,
     effect: int,
 ) -> None:
+    """Validate the normalized synthetic fixture contract, not raw Razorpay Recon fields."""
     if fee < 0 or tax < 0:
         raise AdapterError("recon fee and tax must be non-negative")
     if kind is ReconEntityKind.PAYMENT:
         if gross <= 0 or effect != gross - fee - tax:
             raise AdapterError("payment recon sign/arithmetic invariant failed")
     elif kind is ReconEntityKind.REFUND:
-        if gross >= 0 or effect > 0:
-            raise AdapterError("refund recon must reduce settlement value")
+        if gross >= 0 or fee != 0 or tax != 0 or effect != gross:
+            raise AdapterError("refund recon sign/arithmetic invariant failed")
     elif fee != 0 or tax != 0 or effect != gross:
         raise AdapterError("transfer/adjustment recon must carry direct signed effect")
 
