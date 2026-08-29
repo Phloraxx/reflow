@@ -31,7 +31,7 @@ class BankReceiptProof:
     source_envelope_ids: tuple[domain.SourceEnvelopeId, ...]
     early_bank_entry_ids: tuple[domain.BankEntryId, ...]
     reused_bank_utr_ids: tuple[domain.BankEntryId, ...]
-    rejected_same_amount_ids: tuple[domain.BankEntryId, ...]
+    same_amount_nonidentity_count: int
     reason_codes: tuple[str, ...]
 
     def __post_init__(self) -> None:
@@ -41,6 +41,8 @@ class BankReceiptProof:
             raise ValueError("bank residual currency must match settlement")
         if self.residual != self.expected_amount - self.observed_bank_credit:
             raise ValueError("bank residual must equal settlement minus bank credit")
+        if self.same_amount_nonidentity_count < 0:
+            raise ValueError("same-amount non-identity count cannot be negative")
         if not self.source_envelope_ids:
             raise ValueError("bank proof must cite raw source envelopes")
         if self.status is BankReceiptStatus.PROVEN:
@@ -55,6 +57,7 @@ class BankReceiptProof:
 
 
 type BankPayload = tuple[int, str, str, str, str | None]
+type AmountKey = tuple[int, str]
 
 
 def _bank_payload(entry: domain.BankEntry) -> BankPayload:
@@ -65,6 +68,10 @@ def _bank_payload(entry: domain.BankEntry) -> BankPayload:
         entry.narration,
         entry.utr,
     )
+
+
+def _amount_key(money: domain.Money) -> AmountKey:
+    return (money.amount_paise, money.currency.value)
 
 
 def _deduplicate_bank_entries(
@@ -99,8 +106,8 @@ def _require_source_envelope(
 def _prove_from_candidates(
     settlement: domain.Settlement,
     exact_utr_entries: tuple[domain.BankEntry, ...],
-    rejected_same_amount_entries: tuple[domain.BankEntry, ...],
     *,
+    same_amount_nonidentity_count: int,
     source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
     settlement_utr_reused: bool,
 ) -> BankReceiptProof:
@@ -111,7 +118,7 @@ def _prove_from_candidates(
     )
 
     source_envelope_ids: set[domain.SourceEnvelopeId] = {settlement_source_id}
-    for entry in (*exact_utr_entries, *rejected_same_amount_entries):
+    for entry in exact_utr_entries:
         source_envelope_ids.add(
             _require_source_envelope(
                 source_index,
@@ -169,12 +176,12 @@ def _prove_from_candidates(
     elif settlement.utr is None:
         status = BankReceiptStatus.INCOMPLETE
         reason_codes.add("SETTLEMENT_UTR_MISSING")
-        if rejected_same_amount_entries:
+        if same_amount_nonidentity_count:
             reason_codes.add("SAME_AMOUNT_NOT_IDENTITY")
     elif not exact_utr_entries:
         status = BankReceiptStatus.WAITING
         reason_codes.add("BANK_RECEIPT_NOT_OBSERVED")
-        if rejected_same_amount_entries:
+        if same_amount_nonidentity_count:
             reason_codes.add("SAME_AMOUNT_NOT_IDENTITY")
     elif residual.is_zero:
         status = BankReceiptStatus.PROVEN
@@ -193,9 +200,7 @@ def _prove_from_candidates(
         source_envelope_ids=tuple(sorted(source_envelope_ids, key=str)),
         early_bank_entry_ids=tuple(entry.id for entry in early_entries),
         reused_bank_utr_ids=tuple(entry.id for entry in reused_bank_utr_entries),
-        rejected_same_amount_ids=tuple(
-            sorted((entry.id for entry in rejected_same_amount_entries), key=str)
-        ),
+        same_amount_nonidentity_count=same_amount_nonidentity_count,
         reason_codes=tuple(sorted(reason_codes)),
     )
 
@@ -215,17 +220,15 @@ def prove_bank_receipt(
         else tuple(entry for entry in unique_bank_entries if entry.utr == settlement.utr)
     )
     exact_ids = {entry.id for entry in exact_utr_entries}
-    rejected_same_amount_entries = tuple(
-        entry
+    same_amount_nonidentity_count = sum(
+        1
         for entry in unique_bank_entries
-        if entry.id not in exact_ids
-        and entry.amount == settlement.amount
-        and entry.occurred_at >= settlement.processed_at
+        if entry.id not in exact_ids and entry.amount == settlement.amount
     )
     return _prove_from_candidates(
         settlement,
         exact_utr_entries,
-        rejected_same_amount_entries,
+        same_amount_nonidentity_count=same_amount_nonidentity_count,
         source_index=source_index,
         settlement_utr_reused=settlement_utr_reused,
     )
@@ -251,13 +254,12 @@ def prove_all_bank_receipts(batch: CanonicalBatch) -> tuple[BankReceiptProof, ..
 
     bank_entries = _deduplicate_bank_entries(batch.bank_entries)
     bank_by_utr: dict[str, list[domain.BankEntry]] = {}
-    bank_by_amount: dict[tuple[int, str], list[domain.BankEntry]] = {}
+    bank_amount_counts: dict[AmountKey, int] = {}
     for entry in bank_entries:
         if entry.utr is not None:
             bank_by_utr.setdefault(entry.utr, []).append(entry)
-        bank_by_amount.setdefault(
-            (entry.amount.amount_paise, entry.amount.currency.value), []
-        ).append(entry)
+        key = _amount_key(entry.amount)
+        bank_amount_counts[key] = bank_amount_counts.get(key, 0) + 1
 
     proofs: list[BankReceiptProof] = []
     for settlement_id in sorted(settlements, key=str):
@@ -267,20 +269,19 @@ def prove_all_bank_receipts(batch: CanonicalBatch) -> tuple[BankReceiptProof, ..
             if settlement.utr is None
             else tuple(bank_by_utr.get(settlement.utr, ()))
         )
-        exact_ids = {entry.id for entry in exact_entries}
-        same_amount_entries = tuple(
-            entry
-            for entry in bank_by_amount.get(
-                (settlement.amount.amount_paise, settlement.amount.currency.value),
-                (),
-            )
-            if entry.id not in exact_ids and entry.occurred_at >= settlement.processed_at
+        exact_same_amount_count = sum(
+            1 for entry in exact_entries if entry.amount == settlement.amount
+        )
+        same_amount_nonidentity_count = max(
+            0,
+            bank_amount_counts.get(_amount_key(settlement.amount), 0)
+            - exact_same_amount_count,
         )
         proofs.append(
             _prove_from_candidates(
                 settlement,
                 exact_entries,
-                same_amount_entries,
+                same_amount_nonidentity_count=same_amount_nonidentity_count,
                 source_index=source_index,
                 settlement_utr_reused=(
                     settlement.utr is not None and settlement.utr in reused_utrs
