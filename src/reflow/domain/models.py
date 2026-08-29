@@ -120,17 +120,16 @@ class SourceEnvelope:
     id: SourceEnvelopeId
     source_kind: SourceKind
     source_record_id: str
-    occurred_at: datetime
+    occurred_at: datetime | None
     received_at: datetime
     payload_sha256: str
     schema_version: str
     payload: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        _aware(self.occurred_at, "occurred_at")
+        if self.occurred_at is not None:
+            _aware(self.occurred_at, "occurred_at")
         _aware(self.received_at, "received_at")
-        if self.received_at < self.occurred_at:
-            raise ValueError("received_at cannot precede occurred_at")
         if not self.source_record_id:
             raise ValueError("source_record_id cannot be empty")
         if len(self.payload_sha256) != 64:
