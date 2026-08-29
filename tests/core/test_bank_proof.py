@@ -42,7 +42,7 @@ def _proofs(seed: int, *corruptions: CorruptionKind):
     return batch, journal, prove_all_bank_receipts(batch)
 
 
-def test_clean_world_matches_expected_bank_truth_without_using_hidden_truth_in_engine() -> None:
+def test_clean_world_matches_gate_8_supported_bank_semantics() -> None:
     seed = 101
     world = generate_world(seed)
     batch, _, proofs = _proofs(seed)
@@ -59,23 +59,30 @@ def test_clean_world_matches_expected_bank_truth_without_using_hidden_truth_in_e
             assert proof.status is BankReceiptStatus.RESIDUAL
             assert proof.residual.amount_paise == 137
             assert proof.reason_codes == ("BANK_AMOUNT_MISMATCH",)
+        elif case.scenario == "split_bank_credit":
+            # Legacy simulator shape: multiple distinct bank transactions reuse one UTR.
+            # Gate 8 deliberately rejects this until Instant Settlement payout evidence
+            # (parent setlod -> setlodp payout -> payout UTR) is modeled explicitly.
+            assert proof.status is BankReceiptStatus.CONTRADICTED
+            assert proof.reason_codes == ("BANK_UTR_REUSED_ACROSS_ENTRIES",)
         else:
             assert proof.status is BankReceiptStatus.PROVEN
             assert proof.residual.is_zero
             assert proof.reason_codes == ()
 
 
-def test_split_bank_credit_is_proven_only_by_shared_exact_utr_and_exact_sum() -> None:
+def test_multiple_distinct_bank_entries_sharing_standard_settlement_utr_are_contradicted() -> None:
     seed = 102
     world = generate_world(seed)
     _, _, proofs = _proofs(seed)
     case = next(case for case in world.cases if case.scenario == "split_bank_credit")
     proof = next(proof for proof in proofs if proof.settlement_id == case.settlement.id)
 
-    assert proof.status is BankReceiptStatus.PROVEN
-    assert proof.is_split_credit
-    assert set(proof.bank_entry_ids) == {entry.id for entry in case.bank_entries}
-    assert proof.observed_bank_credit == case.settlement.amount
+    assert proof.status is BankReceiptStatus.CONTRADICTED
+    assert proof.bank_entry_ids == ()
+    assert set(proof.reused_bank_utr_ids) == {entry.id for entry in case.bank_entries}
+    assert proof.observed_bank_credit.is_zero
+    assert proof.reason_codes == ("BANK_UTR_REUSED_ACROSS_ENTRIES",)
 
 
 def test_bank_proof_source_envelopes_resolve_to_raw_journal() -> None:
@@ -88,7 +95,11 @@ def test_bank_proof_source_envelopes_resolve_to_raw_journal() -> None:
         assert source_index[(SourceKind.RAZORPAY_SETTLEMENT, str(proof.settlement_id))] in (
             proof.source_envelope_ids
         )
-        for bank_entry_id in (*proof.bank_entry_ids, *proof.early_bank_entry_ids):
+        for bank_entry_id in (
+            *proof.bank_entry_ids,
+            *proof.early_bank_entry_ids,
+            *proof.reused_bank_utr_ids,
+        ):
             assert source_index[(SourceKind.BANK, str(bank_entry_id))] in (
                 proof.source_envelope_ids
             )
@@ -331,24 +342,31 @@ def test_same_amount_settlements_remain_independent_by_utr() -> None:
     )
 
 
-def test_gate_8_handles_hundreds_of_settlements_without_changing_semantics() -> None:
+def test_gate_8_handles_hundreds_of_settlements_without_cross_partition_matching() -> None:
     config = WorldConfig(
         settlement_count=200,
         min_payments=2,
         max_payments=3,
         high_cardinality_payments=3,
     )
-    observed = _observed(116, config=config)
+    world = generate_world(116, config)
+    observed = observe_world(
+        world,
+        seed=2116,
+        plan=CorruptionPlan(kinds=()),
+    ).observed
     batch, _ = _ingest(observed)
     proofs = prove_all_bank_receipts(batch)
+    by_id = {proof.settlement_id: proof for proof in proofs}
 
     assert len(proofs) == 200
-    assert all(
-        proof.status
-        in {
-            BankReceiptStatus.PROVEN,
-            BankReceiptStatus.WAITING,
-            BankReceiptStatus.RESIDUAL,
-        }
-        for proof in proofs
-    )
+    for case in world.cases:
+        proof = by_id[case.settlement.id]
+        if case.scenario == "missing_bank_receipt":
+            assert proof.status is BankReceiptStatus.WAITING
+        elif case.scenario == "incorrect_bank_amount":
+            assert proof.status is BankReceiptStatus.RESIDUAL
+        elif case.scenario == "split_bank_credit":
+            assert proof.status is BankReceiptStatus.CONTRADICTED
+        else:
+            assert proof.status is BankReceiptStatus.PROVEN
