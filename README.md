@@ -4,28 +4,26 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: research and architecture. Implementation has intentionally not started yet.**
+> **Current phase: deterministic foundation audited through Gates 0–6; settlement and bank proof engines are next.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
-It compiles messy merchant, Razorpay and bank evidence into a canonical temporal **Money Graph**, reconstructs how payments/refunds/transfers/adjustments compose into settlements, proves the bank receipt, and emits a machine-verifiable **Reconciliation Proof**. Anything it cannot prove becomes an explicit residual or exception.
+It is being built to compile messy merchant, Razorpay and bank evidence into a temporal **Money Graph**, prove how payments/refunds/transfers/adjustments compose into settlements, prove the bank receipt independently, and emit a machine-verifiable **Reconciliation Proof**. Anything the deterministic engine cannot prove becomes a residual, contradiction, ambiguity or exception.
 
-AI has two meaningful but bounded jobs:
+AI has two planned, bounded jobs:
 
-1. **Source Adapter Synthesizer** — understands unfamiliar financial exports and proposes a constrained adapter that must compile and pass deterministic financial tests before activation.
-2. **Exception Investigation Agent** — uses read-only evidence tools to investigate unresolved cases and propose the next safe step.
+1. **Source Adapter Synthesizer** — understand unfamiliar financial exports and propose a constrained adapter that must compile and pass deterministic financial tests before activation.
+2. **Exception Investigation Agent** — use read-only evidence/proof tools to investigate unresolved cases and propose the next safe step.
 
-**The LLM never decides whether money reconciles.**
+**The LLM never decides whether money reconciles.** Neither AI layer has been added yet.
 
 ---
 
 ## Why this project
 
-Razorpay's Track 04 asks builders to close one finance-ops loop across a **50+ record synthetic batch** and report match rate, throughput, measured accuracy and the exceptions that could not be resolved.
+A simplistic reconciliation implementation matches one gateway row to one bank row. ReFlow deliberately targets a harder shape: one settlement can be composed from many economic movements before one or more bank-side credits appear.
 
-A simplistic implementation can match one gateway row to one bank row. ReFlow deliberately targets the harder financial shape present in Razorpay's own Settlement Recon model: settlements can contain many payments, refunds, transfers and adjustments with fees/tax before one or more bank-side credits appear.
-
-The core question is therefore not:
+The core question is not:
 
 > “Which row looks similar?”
 
@@ -35,58 +33,82 @@ It is:
 
 ---
 
-## Research conclusion
-
-The research phase changed the design substantially.
-
-ReFlow is **not**:
-
-- a chatbot over settlement CSVs;
-- an LLM that guesses row matches;
-- a screenshot/UTR matcher;
-- a generic “agent decides, rule engine approves” demo.
-
-Its differentiating systems primitives are:
-
-- **Money Graph** — economic movements and evidence relationships instead of flat row pairs;
-- **Reconciliation Proofs** — machine-checkable amount/identity/provenance evidence for every green result;
-- **Residual Solver** — investigates exact unexplained value rather than blindly increasing fuzzy-match thresholds;
-- **Temporal Truth** — preserves what was known when and versions proofs as late events arrive;
-- **Source Adapter Compiler** — AI understands unknown schemas once; deterministic compiled adapters handle runtime data;
-- **Schema Drift Watchdog** — unsafe source changes are quarantined before corrupting reconciliation;
-- **Exception Fingerprints** — repeated exceptions become systemic incidents instead of thousands of independent tickets;
-- **Proof-carrying AI** — every AI hypothesis must cite actual evidence objects and cannot create financial facts.
-
----
-
-## System shape
+## Current deterministic pipeline
 
 ```mermaid
 flowchart LR
-  A[Merchant / ERP files] --> C[Source Adapter Layer]
-  B[Razorpay events + recon + settlements] --> C
-  D[Bank files/feed] --> C
+  A[Merchant / ERP evidence] --> J[(Append-only Raw Evidence Journal)]
+  B[Razorpay evidence] --> J
+  C[Bank evidence] --> J
 
-  C --> J[(Immutable Canonical Journal)]
-  J --> T[Temporal Payment Reducer]
-  T --> G[Money Graph]
-  J --> G
+  J --> D[Deterministic Source Adapters]
+  D --> E[Canonical Financial Objects]
+  E --> T[Temporal Payment Reducer]
+  E --> G[Money Graph]
+  T --> G
 
-  G --> S[Settlement Composition Proof]
-  S --> K[Bank Receipt Proof]
+  G --> S[Settlement Composition Proof - next]
+  S --> K[Bank Receipt Proof - next]
   K --> P{Reconciliation Proof}
 
   P -->|proven| R[PROVEN]
-  P -->|residual / contradiction / ambiguity| E[Exception]
+  P -->|residual / contradiction / ambiguity| X[Exception]
 
-  E --> AI[Bounded Investigation Agent]
-  AI --> V[Deterministic Proposal Validator]
-  V --> P
-
-  U[Unknown Source] --> AS[AI Adapter Synthesizer]
-  AS --> AC[Adapter Compiler + Tests]
-  AC --> C
+  X -. later .-> AI[Bounded Investigation Agent]
+  U[Unknown Source] -. later .-> AS[AI Adapter Synthesizer]
 ```
+
+Raw evidence is journaled **before** canonicalization. This is intentional: malformed evidence must remain auditable even when the deterministic adapter rejects it.
+
+---
+
+## What exists today
+
+### Gates 0–3 — merged foundation
+
+- repository engineering constitution;
+- one-command validation and GitHub Actions CI;
+- signed integer-paise money contracts;
+- strongly typed financial IDs;
+- timezone-aware canonical event models;
+- hidden synthetic financial-world generator;
+- adversarial observation corruption;
+- explicit separation of hidden truth from candidate observations.
+
+### Gates 4–6 — current audited checkpoint
+
+- fail-closed adapters for the **normalized synthetic/known fixture schemas**;
+- append-only raw source envelopes with deterministic hashes and deep payload immutability;
+- journal-first ingestion, including retention of malformed rows before adapter failure;
+- idempotent source replay;
+- pure payment-state reconstruction independent of delivery order;
+- safe handling of `failed → captured` evidence;
+- retry deduplication that separates provider facts from local receive time;
+- Money Graph edges built only from deterministic evidence;
+- recon entries as first-class provenance nodes;
+- graph edge precision/recall tests against hidden truth;
+- duplicate recon evidence visible to the benchmark rather than silently collapsed.
+
+The audit that followed the first Gate 6 implementation found real defects in temporal truth, immutability, retry semantics, graph scoring and adapter validation. Those failures and their regression tests are preserved in [`FAILURE_LOG.md`](FAILURE_LOG.md).
+
+---
+
+## Important source boundary
+
+The current Phase 4 recon adapter consumes a **normalized synthetic schema** containing fields such as:
+
+```text
+gross_amount_paise
+fee_paise
+tax_paise
+settlement_effect_paise
+```
+
+It is **not** the final production Razorpay Settlement Recon adapter.
+
+The real Razorpay integration phase must normalize Razorpay's authoritative Recon fields such as `debit`, `credit`, `amount`, `fee` and `tax` using fixture-tested source semantics. Synthetic formulas are not allowed to masquerade as production API semantics.
+
+See [`LIMITATIONS.md`](LIMITATIONS.md) for the exact non-claims.
 
 ---
 
@@ -95,73 +117,94 @@ flowchart LR
 - Money is signed **integer paise**, never float.
 - Currency and amount unit are explicit.
 - Raw source evidence is append-only and provenance is preserved.
-- Webhook/event ingestion is idempotent and order-safe.
-- `payment.failed → payment.captured` is treated as a real event sequence, not an impossible state.
-- Settlement arithmetic is deterministic.
+- A malformed source row is retained even when canonicalization fails.
+- Duplicate/retried delivery cannot duplicate economic value.
+- Arrival order cannot silently define final payment truth.
+- `payment.failed → payment.captured` is a valid evidence sequence.
+- Settlement composition arithmetic is deterministic.
 - Settlement processing and bank receipt are separate facts.
-- UTR/ID evidence outranks fuzzy similarity.
-- A zero residual does not prove identity by itself.
-- Ambiguity fails closed into review.
-- Unknown source unit/sign semantics quarantine the batch.
-- AI receives finite read-only tools and cannot mutate financial truth.
-- Any AI-proposed resolution must pass the proof engine again.
-- The core batch works without an LLM or external model API.
-
----
-
-## Small data and large data use the same truth model
-
-### Small merchant
-
-```text
-Drop 3 ugly files
-→ ReFlow maps the formats
-→ deterministic validation
-→ reconcile
-→ inspect 2–3 exceptions
-→ export proof
-```
-
-### High-volume operator
-
-```text
-continuous events + batch feeds
-→ approved versioned adapters
-→ partitioned/indexed reconciliation
-→ cheap exact proof path for normal cases
-→ residual/AI work only on exception frontier
-→ cluster systemic incidents
-```
-
-The implementation scales by changing execution strategy, **not by changing financial semantics**.
+- UTR/authoritative IDs outrank fuzzy similarity.
+- A zero residual is necessary but never sufficient proof of identity.
+- Ambiguity fails closed.
+- Unknown source unit/sign semantics quarantine the evidence rather than guess.
+- Hidden simulator truth cannot be imported by production/reconciliation modules.
+- AI cannot mutate financial truth or independently mark a settlement reconciled.
 
 ---
 
 ## Evaluation before claims
 
-No benchmark result is claimed yet.
+**No final benchmark result is claimed yet.**
 
-The planned evaluation creates a hidden financial world and separately generates imperfect observations. Ground truth is unavailable to the candidate reconciliation pipeline and AI agent.
+The evaluation design generates an authoritative hidden financial world and separately generates imperfect observations. Candidate reconciliation code receives only the observed side.
 
-Adversarial cases include:
+Implemented adversarial shapes already include:
 
-- duplicate and out-of-order webhooks;
-- late `payment.failed → payment.captured` transitions;
-- refunds, adjustments and cross-period movements;
-- missing/wrong recon components;
-- settlement processed before bank credit;
-- missing/split bank credits;
+- duplicate and reordered webhooks;
+- delayed webhooks;
+- `failed → captured` evidence;
+- dropped events;
+- refunds and cross-period refunds;
+- transfers and adjustments;
+- missing, duplicate and wrong recon rows;
+- missing, delayed, split and incorrect bank credits;
 - same-amount settlement collisions;
-- exact UTR with wrong amount;
-- malformed and drifting source schemas;
-- rupee/paise and debit/credit sign traps;
-- prompt-like narration;
-- AI hallucinated evidence;
-- model/source outage.
+- UTR removal/corruption;
+- malformed dates and schema drift;
+- rupee/paise and sign traps;
+- prompt-like bank narration;
+- partial source outages;
+- high-cardinality settlement cases.
 
-The safety metric we care about most is **silent false auto-match rate**. A confident wrong financial match is worse than an explicit unresolved case.
+The safety metric that matters most is **silent false auto-match rate**. A confident wrong financial match is worse than an explicit unresolved case.
 
-Planned benchmark sizes include the Buildathon minimum and progressively larger runs; scale claims will only be published after reproducible measurement with hardware/runtime disclosure.
+Final match-rate, accuracy, throughput and scale numbers will only be published after the checked-in held-out evaluation harness exists.
+
+---
+
+## Next implementation gates
+
+### Phase 7 — Settlement Composition Proof
+
+For each settlement:
+
+- collect authoritative recon rows;
+- validate row identity and canonical signs;
+- detect duplicate economic evidence;
+- calculate exact net composition;
+- compare it to the settlement entity;
+- emit an exact component proof or residual.
+
+### Phase 8 — Bank Receipt Proof
+
+Bank identity will be conservative. Exact UTR plus exact amount and valid source/time constraints can prove a normal bank receipt. Same amount plus approximate date cannot.
+
+Split-credit support must require evidence binding all component bank rows to the settlement.
+
+### Phase 9 — Full Proof + versioning
+
+Composition proof and bank proof become independent fragments of a versioned full reconciliation proof. Late evidence must reopen only affected proof fragments while preserving the old version.
+
+Only after those gates pass do baseline benchmarking, AI adapter synthesis, AI exception investigation and UI work begin.
+
+---
+
+## Commands
+
+```bash
+python -m pip install -e '.[dev]'
+make check
+```
+
+Equivalent explicit checks:
+
+```bash
+python -m ruff check .
+python -m mypy src
+python -m pytest
+```
+
+CI runs the same validation path.
 
 ---
 
@@ -169,47 +212,31 @@ Planned benchmark sizes include the Buildathon minimum and progressively larger 
 
 ### Foundation
 
-- [`docs/01_BUILDATHON_BRIEF.md`](docs/01_BUILDATHON_BRIEF.md) — official challenge bar and success criteria
+- [`docs/01_BUILDATHON_BRIEF.md`](docs/01_BUILDATHON_BRIEF.md) — challenge bar and success criteria
 - [`docs/02_RAZORPAY_RESEARCH.md`](docs/02_RAZORPAY_RESEARCH.md) — settlement, recon, webhook and AI-platform research
-- [`docs/03_COMPETITIVE_ANALYSIS.md`](docs/03_COMPETITIVE_ANALYSIS.md) — why we selected Track 04 after inspecting the public field
+- [`docs/03_COMPETITIVE_ANALYSIS.md`](docs/03_COMPETITIVE_ANALYSIS.md) — track decision and competitive scan
 - [`docs/04_PRODUCT_SPEC.md`](docs/04_PRODUCT_SPEC.md) — original product scope and domain objects
-- [`docs/05_ARCHITECTURE.md`](docs/05_ARCHITECTURE.md) — evidence-first base architecture
-- [`docs/06_EVALUATION_PLAN.md`](docs/06_EVALUATION_PLAN.md) — initial adversarial evaluation protocol
+- [`docs/05_ARCHITECTURE.md`](docs/05_ARCHITECTURE.md) — original evidence-first architecture
+- [`docs/06_EVALUATION_PLAN.md`](docs/06_EVALUATION_PLAN.md) — adversarial evaluation protocol
 - [`docs/07_FAILURE_SAFETY_MODEL.md`](docs/07_FAILURE_SAFETY_MODEL.md) — failure taxonomy and guard boundaries
-- [`docs/08_EXECUTION_ROADMAP.md`](docs/08_EXECUTION_ROADMAP.md) — initial gated roadmap
-- [`docs/09_DEMO_SUBMISSION_PLAN.md`](docs/09_DEMO_SUBMISSION_PLAN.md) — five-minute pitch and review questions
+- [`docs/08_EXECUTION_ROADMAP.md`](docs/08_EXECUTION_ROADMAP.md) — gated roadmap
+- [`docs/09_DEMO_SUBMISSION_PLAN.md`](docs/09_DEMO_SUBMISSION_PLAN.md) — pitch and review questions
 
-### Second research pass — current direction
+### Current direction
 
-- [`docs/10_FINANCE_OPS_PROBLEM_LANDSCAPE.md`](docs/10_FINANCE_OPS_PROBLEM_LANDSCAPE.md) — merchant/institution pain points, low/high-volume failure modes
-- [`docs/11_NOVEL_PRODUCT_THESIS.md`](docs/11_NOVEL_PRODUCT_THESIS.md) — finance-compiler thesis and novel product primitives
-- [`docs/12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](docs/12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md) — formal proof/evidence/residual model
-- [`docs/13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](docs/13_MESSY_DATA_AND_CONNECTOR_COMPILER.md) — safe AI-assisted schema understanding and drift handling
-- [`docs/14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](docs/14_SCALE_PERFORMANCE_AND_RESILIENCE.md) — one correctness model from small files to high-volume processing
-- [`docs/15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](docs/15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — direct mapping to Buildathon page and actual submission form
-- [`docs/16_MASTER_BUILD_PLAN.md`](docs/16_MASTER_BUILD_PLAN.md) — **current implementation contract; start here before coding**
-- [`docs/17_RESEARCH_SOURCEBOOK.md`](docs/17_RESEARCH_SOURCEBOOK.md) — primary sources and the exact design implications taken from them
+- [`docs/10_FINANCE_OPS_PROBLEM_LANDSCAPE.md`](docs/10_FINANCE_OPS_PROBLEM_LANDSCAPE.md)
+- [`docs/11_NOVEL_PRODUCT_THESIS.md`](docs/11_NOVEL_PRODUCT_THESIS.md)
+- [`docs/12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](docs/12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md)
+- [`docs/13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](docs/13_MESSY_DATA_AND_CONNECTOR_COMPILER.md)
+- [`docs/14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](docs/14_SCALE_PERFORMANCE_AND_RESILIENCE.md)
+- [`docs/15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](docs/15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md)
+- [`docs/16_MASTER_BUILD_PLAN.md`](docs/16_MASTER_BUILD_PLAN.md) — implementation contract
+- [`docs/17_RESEARCH_SOURCEBOOK.md`](docs/17_RESEARCH_SOURCEBOOK.md)
 
 ### Honesty / review artifacts
 
-- [`FAILURE_LOG.md`](FAILURE_LOG.md) — real technical failures and fixes as implementation progresses
-- [`LIMITATIONS.md`](LIMITATIONS.md) — known limitations and explicit non-claims
-
----
-
-## Key research findings
-
-- Razorpay Settlement Recon exposes settled `payment`, `refund`, `transfer` and `adjustment` movements, supporting a many-to-one settlement model.
-- Razorpay webhooks use at-least-once delivery and may arrive out of order.
-- Razorpay explicitly documents a possible `payment.failed` → `payment.captured` sequence for the same transaction.
-- `settlement.processed` is not identical to “bank credit already visible”; UTR is used to reconcile settlement to bank evidence.
-- Instant/Smart Settlement paths can produce different bank-credit shapes, so the domain should not permanently assume one settlement equals one bank row.
-- Razorpay's own Agentic Platform already markets screenshot/UTR-assisted reconciliation, so that is not our novelty.
-- Razorpay Agent Studio emphasizes verified first-party data, bounded permissions, independent validation and audit trails.
-- Razorpay Engineering's current eval philosophy emphasizes bespoke system-level evals, reproducibility, safe failure and model optionality.
-- Swift's payments research reinforces that a small percentage of exceptions can consume disproportionate operations effort, which supports ReFlow's exception-frontier design.
-
-See the sourcebook for links and boundaries around these claims.
+- [`FAILURE_LOG.md`](FAILURE_LOG.md) — genuine implementation failures and fixes
+- [`LIMITATIONS.md`](LIMITATIONS.md) — current limitations and explicit non-claims
 
 ---
 
@@ -217,42 +244,40 @@ See the sourcebook for links and boundaries around these claims.
 
 ### Research / planning
 
-- [x] Competition research
-- [x] Actual application-form research
+- [x] competition and application-form research
 - [x] Razorpay domain/API research
-- [x] Current Razorpay AI/product-direction research
-- [x] Competitive scan
-- [x] Finance-ops industry problem research
-- [x] Track decision
-- [x] Novel product thesis
+- [x] competitive and finance-ops research
+- [x] Track 04 decision
+- [x] financial-truth-compiler thesis
 - [x] Money Graph / proof protocol
-- [x] Messy data / connector compiler plan
-- [x] scale / resilience plan
+- [x] connector compiler and safety model
 - [x] evaluation strategy
-- [x] judging strategy
 - [x] master implementation plan
-- [x] failure/limitations scaffolding
 
-### Implementation
+### Deterministic implementation
 
-- [ ] repository engineering constitution / CI
-- [ ] financial domain contracts
-- [ ] synthetic hidden world
-- [ ] observation corruption engine
-- [ ] deterministic known-source adapters
-- [ ] immutable journal
-- [ ] temporal payment reducer
-- [ ] Money Graph
+- [x] repository engineering constitution / CI
+- [x] financial domain contracts
+- [x] synthetic hidden world
+- [x] observation corruption engine
+- [x] normalized deterministic known-source adapters
+- [x] append-only raw evidence journal
+- [x] journal-first ingestion
+- [x] temporal payment reducer
+- [x] provenance-preserving Money Graph
 - [ ] settlement composition proofs
 - [ ] bank receipt proofs
-- [ ] proof versioning
+- [ ] full proof versioning
 - [ ] residual solver
 - [ ] baseline evaluation harness
-- [ ] Source Adapter Synthesizer
-- [ ] Exception Investigation Agent
 - [ ] exception fingerprinting
 - [ ] scale benchmark
-- [ ] Razorpay Test Mode adapter/demo evidence
+- [ ] real Razorpay Test Mode / Settlement Recon adapter evidence
+
+### AI / product surface
+
+- [ ] Source Adapter Synthesizer
+- [ ] Exception Investigation Agent
 - [ ] operator UI
 - [ ] failure campaign
 - [ ] final benchmark
@@ -261,8 +286,8 @@ See the sourcebook for links and boundaries around these claims.
 
 ---
 
-## Research rule
+## Engineering rule
 
-If implementation evidence contradicts this plan, **the plan changes**.
+If implementation evidence contradicts the design, **the design changes**.
 
-We will not preserve an attractive architecture, AI feature or benchmark claim after testing proves it wrong.
+ReFlow will not preserve an attractive architecture, AI feature or benchmark claim after testing proves it wrong.

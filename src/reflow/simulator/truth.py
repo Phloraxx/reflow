@@ -84,18 +84,26 @@ class HiddenWorld:
 
     def validate(self) -> None:
         settlement_ids: set[SettlementId] = set()
+        settlement_utrs: set[str] = set()
         order_ids: set[OrderId] = set()
         payment_ids: set[PaymentId] = set()
+        event_ids: set[str] = set()
         refund_ids: set[RefundId] = set()
         transfer_ids: set[TransferId] = set()
         adjustment_ids: set[AdjustmentId] = set()
+        recon_ids: set[ReconEntryId] = set()
         bank_ids: set[BankEntryId] = set()
 
         for case in self.cases:
             if case.settlement.id in settlement_ids:
                 raise AssertionError("duplicate settlement id in hidden truth")
             settlement_ids.add(case.settlement.id)
+            if case.settlement.utr is not None:
+                if case.settlement.utr in settlement_utrs:
+                    raise AssertionError("duplicate settlement UTR in hidden truth")
+                settlement_utrs.add(case.settlement.utr)
 
+            case_order_ids = {order.id for order in case.orders}
             for order in case.orders:
                 if order.id in order_ids:
                     raise AssertionError("duplicate order id in hidden truth")
@@ -105,28 +113,92 @@ class HiddenWorld:
             new_payment_ids = case_payment_ids - payment_ids
             if len(new_payment_ids) != len(case_payment_ids):
                 raise AssertionError("payment id reused across settlement cases")
+            for event in case.payment_events:
+                if event.source_event_id in event_ids:
+                    raise AssertionError("duplicate payment event id in hidden truth")
+                event_ids.add(event.source_event_id)
+                if event.order_id is not None and event.order_id not in case_order_ids:
+                    raise AssertionError("payment event references unknown order")
+                if event.occurred_at > case.settlement.processed_at:
+                    raise AssertionError("payment event occurs after settlement processing")
             payment_ids.update(case_payment_ids)
 
+            case_refund_ids: set[RefundId] = set()
             for refund in case.refunds:
                 if refund.id in refund_ids:
                     raise AssertionError("duplicate refund id in hidden truth")
                 refund_ids.add(refund.id)
-                if refund.payment_id not in case_payment_ids:
-                    raise AssertionError("refund references payment outside its truth case")
+                case_refund_ids.add(refund.id)
+                if refund.payment_id not in payment_ids:
+                    raise AssertionError("refund references an unknown or future payment")
+                if refund.created_at > case.settlement.processed_at:
+                    raise AssertionError("refund occurs after its settlement processing")
 
+            case_transfer_ids: set[TransferId] = set()
             for transfer in case.transfers:
                 if transfer.id in transfer_ids:
                     raise AssertionError("duplicate transfer id in hidden truth")
                 transfer_ids.add(transfer.id)
+                case_transfer_ids.add(transfer.id)
+                if transfer.payment_id is not None and transfer.payment_id not in payment_ids:
+                    raise AssertionError("transfer references an unknown or future payment")
+                if transfer.created_at > case.settlement.processed_at:
+                    raise AssertionError("transfer occurs after its settlement processing")
 
+            case_adjustment_ids: set[AdjustmentId] = set()
             for adjustment in case.adjustments:
                 if adjustment.id in adjustment_ids:
                     raise AssertionError("duplicate adjustment id in hidden truth")
                 adjustment_ids.add(adjustment.id)
+                case_adjustment_ids.add(adjustment.id)
+                if adjustment.created_at > case.settlement.processed_at:
+                    raise AssertionError("adjustment occurs after its settlement processing")
 
             for entry in case.recon_entries:
+                if entry.id in recon_ids:
+                    raise AssertionError("duplicate recon id in hidden truth")
+                recon_ids.add(entry.id)
                 if entry.settlement_id != case.settlement.id:
                     raise AssertionError("recon entry points at wrong settlement")
+                if entry.occurred_at > case.settlement.processed_at:
+                    raise AssertionError("recon entry occurs after settlement processing")
+                if entry.entity_kind is ReconEntityKind.PAYMENT:
+                    if entry.entity_id not in case_payment_ids:
+                        raise AssertionError("payment recon references unknown payment")
+                    if (
+                        entry.gross_amount.amount_paise <= 0
+                        or entry.settlement_effect
+                        != entry.gross_amount - entry.fee - entry.tax
+                    ):
+                        raise AssertionError("invalid payment recon arithmetic in hidden truth")
+                elif entry.entity_kind is ReconEntityKind.REFUND:
+                    if entry.entity_id not in case_refund_ids:
+                        raise AssertionError("refund recon references unknown refund")
+                    if (
+                        entry.gross_amount.amount_paise >= 0
+                        or not entry.fee.is_zero
+                        or not entry.tax.is_zero
+                        or entry.settlement_effect != entry.gross_amount
+                    ):
+                        raise AssertionError("invalid refund recon arithmetic in hidden truth")
+                elif entry.entity_kind is ReconEntityKind.TRANSFER:
+                    if entry.entity_id not in case_transfer_ids:
+                        raise AssertionError("transfer recon references unknown transfer")
+                    if (
+                        not entry.fee.is_zero
+                        or not entry.tax.is_zero
+                        or entry.settlement_effect != entry.gross_amount
+                    ):
+                        raise AssertionError("invalid transfer recon arithmetic in hidden truth")
+                elif entry.entity_kind is ReconEntityKind.ADJUSTMENT:
+                    if entry.entity_id not in case_adjustment_ids:
+                        raise AssertionError("adjustment recon references unknown adjustment")
+                    if (
+                        not entry.fee.is_zero
+                        or not entry.tax.is_zero
+                        or entry.settlement_effect != entry.gross_amount
+                    ):
+                        raise AssertionError("invalid adjustment recon arithmetic in hidden truth")
 
             expected = sum_money([entry.settlement_effect for entry in case.recon_entries])
             if expected != case.settlement.amount:
@@ -137,6 +209,10 @@ class HiddenWorld:
                 if bank_entry.id in bank_ids:
                     raise AssertionError("duplicate bank entry id in hidden truth")
                 bank_ids.add(bank_entry.id)
+                if bank_entry.occurred_at < case.settlement.processed_at:
+                    raise AssertionError("bank credit precedes settlement processing")
+                if bank_entry.utr != case.settlement.utr:
+                    raise AssertionError("bank truth UTR does not match settlement UTR")
 
             if case.bank_expectation is BankExpectation.MATCHED:
                 if len(case.bank_entries) != 1 or bank_total != case.settlement.amount:
@@ -177,6 +253,15 @@ def _scenario_for(index: int) -> str:
     return scenarios[index % len(scenarios)]
 
 
+def _previous_captured_payment(cases: list[TruthSettlementCase]) -> PaymentEvent:
+    if not cases:
+        raise AssertionError("cross-period refund requires a prior settlement case")
+    for event in cases[-1].payment_events:
+        if event.kind is PaymentEventKind.CAPTURED:
+            return event
+    raise AssertionError("prior settlement case has no captured payment")
+
+
 def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
     cfg = config or WorldConfig()
     rng = Random(seed)
@@ -206,6 +291,7 @@ def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
             payment_id = PaymentId(f"pay_{stem}")
             gross = rng.randint(5_000, 250_000)
             amount = Money(gross)
+            event_offset = timedelta(microseconds=payment_index * 4)
             orders.append(MerchantOrder(order_id, amount, case_time))
             events.append(
                 PaymentEvent(
@@ -214,8 +300,8 @@ def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
                     order_id=order_id,
                     kind=PaymentEventKind.CREATED,
                     amount=amount,
-                    occurred_at=case_time + timedelta(seconds=payment_index * 2),
-                    received_at=case_time + timedelta(seconds=payment_index * 2 + 1),
+                    occurred_at=case_time + event_offset,
+                    received_at=case_time + event_offset + timedelta(microseconds=1),
                 )
             )
             events.append(
@@ -225,8 +311,8 @@ def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
                     order_id=order_id,
                     kind=PaymentEventKind.CAPTURED,
                     amount=amount,
-                    occurred_at=case_time + timedelta(seconds=payment_index * 2 + 2),
-                    received_at=case_time + timedelta(seconds=payment_index * 2 + 3),
+                    occurred_at=case_time + event_offset + timedelta(microseconds=2),
+                    received_at=case_time + event_offset + timedelta(microseconds=3),
                 )
             )
             fee, tax = _fee_and_tax(gross)
@@ -245,12 +331,15 @@ def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
             )
 
         if scenario in {"refund", "cross_period_refund"}:
-            payment_id = events[1].payment_id
-            payment_amount = events[1].amount.amount_paise
-            refund_amount = min(payment_amount // 3, 25_000)
-            refund_time = case_time + (
-                timedelta(days=2) if scenario == "cross_period_refund" else timedelta(hours=1)
+            source_payment = (
+                _previous_captured_payment(cases)
+                if scenario == "cross_period_refund"
+                else events[1]
             )
+            payment_id = source_payment.payment_id
+            payment_amount = source_payment.amount.amount_paise
+            refund_amount = min(payment_amount // 3, 25_000)
+            refund_time = case_time + timedelta(hours=1)
             refund = Refund(
                 id=RefundId(f"rfnd_{case_index:06d}_00000"),
                 payment_id=payment_id,

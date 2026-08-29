@@ -1,104 +1,126 @@
 # ReFlow — Known Limitations and Non-Claims
 
-This file must stay current as implementation progresses.
-
-A strong finance system should say what it cannot prove.
+This file must stay current as implementation progresses. A finance system should state what it cannot prove.
 
 ---
 
 ## Current state
 
-ReFlow is currently in **research and architecture**. The implementation and final benchmark have not started.
+ReFlow has implemented and audited the deterministic foundation through **Gates 0–6** on the current build branch:
 
-Therefore we currently make **no claims** about:
+- engineering constitution and CI;
+- typed financial contracts;
+- hidden financial-world generator;
+- adversarial observation corruption;
+- normalized known-fixture adapters;
+- journal-first raw evidence ingestion and temporal payment reduction;
+- provenance-preserving Money Graph construction.
 
-- accuracy;
+Settlement composition proofs, bank receipt proofs, proof versioning, the residual solver, final evaluation harness, AI layers, production Razorpay integration and operator UI are **not complete yet**.
+
+We currently make **no published claims** about:
+
+- reconciliation accuracy or match rate;
 - throughput;
 - maximum supported transaction volume;
 - memory consumption;
 - AI adapter success rate;
-- reconciliation rate;
-- false-positive rate;
+- false-positive rate on a final held-out benchmark;
 - production readiness.
 
-Any such number appearing elsewhere before the benchmark exists is a bug in the documentation.
+Any such number appearing before the checked-in final benchmark exists is a documentation bug.
 
 ---
 
-## Scope limitations planned for the Buildathon
+## Current implementation limitations
 
 ### 1. Synthetic financial world
 
-Track 04 explicitly allows/requires synthetic batch data. The main measured reconciliation benchmark will therefore be synthetic and adversarial.
+The main development/evaluation world is synthetic and adversarial. It is not presented as Razorpay production data.
 
-It will not be presented as a Razorpay production-data benchmark.
+The simulator now checks arithmetic, identity references and temporal causality, but its distributions still require later calibration against legitimate real integration evidence.
 
-### 2. Real Razorpay Test Mode coverage
+### 2. Phase 4 recon format is normalized synthetic evidence
 
-Razorpay Test Mode will be used where it provides legitimate integration evidence. Current connected account data does not provide a useful live settlement history, so settlement decomposition must not depend on live account settlements appearing before submission.
+The current known-fixture recon adapter consumes an already-normalized signed schema with fields such as `gross_amount_paise` and `settlement_effect_paise`.
 
-### 3. India / INR first
+It is **not** claimed to be the final production Razorpay Settlement Recon adapter. Razorpay's actual Recon API exposes authoritative `debit`, `credit`, `amount`, `fee` and `tax` fields. The later real adapter must normalize those semantics explicitly and fixture-test them against real Test Mode/API evidence rather than reuse synthetic arithmetic assumptions.
 
-The first financial contracts are designed around INR and integer paise.
+### 3. Journal persistence is in-memory
 
-Multi-currency settlement, FX conversion and cross-border accounting are outside the initial scope.
+Raw evidence now enters the append-only journal before deterministic canonicalization, including malformed rows whose source timestamp cannot be parsed.
 
-### 4. Reconciliation, not accounting ERP
+The current journal is still an in-memory reference implementation. Crash/restart persistence, database constraints, migrations and retention policy remain later work.
 
-ReFlow proves/explains payment-settlement-bank relationships.
+### 4. Bank adapter is a settlement-credit feed contract
 
-It will not automatically post journal entries into Tally/QuickBooks/ERP in the Buildathon version.
+The current bank adapter accepts positive settlement-credit rows. It is not a complete arbitrary bank-statement parser containing debits, balances, reversals and unrelated account traffic.
 
-### 5. No autonomous money movement
+Unknown bank schemas remain fail-closed until the later adapter compiler/integration work.
+
+### 5. Refund state modeling is intentionally conservative
+
+Refunds are first-class economic entities. The generic `PaymentEventKind.REFUNDED` path represents a fully refunded payment; partial refund amount/status will require authoritative refund/payment fields from the real integration.
+
+The proof engine must not infer partial-refund amount from a generic payment event alone.
+
+### 6. INR first
+
+The first contracts use INR and integer paise. Multi-currency settlement, FX conversion and cross-border accounting are outside initial Buildathon scope.
+
+### 7. No accounting ERP mutation
+
+ReFlow proves and explains payment-settlement-bank relationships. The Buildathon version will not automatically post accounting journal entries into Tally, QuickBooks or another ERP.
+
+### 8. No autonomous money movement
 
 The AI investigator will not initiate refunds, payouts, transfers or settlement operations.
 
-### 6. No AML/fraud decisioning
+### 9. No AML/fraud decisioning
 
 Fraud detection, AML transaction monitoring, sanctions screening and credit underwriting are separate high-stakes domains and are not Buildathon scope.
 
-### 7. Bank-format coverage
+### 10. Bank-format coverage is bounded
 
 The Source Adapter Compiler will be benchmarked against an adversarial family of formats, not every Indian bank/accounting export in existence.
 
-### 8. PDF/OCR is not the core
+### 11. PDF/OCR is not the core
 
-CSV/JSON are P0. XLSX/PDF/screenshot ingestion is stretch functionality.
+CSV/JSON are P0. XLSX/PDF/screenshot ingestion remains stretch functionality.
 
-### 9. Split-credit semantics may be constrained
+### 12. Split-credit semantics are constrained initially
 
-The domain graph should support one settlement/request mapping to multiple bank entries. The first implementation may prove this only on explicitly modeled/synthetic settlement modes rather than claiming universal inference for arbitrary bank credits.
+The domain supports one settlement mapping to multiple bank entries. The first proof implementation may prove split credits only when explicit source evidence binds those rows to the settlement; it will not claim universal subset inference from amount alone.
 
-### 10. Residual solver is bounded
+### 13. Residual solving will be bounded
 
-The solver will have strict candidate/time limits. When the solution space is too large or ambiguous, the correct output is an exception, not an exhaustive search that blocks the system.
+The solver will have strict candidate/time limits. If the solution space is large or ambiguous, the correct output is an exception.
 
-### 11. AI providers are replaceable and fallible
+### 14. AI providers are replaceable and fallible
 
-No model is treated as authoritative. Provider outage should only degrade semantic adapter inference/investigation, not deterministic financial truth.
+No model is authoritative. Provider outage may degrade schema understanding or exception investigation, but deterministic financial truth must continue to function.
 
-### 12. ReFlow does not prove bank finality beyond available evidence
+### 15. ReFlow cannot prove bank finality beyond supplied evidence
 
-A bank statement/feed is itself a source. ReFlow proves consistency with supplied bank evidence; it is not a direct participant in the banking settlement rail.
+A bank statement/feed is itself a source. ReFlow can prove consistency with supplied bank evidence; it is not a participant in the banking settlement rail.
 
 ---
 
-## Evaluation limitations that must be disclosed later
+## Evaluation disclosures required before submission
 
-The final README/pitch should disclose:
+The final README/pitch must disclose:
 
 - how synthetic distributions were chosen;
-- which failure types are represented;
-- which are not represented;
+- which failure types are represented and omitted;
 - dataset seed/version;
 - held-out strategy;
-- model/version used;
+- model/provider/version used for AI evaluation;
 - whether agent decisions are live or replayed;
-- hardware used for throughput;
-- any benchmark bug/fix that affected results;
+- hardware/runtime used for throughput;
+- every benchmark bug/fix that affected results;
 - any source schema with poor adapter results;
 - any exception class with weak accuracy;
-- whether large-scale results are extrapolated or directly measured.
+- whether scale results are directly measured or extrapolated.
 
 ---
 

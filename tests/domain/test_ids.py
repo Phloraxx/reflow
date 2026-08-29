@@ -16,5 +16,10 @@ def test_wrong_id_prefix_is_rejected() -> None:
         PaymentId("order_abc")
 
 
+def test_prefix_without_identifier_suffix_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        PaymentId("pay_")
+
+
 def test_valid_order_id() -> None:
     assert str(OrderId("order_abc")) == "order_abc"
