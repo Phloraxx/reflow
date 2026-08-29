@@ -292,6 +292,51 @@ None.
 
 ---
 
+## F-0008 — Append-only journal was not on the ingestion path
+
+**Date:** 2026-08-29  
+**Area:** ingestion  
+**Severity:** safety-critical
+
+### Symptom
+
+The repository contained an append-only journal implementation, but the known-source adapter path consumed `ObservedBatch` directly. A malformed row could therefore be rejected before any immutable raw evidence had been retained. In addition, `SourceEnvelope` required a valid parsed source timestamp, so a row with a malformed source date could not be preserved as raw evidence at all.
+
+### Initial assumption
+
+Having a tested journal abstraction was treated as equivalent to having journal-first ingestion.
+
+### Root cause
+
+The architecture diagram and implementation order conflated raw evidence retention with canonicalization. The journal sat beside the adapters instead of in front of them.
+
+### Why it matters
+
+A finance proof system must be able to explain rejected or quarantined evidence. If malformed source rows disappear before journaling, provenance is incomplete precisely when an operator most needs the original evidence.
+
+### Fix
+
+A journal-first ingestion pipeline now stores each raw record before deterministic canonicalization. Raw envelopes permit `occurred_at=None` when the source time cannot be parsed, while always preserving an aware local `received_at`, immutable payload and deterministic content hash. Missing source record identifiers use a deterministic hash-derived fallback rather than dropping the row. Canonical financial models retain their strict timestamp validation.
+
+### Regression protection
+
+`tests/ingestion/test_pipeline.py` verifies that:
+
+- every clean raw record is journaled before canonical objects are returned;
+- malformed-date evidence remains in the journal even though the adapter rejects the batch;
+- replaying the same raw batch later is idempotent;
+- changed raw content under the same source record identity fails closed.
+
+### Metric impact
+
+No published metric changed.
+
+### Remaining limitation
+
+The journal is currently an in-memory reference implementation. Durable crash/restart idempotency, database constraints and retention policy remain later infrastructure work.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
