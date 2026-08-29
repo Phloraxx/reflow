@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 
 from reflow.ingestion import AdapterError, adapt_observed_batch
@@ -36,6 +38,18 @@ def test_clean_known_sources_canonicalize() -> None:
 def test_known_unit_sign_and_schema_corruptions_fail_closed(kind: CorruptionKind) -> None:
     with pytest.raises(AdapterError):
         adapt_observed_batch(_observed(kind))
+
+
+def test_wrong_refund_effect_fails_closed_even_when_still_negative() -> None:
+    observed = _observed()
+    rows = [dict(row) for row in observed.recon_rows]
+    refund = next(row for row in rows if row["entity_kind"] == "refund")
+    effect = refund["settlement_effect_paise"]
+    assert isinstance(effect, int)
+    refund["settlement_effect_paise"] = effect + 1
+    malformed = replace(observed, recon_rows=tuple(rows))
+    with pytest.raises(AdapterError):
+        adapt_observed_batch(malformed)
 
 
 def test_prompt_like_bank_narration_is_data_not_instruction() -> None:
