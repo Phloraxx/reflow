@@ -1,136 +1,268 @@
 # ReFlow
 
-**Every rupee, explained.**
+**Every rupee gets a path, a proof, or an exception.**
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
 > **Current phase: research and architecture. Implementation has intentionally not started yet.**
 
-ReFlow is an evidence-first AI finance controller for **many-to-one payment settlement reconciliation**.
+ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
-It reconstructs payment truth from an imperfect event journal, proves how payments/refunds/adjustments compose into a Razorpay settlement, links that settlement to bank-credit evidence, and turns anything it cannot prove into an explicit exception. A bounded AI investigator can gather additional evidence and propose the next safe step, but **the LLM never decides whether money reconciles**.
+It compiles messy merchant, Razorpay and bank evidence into a canonical temporal **Money Graph**, reconstructs how payments/refunds/transfers/adjustments compose into settlements, proves the bank receipt, and emits a machine-verifiable **Reconciliation Proof**. Anything it cannot prove becomes an explicit residual or exception.
+
+AI has two meaningful but bounded jobs:
+
+1. **Source Adapter Synthesizer** — understands unfamiliar financial exports and proposes a constrained adapter that must compile and pass deterministic financial tests before activation.
+2. **Exception Investigation Agent** — uses read-only evidence tools to investigate unresolved cases and propose the next safe step.
+
+**The LLM never decides whether money reconciles.**
+
+---
 
 ## Why this project
 
-The Buildathon asks Track 04 projects to close a finance-ops loop across 50+ synthetic records while reporting match rate, throughput, measured accuracy and unresolved exceptions.
+Razorpay's Track 04 asks builders to close one finance-ops loop across a **50+ record synthetic batch** and report match rate, throughput, measured accuracy and the exceptions that could not be resolved.
 
-A simplistic implementation can match one gateway row to one bank row. ReFlow deliberately targets the harder shape suggested by Razorpay's own Settlement Recon model: a settlement can contain multiple payments, refunds, transfers and adjustments, with fees/tax and one settlement-level bank transfer/UTR.
+A simplistic implementation can match one gateway row to one bank row. ReFlow deliberately targets the harder financial shape present in Razorpay's own Settlement Recon model: settlements can contain many payments, refunds, transfers and adjustments with fees/tax before one or more bank-side credits appear.
 
-So the core question is not:
+The core question is therefore not:
 
-> “Which bank row looks similar to this payment?”
+> “Which row looks similar?”
 
 It is:
 
-> **“Can we produce an auditable proof of every financial movement that explains this settlement, and safely identify exactly what is missing when we cannot?”**
+> **“Can we produce an auditable proof of every financial movement that explains this settlement, and state exactly what evidence is missing when we cannot?”**
 
-## Planned system
+---
+
+## Research conclusion
+
+The research phase changed the design substantially.
+
+ReFlow is **not**:
+
+- a chatbot over settlement CSVs;
+- an LLM that guesses row matches;
+- a screenshot/UTR matcher;
+- a generic “agent decides, rule engine approves” demo.
+
+Its differentiating systems primitives are:
+
+- **Money Graph** — economic movements and evidence relationships instead of flat row pairs;
+- **Reconciliation Proofs** — machine-checkable amount/identity/provenance evidence for every green result;
+- **Residual Solver** — investigates exact unexplained value rather than blindly increasing fuzzy-match thresholds;
+- **Temporal Truth** — preserves what was known when and versions proofs as late events arrive;
+- **Source Adapter Compiler** — AI understands unknown schemas once; deterministic compiled adapters handle runtime data;
+- **Schema Drift Watchdog** — unsafe source changes are quarantined before corrupting reconciliation;
+- **Exception Fingerprints** — repeated exceptions become systemic incidents instead of thousands of independent tickets;
+- **Proof-carrying AI** — every AI hypothesis must cite actual evidence objects and cannot create financial facts.
+
+---
+
+## System shape
 
 ```mermaid
 flowchart LR
-  A[Merchant ledger] --> J[Immutable source journal]
-  B[Razorpay events + recon] --> J
-  C[Settlement records] --> J
-  D[Bank ledger] --> J
-  J --> P[Payment state reducer]
-  P --> G[Evidence graph]
-  G --> S[Settlement proof engine]
-  S --> M[Bank matcher]
-  M --> X{Proven?}
-  X -->|yes| R[Reconciled + audit proof]
-  X -->|no| E[Typed exception]
-  E --> AI[Bounded AI investigator]
-  AI --> V[Deterministic proposal validator]
-  V --> E
-  V --> R
+  A[Merchant / ERP files] --> C[Source Adapter Layer]
+  B[Razorpay events + recon + settlements] --> C
+  D[Bank files/feed] --> C
+
+  C --> J[(Immutable Canonical Journal)]
+  J --> T[Temporal Payment Reducer]
+  T --> G[Money Graph]
+  J --> G
+
+  G --> S[Settlement Composition Proof]
+  S --> K[Bank Receipt Proof]
+  K --> P{Reconciliation Proof}
+
+  P -->|proven| R[PROVEN]
+  P -->|residual / contradiction / ambiguity| E[Exception]
+
+  E --> AI[Bounded Investigation Agent]
+  AI --> V[Deterministic Proposal Validator]
+  V --> P
+
+  U[Unknown Source] --> AS[AI Adapter Synthesizer]
+  AS --> AC[Adapter Compiler + Tests]
+  AC --> C
 ```
 
-### Core boundaries
+---
+
+## Core boundaries
 
 - Money is signed **integer paise**, never float.
+- Currency and amount unit are explicit.
+- Raw source evidence is append-only and provenance is preserved.
 - Webhook/event ingestion is idempotent and order-safe.
+- `payment.failed → payment.captured` is treated as a real event sequence, not an impossible state.
 - Settlement arithmetic is deterministic.
+- Settlement processing and bank receipt are separate facts.
 - UTR/ID evidence outranks fuzzy similarity.
+- A zero residual does not prove identity by itself.
 - Ambiguity fails closed into review.
-- AI receives a finite set of read-only investigation tools.
-- AI cannot mutate source records or mark a settlement reconciled.
-- Any AI-proposed resolution must pass the deterministic proof engine again.
+- Unknown source unit/sign semantics quarantine the batch.
+- AI receives finite read-only tools and cannot mutate financial truth.
+- Any AI-proposed resolution must pass the proof engine again.
 - The core batch works without an LLM or external model API.
+
+---
+
+## Small data and large data use the same truth model
+
+### Small merchant
+
+```text
+Drop 3 ugly files
+→ ReFlow maps the formats
+→ deterministic validation
+→ reconcile
+→ inspect 2–3 exceptions
+→ export proof
+```
+
+### High-volume operator
+
+```text
+continuous events + batch feeds
+→ approved versioned adapters
+→ partitioned/indexed reconciliation
+→ cheap exact proof path for normal cases
+→ residual/AI work only on exception frontier
+→ cluster systemic incidents
+```
+
+The implementation scales by changing execution strategy, **not by changing financial semantics**.
+
+---
 
 ## Evaluation before claims
 
 No benchmark result is claimed yet.
 
-The planned final benchmark will use a seedable hidden financial world and separately generated imperfect observations. Ground truth is unavailable to the reconciliation engine and agent.
+The planned evaluation creates a hidden financial world and separately generates imperfect observations. Ground truth is unavailable to the candidate reconciliation pipeline and AI agent.
 
-Target evaluation scale is **1,000+ transaction-level records** across grouped settlements with adversarial cases including:
+Adversarial cases include:
 
-- duplicate webhooks;
-- out-of-order events;
+- duplicate and out-of-order webhooks;
 - late `payment.failed → payment.captured` transitions;
-- refunds and adjustments;
+- refunds, adjustments and cross-period movements;
 - missing/wrong recon components;
-- processed settlement before bank credit;
-- missing bank credit;
-- same-amount settlements;
+- settlement processed before bank credit;
+- missing/split bank credits;
+- same-amount settlement collisions;
 - exact UTR with wrong amount;
-- duplicate/unknown bank entries;
-- ambiguous evidence;
-- malformed source records;
-- LLM hallucinated evidence and provider failure.
+- malformed and drifting source schemas;
+- rupee/paise and debit/credit sign traps;
+- prompt-like narration;
+- AI hallucinated evidence;
+- model/source outage.
 
-The safety metric we care about most is **silent false auto-match rate**. A confident wrong match is more dangerous than an explicit unresolved case.
+The safety metric we care about most is **silent false auto-match rate**. A confident wrong financial match is worse than an explicit unresolved case.
+
+Planned benchmark sizes include the Buildathon minimum and progressively larger runs; scale claims will only be published after reproducible measurement with hardware/runtime disclosure.
+
+---
 
 ## Research and planning
 
-Start here:
+### Foundation
 
-- [`docs/01_BUILDATHON_BRIEF.md`](docs/01_BUILDATHON_BRIEF.md) — official challenge bar and our success criteria
+- [`docs/01_BUILDATHON_BRIEF.md`](docs/01_BUILDATHON_BRIEF.md) — official challenge bar and success criteria
 - [`docs/02_RAZORPAY_RESEARCH.md`](docs/02_RAZORPAY_RESEARCH.md) — settlement, recon, webhook and AI-platform research
-- [`docs/03_COMPETITIVE_ANALYSIS.md`](docs/03_COMPETITIVE_ANALYSIS.md) — why we chose Track 04 after inspecting the public field
-- [`docs/04_PRODUCT_SPEC.md`](docs/04_PRODUCT_SPEC.md) — exact finance loop, entities, statuses and AI responsibilities
-- [`docs/05_ARCHITECTURE.md`](docs/05_ARCHITECTURE.md) — evidence-first technical architecture
-- [`docs/06_EVALUATION_PLAN.md`](docs/06_EVALUATION_PLAN.md) — adversarial corpus, baselines and metrics
+- [`docs/03_COMPETITIVE_ANALYSIS.md`](docs/03_COMPETITIVE_ANALYSIS.md) — why we selected Track 04 after inspecting the public field
+- [`docs/04_PRODUCT_SPEC.md`](docs/04_PRODUCT_SPEC.md) — original product scope and domain objects
+- [`docs/05_ARCHITECTURE.md`](docs/05_ARCHITECTURE.md) — evidence-first base architecture
+- [`docs/06_EVALUATION_PLAN.md`](docs/06_EVALUATION_PLAN.md) — initial adversarial evaluation protocol
 - [`docs/07_FAILURE_SAFETY_MODEL.md`](docs/07_FAILURE_SAFETY_MODEL.md) — failure taxonomy and guard boundaries
-- [`docs/08_EXECUTION_ROADMAP.md`](docs/08_EXECUTION_ROADMAP.md) — gated plan through submission
-- [`docs/09_DEMO_SUBMISSION_PLAN.md`](docs/09_DEMO_SUBMISSION_PLAN.md) — five-minute pitch, visuals and review questions
+- [`docs/08_EXECUTION_ROADMAP.md`](docs/08_EXECUTION_ROADMAP.md) — initial gated roadmap
+- [`docs/09_DEMO_SUBMISSION_PLAN.md`](docs/09_DEMO_SUBMISSION_PLAN.md) — five-minute pitch and review questions
 
-## Key Razorpay sources
+### Second research pass — current direction
 
-- Buildathon: https://razorpay.com/buildathon/
-- Settlement Recon API: https://razorpay.com/docs/api/settlements/fetch-recon/
-- Settlement webhooks: https://razorpay.com/docs/webhooks/settlements/
-- Payment webhooks: https://razorpay.com/docs/webhooks/payments/
-- Webhook best practices: https://razorpay.com/docs/webhooks/best-practices/
-- Settlement break-up: https://razorpay.com/docs/payments/settlements/dashboard/
-- Agentic Platform: https://razorpay.com/blog/razorpay-agentic-platform/
-- Agent Studio guardrails: https://razorpay.com/blog/razorpay-agent-studio-principles-guardrails-and-merchant-control/
-- Razorpay engineering eval philosophy: https://razorpay.com/blog/?p=27428
+- [`docs/10_FINANCE_OPS_PROBLEM_LANDSCAPE.md`](docs/10_FINANCE_OPS_PROBLEM_LANDSCAPE.md) — merchant/institution pain points, low/high-volume failure modes
+- [`docs/11_NOVEL_PRODUCT_THESIS.md`](docs/11_NOVEL_PRODUCT_THESIS.md) — finance-compiler thesis and novel product primitives
+- [`docs/12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](docs/12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md) — formal proof/evidence/residual model
+- [`docs/13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](docs/13_MESSY_DATA_AND_CONNECTOR_COMPILER.md) — safe AI-assisted schema understanding and drift handling
+- [`docs/14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](docs/14_SCALE_PERFORMANCE_AND_RESILIENCE.md) — one correctness model from small files to high-volume processing
+- [`docs/15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](docs/15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — direct mapping to Buildathon page and actual submission form
+- [`docs/16_MASTER_BUILD_PLAN.md`](docs/16_MASTER_BUILD_PLAN.md) — **current implementation contract; start here before coding**
+- [`docs/17_RESEARCH_SOURCEBOOK.md`](docs/17_RESEARCH_SOURCEBOOK.md) — primary sources and the exact design implications taken from them
+
+### Honesty / review artifacts
+
+- [`FAILURE_LOG.md`](FAILURE_LOG.md) — real technical failures and fixes as implementation progresses
+- [`LIMITATIONS.md`](LIMITATIONS.md) — known limitations and explicit non-claims
+
+---
+
+## Key research findings
+
+- Razorpay Settlement Recon exposes settled `payment`, `refund`, `transfer` and `adjustment` movements, supporting a many-to-one settlement model.
+- Razorpay webhooks use at-least-once delivery and may arrive out of order.
+- Razorpay explicitly documents a possible `payment.failed` → `payment.captured` sequence for the same transaction.
+- `settlement.processed` is not identical to “bank credit already visible”; UTR is used to reconcile settlement to bank evidence.
+- Instant/Smart Settlement paths can produce different bank-credit shapes, so the domain should not permanently assume one settlement equals one bank row.
+- Razorpay's own Agentic Platform already markets screenshot/UTR-assisted reconciliation, so that is not our novelty.
+- Razorpay Agent Studio emphasizes verified first-party data, bounded permissions, independent validation and audit trails.
+- Razorpay Engineering's current eval philosophy emphasizes bespoke system-level evals, reproducibility, safe failure and model optionality.
+- Swift's payments research reinforces that a small percentage of exceptions can consume disproportionate operations effort, which supports ReFlow's exception-frontier design.
+
+See the sourcebook for links and boundaries around these claims.
+
+---
 
 ## Build status
 
+### Research / planning
+
 - [x] Competition research
-- [x] Razorpay domain research
+- [x] Actual application-form research
+- [x] Razorpay domain/API research
+- [x] Current Razorpay AI/product-direction research
 - [x] Competitive scan
+- [x] Finance-ops industry problem research
 - [x] Track decision
-- [x] Product specification
-- [x] Architecture plan
-- [x] Evaluation protocol
-- [x] Failure/safety model
-- [x] Execution + demo plan
-- [ ] Financial domain contracts
-- [ ] Synthetic world + observation generator
-- [ ] Event reducer
-- [ ] Settlement proof engine
-- [ ] Bank matcher + exceptions
-- [ ] Evaluation harness
-- [ ] Bounded AI investigator
-- [ ] Operator UI
-- [ ] Razorpay Test Mode adapter
-- [ ] Final adversarial benchmark
-- [ ] Public deployment
-- [ ] Five-minute pitch
+- [x] Novel product thesis
+- [x] Money Graph / proof protocol
+- [x] Messy data / connector compiler plan
+- [x] scale / resilience plan
+- [x] evaluation strategy
+- [x] judging strategy
+- [x] master implementation plan
+- [x] failure/limitations scaffolding
+
+### Implementation
+
+- [ ] repository engineering constitution / CI
+- [ ] financial domain contracts
+- [ ] synthetic hidden world
+- [ ] observation corruption engine
+- [ ] deterministic known-source adapters
+- [ ] immutable journal
+- [ ] temporal payment reducer
+- [ ] Money Graph
+- [ ] settlement composition proofs
+- [ ] bank receipt proofs
+- [ ] proof versioning
+- [ ] residual solver
+- [ ] baseline evaluation harness
+- [ ] Source Adapter Synthesizer
+- [ ] Exception Investigation Agent
+- [ ] exception fingerprinting
+- [ ] scale benchmark
+- [ ] Razorpay Test Mode adapter/demo evidence
+- [ ] operator UI
+- [ ] failure campaign
+- [ ] final benchmark
+- [ ] public deployment
+- [ ] five-minute pitch
+
+---
 
 ## Research rule
 
-If implementation evidence contradicts this plan, **the plan changes**. We will not preserve an attractive architecture or benchmark claim after testing proves it wrong.
+If implementation evidence contradicts this plan, **the plan changes**.
+
+We will not preserve an attractive architecture, AI feature or benchmark claim after testing proves it wrong.
