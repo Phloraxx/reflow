@@ -17,13 +17,16 @@ NOW = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
 def _envelope(
     payload: dict[str, object],
     *,
-    occurred_offset: int = 0,
+    occurred_offset: int | None = 0,
     received_offset: int = 0,
 ):
+    occurred_at = (
+        None if occurred_offset is None else NOW + timedelta(seconds=occurred_offset)
+    )
     return make_source_envelope(
         source_kind=SourceKind.RAZORPAY_EVENT,
         source_record_id="evt_1",
-        occurred_at=NOW + timedelta(seconds=occurred_offset),
+        occurred_at=occurred_at,
         received_at=NOW + timedelta(seconds=received_offset),
         schema_version="rzp-event-v1",
         payload=payload,
@@ -49,12 +52,16 @@ def test_same_source_identity_with_changed_payload_fails_closed() -> None:
     assert len(journal) == 1
 
 
-def test_same_payload_with_changed_source_occurrence_time_is_conflict() -> None:
+def test_same_raw_payload_remains_duplicate_when_ingestion_metadata_differs() -> None:
     journal = InMemoryJournal()
     payload = {"payment_id": "pay_1", "status": "captured"}
-    journal.append(_envelope(payload))
-    with pytest.raises(JournalConflictError):
-        journal.append(_envelope(payload, occurred_offset=1, received_offset=1))
+    first = journal.append(_envelope(payload, occurred_offset=None))
+    duplicate = journal.append(
+        _envelope(payload, occurred_offset=1, received_offset=5)
+    )
+    assert first.disposition is AppendDisposition.STORED
+    assert duplicate.disposition is AppendDisposition.DUPLICATE
+    assert len(journal) == 1
 
 
 def test_payload_hash_is_independent_of_mapping_key_order() -> None:
