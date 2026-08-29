@@ -30,6 +30,7 @@ class BankReceiptProof:
     bank_entry_ids: tuple[domain.BankEntryId, ...]
     source_envelope_ids: tuple[domain.SourceEnvelopeId, ...]
     early_bank_entry_ids: tuple[domain.BankEntryId, ...]
+    reused_bank_utr_ids: tuple[domain.BankEntryId, ...]
     rejected_same_amount_ids: tuple[domain.BankEntryId, ...]
     reason_codes: tuple[str, ...]
 
@@ -43,18 +44,14 @@ class BankReceiptProof:
         if not self.source_envelope_ids:
             raise ValueError("bank proof must cite raw source envelopes")
         if self.status is BankReceiptStatus.PROVEN:
-            if not self.bank_entry_ids:
-                raise ValueError("proven bank receipt must cite at least one bank entry")
+            if len(self.bank_entry_ids) != 1:
+                raise ValueError("standard settlement proof requires exactly one bank entry")
             if not self.residual.is_zero:
                 raise ValueError("proven bank receipt must have zero residual")
-            if self.early_bank_entry_ids:
-                raise ValueError("proven bank receipt cannot use pre-settlement bank evidence")
+            if self.early_bank_entry_ids or self.reused_bank_utr_ids:
+                raise ValueError("proven bank receipt cannot contain bank identity conflicts")
             if self.reason_codes:
                 raise ValueError("proven bank receipt cannot carry failure reason codes")
-
-    @property
-    def is_split_credit(self) -> bool:
-        return len(self.bank_entry_ids) > 1
 
 
 type BankPayload = tuple[int, str, str, str, str | None]
@@ -127,6 +124,11 @@ def _prove_from_candidates(
         if entry.amount.currency != settlement.amount.currency:
             raise BankReceiptProofError("settlement and exact-UTR bank currencies differ")
 
+    reused_bank_utr_entries = (
+        tuple(sorted(exact_utr_entries, key=lambda row: str(row.id)))
+        if len(exact_utr_entries) > 1
+        else ()
+    )
     early_entries = tuple(
         sorted(
             (
@@ -137,12 +139,18 @@ def _prove_from_candidates(
             key=lambda row: str(row.id),
         )
     )
-    causal_entries = tuple(
-        entry for entry in exact_utr_entries if entry.occurred_at >= settlement.processed_at
+    accepted_entries = (
+        ()
+        if reused_bank_utr_entries
+        else tuple(
+            entry
+            for entry in exact_utr_entries
+            if entry.occurred_at >= settlement.processed_at
+        )
     )
 
     observed = domain.sum_money(
-        [entry.amount for entry in causal_entries],
+        [entry.amount for entry in accepted_entries],
         settlement.amount.currency,
     )
     residual = settlement.amount - observed
@@ -150,10 +158,12 @@ def _prove_from_candidates(
     reason_codes: set[str] = set()
     if settlement_utr_reused:
         reason_codes.add("SETTLEMENT_UTR_REUSED")
+    if reused_bank_utr_entries:
+        reason_codes.add("BANK_UTR_REUSED_ACROSS_ENTRIES")
     if early_entries:
         reason_codes.add("BANK_CREDIT_PRECEDES_SETTLEMENT")
 
-    if settlement_utr_reused or early_entries:
+    if settlement_utr_reused or reused_bank_utr_entries or early_entries:
         status = BankReceiptStatus.CONTRADICTED
     elif settlement.utr is None:
         status = BankReceiptStatus.INCOMPLETE
@@ -178,9 +188,10 @@ def _prove_from_candidates(
         expected_amount=settlement.amount,
         observed_bank_credit=observed,
         residual=residual,
-        bank_entry_ids=tuple(entry.id for entry in causal_entries),
+        bank_entry_ids=tuple(entry.id for entry in accepted_entries),
         source_envelope_ids=tuple(sorted(source_envelope_ids, key=str)),
         early_bank_entry_ids=tuple(entry.id for entry in early_entries),
+        reused_bank_utr_ids=tuple(entry.id for entry in reused_bank_utr_entries),
         rejected_same_amount_ids=tuple(
             sorted((entry.id for entry in rejected_same_amount_entries), key=str)
         ),
@@ -195,6 +206,7 @@ def prove_bank_receipt(
     source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
     settlement_utr_reused: bool = False,
 ) -> BankReceiptProof:
+    """Prove one standard settlement against bank evidence using exact UTR identity."""
     unique_bank_entries = _deduplicate_bank_entries(bank_entries)
     exact_utr_entries = (
         ()
