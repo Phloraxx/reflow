@@ -147,9 +147,11 @@ class HiddenWorld:
             elif case.bank_expectation is BankExpectation.MISSING:
                 if case.bank_entries:
                     raise AssertionError("missing-bank truth must contain no bank entries")
-            elif case.bank_expectation is BankExpectation.MISMATCHED:
-                if not case.bank_entries or bank_total == case.settlement.amount:
-                    raise AssertionError("mismatched bank truth must carry a non-zero residual")
+            elif (
+                case.bank_expectation is BankExpectation.MISMATCHED
+                and (not case.bank_entries or bank_total == case.settlement.amount)
+            ):
+                raise AssertionError("mismatched bank truth must carry a non-zero residual")
 
 
 def _fee_and_tax(gross_paise: int) -> tuple[int, int]:
