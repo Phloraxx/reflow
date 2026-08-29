@@ -340,7 +340,17 @@ def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
             )
             payment_id = source_payment.payment_id
             payment_amount = source_payment.amount.amount_paise
-            refund_amount = min(payment_amount // 3, 25_000)
+            current_capacity = sum_money(
+                [entry.settlement_effect for entry in recon]
+            ).amount_paise
+            max_refund_without_zeroing_settlement = current_capacity - 1
+            if max_refund_without_zeroing_settlement <= 0:
+                raise AssertionError("payment recon must leave positive refund capacity")
+            refund_amount = min(
+                payment_amount // 3,
+                25_000,
+                max_refund_without_zeroing_settlement,
+            )
             refund_time = case_time + timedelta(hours=1)
             refund = Refund(
                 id=RefundId(f"rfnd_{case_index:06d}_00000"),
