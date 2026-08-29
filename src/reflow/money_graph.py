@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from . import domain, ingestion
+from . import domain
+from . import ingestion
 
 
 type EdgeKey = tuple[str, str, str]
