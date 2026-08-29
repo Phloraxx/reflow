@@ -3,9 +3,8 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from reflow.domain import EdgeState, EvidenceEdge, EvidenceEdgeId, EvidenceStrength
-from reflow.domain.types import EntityId
-from reflow.ingestion import CanonicalBatch
+from .domain import EdgeState, EntityId, EvidenceEdge, EvidenceEdgeId, EvidenceStrength
+from .ingestion import CanonicalBatch
 
 
 type EdgeKey = tuple[str, str, str]
