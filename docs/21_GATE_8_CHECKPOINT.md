@@ -4,6 +4,8 @@
 **Scope:** standard Razorpay settlement → bank receipt proof.  
 **Out of scope:** Instant Settlement payout topology, fuzzy bank matching, final reconciliation proof/versioning, AI and production-readiness claims.
 
+This checkpoint supersedes earlier generic planning language about split bank credits. Multi-credit proof is allowed only after the provider topology that authoritatively binds those credits is modeled.
+
 ---
 
 ## 1. Gate 8 question
@@ -65,7 +67,7 @@ Sources:
 
 This is **not** represented by summing arbitrary bank rows under one standard `setl_...` UTR.
 
-The Buildathon's current standard-settlement proof therefore fails closed when multiple distinct bank transactions reuse the same standard settlement UTR. A later Instant Settlement adapter must explicitly model:
+The current standard-settlement proof therefore fails closed when multiple distinct bank transactions reuse the same standard settlement UTR. A later Instant Settlement adapter must explicitly model:
 
 ```text
 setlod parent
@@ -131,7 +133,7 @@ Examples include:
 - one UTR reused by multiple settlement entities;
 - multiple distinct bank transactions reusing one standard settlement UTR.
 
-Contradicted evidence is not silently selected or summed.
+Contradicted evidence is not silently selected or summed. When settlement identity itself is ambiguous, matching bank rows remain cited as evidence but are **not attributed** through `bank_entry_ids` and contribute zero accepted bank value.
 
 ---
 
@@ -178,7 +180,7 @@ does not change proof identity or status.
 
 ## 6. Replay and duplicate semantics
 
-Two superficially similar cases are deliberately separated.
+Three superficially similar cases are deliberately separated.
 
 ### Same bank source identity, exact same payload
 
@@ -196,17 +198,46 @@ These are two economic bank transactions claiming one UTR. Gate 8 marks the sett
 
 ## 7. Raw-evidence provenance
 
-Every Gate 8 result cites immutable raw `SourceEnvelopeId` values for:
+Every Gate 8 result cites immutable raw `SourceEnvelopeId` values for the evidence that can participate in the authoritative identity decision:
 
 - the settlement record;
-- every exact-UTR bank candidate;
-- same-amount rows preserved as rejected non-identity evidence.
+- every exact-UTR bank candidate, including contradictory ones.
 
 A proof cannot be built from a bare adapter-only `CanonicalBatch` and cannot proceed if required raw source provenance is missing.
 
+Same-amount rows with a different/missing UTR are intentionally **not copied into the authoritative proof payload**. They are non-identity evidence. Gate 8 records only `same_amount_nonidentity_count` as a diagnostic signal. A later investigator can query those rows when needed without making every proof carry thousands of fuzzy candidate IDs.
+
 ---
 
-## 8. Adversarial regression matrix
+## 8. High-volume shape
+
+The first Gate 8 implementation collected every same-amount bank row as a rejected candidate for every settlement. That is safe in correctness terms but poor at scale: a merchant with a common price point could make proof payload/work approach quadratic growth.
+
+The hardened batch path instead builds:
+
+```text
+UTR -> exact bank entries
+(amount, currency) -> count
+```
+
+and each proof stores only:
+
+- exact authoritative candidates;
+- contradiction IDs that share the exact UTR;
+- a scalar count of non-identity same-amount observations.
+
+A 1,000-settlement regression fixture forces essentially all observed bank transactions to the same amount and verifies:
+
+- exact UTR still partitions identity correctly;
+- proof `source_envelope_ids` remain bounded to at most settlement + exact bank evidence;
+- `bank_entry_ids` remain at most one for standard settlements;
+- same-amount collision diagnostics do not embed every fuzzy row into every proof.
+
+This is a structural scale test, **not** a throughput claim.
+
+---
+
+## 9. Adversarial regression matrix
 
 The Gate 8 suite covers:
 
@@ -219,7 +250,7 @@ The Gate 8 suite covers:
 - settlement missing UTR;
 - bank credit before settlement processing;
 - delayed bank credit with no arbitrary upper cutoff;
-- duplicate settlement UTR;
+- duplicate settlement UTR with zero bank attribution;
 - duplicate bank transaction delivery;
 - conflicting payload under one bank-entry ID;
 - two distinct bank transactions reusing one standard settlement UTR;
@@ -227,13 +258,16 @@ The Gate 8 suite covers:
 - same-amount settlements with different UTRs;
 - noisy narration;
 - prompt-like narration;
-- a 200-settlement batch without cross-partition matching.
+- a 200-settlement correctness batch;
+- a 1,000-settlement common-amount proof-shape stress fixture.
 
 The hidden simulator also asserts globally unique bank UTRs for its standard-settlement truth and no longer presents split standard-settlement credits as valid truth.
 
 ---
 
-## 9. Failure discovered while implementing Gate 8
+## 10. Failures discovered while implementing Gate 8
+
+### Standard vs Instant Settlement topology
 
 The original simulator contained a `split_bank_credit` scenario in which two distinct bank entries reused one standard settlement UTR and their values were summed to the settlement amount.
 
@@ -242,13 +276,23 @@ Further provider-semantic review showed that this conflated two products:
 - a standard `setl_...` settlement, whose UTR is used to track that particular settlement in the bank account; and
 - Instant Settlement, whose `setlod_...` parent can expose explicit `setlodp_...` payout children with their own payout evidence/UTRs.
 
-The synthetic truth was therefore corrected rather than teaching the proof engine to reward the old assumption.
+The synthetic truth was corrected rather than teaching the proof engine to reward the old assumption.
 
-No final benchmark number had been published, so no metric needed withdrawal.
+### Reused settlement UTR still attributed a bank row
+
+An intermediate Gate 8 version correctly marked two settlements with one UTR as contradicted, but still placed the same matching bank row in both proofs' accepted `bank_entry_ids`. The status was red, but the attribution graph was still semantically unsafe.
+
+The fix makes reused settlement identity non-attributable: affected proofs preserve the source evidence but have no accepted bank entries and zero observed accepted bank credit.
+
+### Common-amount diagnostic payload growth
+
+An intermediate design retained every same-amount non-UTR row as a rejected candidate. The review showed that this could create large repeated proof payloads at common price points.
+
+The proof now retains a diagnostic count instead of fuzzy candidate IDs. No final benchmark number had been published, so none of these corrections required withdrawing an external metric.
 
 ---
 
-## 10. Non-claims after Gate 8
+## 11. Non-claims after Gate 8
 
 Gate 8 does **not** claim:
 
@@ -265,14 +309,14 @@ The current bank adapter remains a normalized settlement-credit fixture contract
 
 ---
 
-## 11. Gate to continue
+## 12. Gate to continue
 
 Gate 9 may begin only after:
 
 - Ruff passes;
 - strict mypy passes;
 - the full pytest suite passes;
-- this Gate 8 checkpoint and the corresponding failure-log entry are checked in;
+- this Gate 8 checkpoint and all corresponding failure-log entries are checked in;
 - the Gate 8 PR exact head passes PR-triggered CI;
 - the Gate 8 PR is merged to `main`.
 
