@@ -71,21 +71,14 @@ def reduce_payment_events(events: Sequence[PaymentEvent]) -> PaymentCurrentState
     if PaymentEventKind.FAILED in kinds and PaymentEventKind.CAPTURED in kinds:
         warnings.append("FAILED_AND_CAPTURED_OBSERVED")
 
-    if PaymentEventKind.REFUNDED in kinds:
-        status = PaymentStatus.REFUNDED
-        refunded_amount = amount
-    elif PaymentEventKind.CAPTURED in kinds:
+    if PaymentEventKind.CAPTURED in kinds:
         status = PaymentStatus.CAPTURED
-        refunded_amount = Money.zero(amount.currency)
     elif PaymentEventKind.FAILED in kinds:
         status = PaymentStatus.FAILED
-        refunded_amount = Money.zero(amount.currency)
     elif PaymentEventKind.AUTHORIZED in kinds:
         status = PaymentStatus.AUTHORIZED
-        refunded_amount = Money.zero(amount.currency)
     else:
         status = PaymentStatus.CREATED
-        refunded_amount = Money.zero(amount.currency)
 
     captured_at = (
         min(event.occurred_at for event in captured_events) if captured_events else None
@@ -97,7 +90,7 @@ def reduce_payment_events(events: Sequence[PaymentEvent]) -> PaymentCurrentState
         status=status,
         last_occurred_at=max(event.occurred_at for event in unique),
         captured_at=captured_at,
-        refunded_amount=refunded_amount,
+        refunded_amount=Money.zero(amount.currency),
         warnings=tuple(sorted(warnings)),
     )
 
