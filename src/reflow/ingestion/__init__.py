@@ -1,4 +1,4 @@
-"""Deterministic source adapters into ReFlow canonical domain contracts."""
+"""Deterministic source adapters and journal-first ingestion."""
 
 from .adapters import (
     AdapterError,
@@ -10,6 +10,7 @@ from .adapters import (
     adapt_recon_row,
     adapt_settlement_row,
 )
+from .pipeline import ingest_observed_batch, journal_observed_batch
 
 __all__ = [
     "AdapterError",
@@ -20,4 +21,6 @@ __all__ = [
     "adapt_payment_event",
     "adapt_recon_row",
     "adapt_settlement_row",
+    "ingest_observed_batch",
+    "journal_observed_batch",
 ]
