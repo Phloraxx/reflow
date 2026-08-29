@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import datetime
 
 from reflow.domain import SourceKind
 from reflow.journal import InMemoryJournal, make_source_envelope, payload_sha256
 from reflow.simulator.observed import ObservedBatch, RawRecord
 
-from .adapters import CanonicalBatch, adapt_observed_batch
+from .adapters import CanonicalBatch, SourceIdentity, SourceLink, adapt_observed_batch
 
 
 def _aware(value: datetime) -> None:
@@ -46,18 +47,35 @@ def _journal_rows(
     source_time_key: str,
     schema_version: str,
     received_at: datetime,
-) -> None:
+) -> tuple[SourceLink, ...]:
+    links: dict[SourceIdentity, SourceLink] = {}
     for row in rows:
-        journal.append(
+        source_record_id = _raw_record_id(row, record_id_key)
+        result = journal.append(
             make_source_envelope(
                 source_kind=source_kind,
-                source_record_id=_raw_record_id(row, record_id_key),
+                source_record_id=source_record_id,
                 occurred_at=_raw_source_time(row, source_time_key),
                 received_at=received_at,
                 schema_version=schema_version,
                 payload=row,
             )
         )
+        link = SourceLink(
+            source_kind=source_kind,
+            source_record_id=source_record_id,
+            envelope_id=result.envelope.id,
+        )
+        existing = links.get(link.identity)
+        if existing is not None and existing != link:
+            raise AssertionError("journal returned conflicting envelope for one source identity")
+        links[link.identity] = link
+    return tuple(
+        sorted(
+            links.values(),
+            key=lambda link: (link.source_kind.value, link.source_record_id),
+        )
+    )
 
 
 def journal_observed_batch(
@@ -65,53 +83,67 @@ def journal_observed_batch(
     journal: InMemoryJournal,
     *,
     received_at: datetime,
-) -> None:
-    """Persist raw evidence before canonical validation can reject the batch."""
+) -> tuple[SourceLink, ...]:
+    """Persist raw evidence before canonical validation and return immutable source links."""
     _aware(received_at)
-    _journal_rows(
-        journal,
-        batch.merchant_rows,
-        source_kind=SourceKind.MERCHANT,
-        record_id_key="order_id",
-        source_time_key="created_at",
-        schema_version="merchant-normalized-v1",
-        received_at=received_at,
+    links = (
+        *_journal_rows(
+            journal,
+            batch.merchant_rows,
+            source_kind=SourceKind.MERCHANT,
+            record_id_key="order_id",
+            source_time_key="created_at",
+            schema_version="merchant-normalized-v1",
+            received_at=received_at,
+        ),
+        *_journal_rows(
+            journal,
+            batch.razorpay_events,
+            source_kind=SourceKind.RAZORPAY_EVENT,
+            record_id_key="event_id",
+            source_time_key="occurred_at",
+            schema_version="razorpay-event-normalized-v1",
+            received_at=received_at,
+        ),
+        *_journal_rows(
+            journal,
+            batch.recon_rows,
+            source_kind=SourceKind.RAZORPAY_RECON,
+            record_id_key="recon_id",
+            source_time_key="occurred_at",
+            schema_version="razorpay-recon-normalized-v1",
+            received_at=received_at,
+        ),
+        *_journal_rows(
+            journal,
+            batch.settlement_rows,
+            source_kind=SourceKind.RAZORPAY_SETTLEMENT,
+            record_id_key="settlement_id",
+            source_time_key="processed_at",
+            schema_version="razorpay-settlement-normalized-v1",
+            received_at=received_at,
+        ),
+        *_journal_rows(
+            journal,
+            batch.bank_rows,
+            source_kind=SourceKind.BANK,
+            record_id_key="bank_entry_id",
+            source_time_key="occurred_at",
+            schema_version="bank-settlement-credit-normalized-v1",
+            received_at=received_at,
+        ),
     )
-    _journal_rows(
-        journal,
-        batch.razorpay_events,
-        source_kind=SourceKind.RAZORPAY_EVENT,
-        record_id_key="event_id",
-        source_time_key="occurred_at",
-        schema_version="razorpay-event-normalized-v1",
-        received_at=received_at,
-    )
-    _journal_rows(
-        journal,
-        batch.recon_rows,
-        source_kind=SourceKind.RAZORPAY_RECON,
-        record_id_key="recon_id",
-        source_time_key="occurred_at",
-        schema_version="razorpay-recon-normalized-v1",
-        received_at=received_at,
-    )
-    _journal_rows(
-        journal,
-        batch.settlement_rows,
-        source_kind=SourceKind.RAZORPAY_SETTLEMENT,
-        record_id_key="settlement_id",
-        source_time_key="processed_at",
-        schema_version="razorpay-settlement-normalized-v1",
-        received_at=received_at,
-    )
-    _journal_rows(
-        journal,
-        batch.bank_rows,
-        source_kind=SourceKind.BANK,
-        record_id_key="bank_entry_id",
-        source_time_key="occurred_at",
-        schema_version="bank-settlement-credit-normalized-v1",
-        received_at=received_at,
+    indexed: dict[SourceIdentity, SourceLink] = {}
+    for link in links:
+        existing = indexed.get(link.identity)
+        if existing is not None and existing != link:
+            raise AssertionError("one batch produced conflicting source links")
+        indexed[link.identity] = link
+    return tuple(
+        sorted(
+            indexed.values(),
+            key=lambda link: (link.source_kind.value, link.source_record_id),
+        )
     )
 
 
@@ -121,6 +153,7 @@ def ingest_observed_batch(
     *,
     received_at: datetime,
 ) -> CanonicalBatch:
-    """Journal the immutable raw batch first, then compile known deterministic shapes."""
-    journal_observed_batch(batch, journal, received_at=received_at)
-    return adapt_observed_batch(batch)
+    """Journal the immutable raw batch first, then compile and bind canonical objects."""
+    source_links = journal_observed_batch(batch, journal, received_at=received_at)
+    canonical = adapt_observed_batch(batch)
+    return replace(canonical, source_links=source_links)
