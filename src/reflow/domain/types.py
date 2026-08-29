@@ -93,7 +93,6 @@ class PaymentEventKind(StrEnum):
     AUTHORIZED = "authorized"
     FAILED = "failed"
     CAPTURED = "captured"
-    REFUNDED = "refunded"
 
 
 class PaymentStatus(StrEnum):
@@ -101,7 +100,6 @@ class PaymentStatus(StrEnum):
     AUTHORIZED = "authorized"
     FAILED = "failed"
     CAPTURED = "captured"
-    PARTIALLY_REFUNDED = "partially_refunded"
     REFUNDED = "refunded"
 
 
