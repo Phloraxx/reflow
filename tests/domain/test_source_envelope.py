@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import pytest
 
 from reflow.domain.models import SourceEnvelope
+from reflow.domain.source_hash import source_payload_sha256
 from reflow.domain.types import SourceEnvelopeId, SourceKind
 
 NOW = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
@@ -22,31 +23,48 @@ def test_source_hash_must_be_sha256_shape() -> None:
         )
 
 
+def test_source_hash_must_match_payload() -> None:
+    with pytest.raises(ValueError, match="does not match"):
+        SourceEnvelope(
+            id=SourceEnvelopeId("src_2"),
+            source_kind=SourceKind.BANK,
+            source_record_id="row-2",
+            occurred_at=NOW,
+            received_at=NOW,
+            payload_sha256="a" * 64,
+            schema_version="bank-v1",
+            payload={"amount": 100},
+        )
+
+
 def test_valid_source_envelope_retains_provenance() -> None:
+    payload = {"settlement_id": "setl_2"}
     envelope = SourceEnvelope(
-        id=SourceEnvelopeId("src_2"),
+        id=SourceEnvelopeId("src_3"),
         source_kind=SourceKind.RAZORPAY_RECON,
         source_record_id="recon-row-2",
         occurred_at=NOW,
         received_at=NOW,
-        payload_sha256="a" * 64,
+        payload_sha256=source_payload_sha256(payload),
         schema_version="rzp-recon-v1",
-        payload={"settlement_id": "setl_2"},
+        payload=payload,
     )
     assert envelope.source_record_id == "recon-row-2"
     assert envelope.payload["settlement_id"] == "setl_2"
+    assert source_payload_sha256(envelope.payload) == envelope.payload_sha256
 
 
 def test_source_payload_is_deeply_immutable_after_construction() -> None:
+    payload = {"nested": {"amount": 100}, "rows": [{"id": "one"}]}
     envelope = SourceEnvelope(
-        id=SourceEnvelopeId("src_3"),
+        id=SourceEnvelopeId("src_4"),
         source_kind=SourceKind.BANK,
         source_record_id="row-3",
         occurred_at=NOW,
         received_at=NOW,
-        payload_sha256="b" * 64,
+        payload_sha256=source_payload_sha256(payload),
         schema_version="bank-v1",
-        payload={"nested": {"amount": 100}, "rows": [{"id": "one"}]},
+        payload=payload,
     )
     with pytest.raises(TypeError):
         envelope.payload["new"] = "value"  # type: ignore[index]
