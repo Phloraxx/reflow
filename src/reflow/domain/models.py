@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
 
+from .source_hash import source_envelope_id_value, source_payload_sha256
 from .types import (
     AdjustmentId,
     BankEntryId,
@@ -127,20 +128,34 @@ class SourceEnvelope:
     payload: Mapping[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.id, SourceEnvelopeId):
+            raise TypeError("id must be SourceEnvelopeId")
+        if not isinstance(self.source_kind, SourceKind):
+            raise TypeError("source_kind must be SourceKind")
         if self.occurred_at is not None:
             _aware(self.occurred_at, "occurred_at")
         _aware(self.received_at, "received_at")
-        if not self.source_record_id:
-            raise ValueError("source_record_id cannot be empty")
+        if not isinstance(self.source_record_id, str) or not self.source_record_id.strip():
+            raise ValueError("source_record_id cannot be empty or blank")
         if len(self.payload_sha256) != 64:
             raise ValueError("payload_sha256 must be a 64-character hex digest")
         try:
             int(self.payload_sha256, 16)
         except ValueError as exc:
             raise ValueError("payload_sha256 must be hexadecimal") from exc
-        if not self.schema_version:
-            raise ValueError("schema_version cannot be empty")
-        object.__setattr__(self, "payload", _freeze_payload(self.payload))
+        if not isinstance(self.schema_version, str) or not self.schema_version.strip():
+            raise ValueError("schema_version cannot be empty or blank")
+        frozen_payload = _freeze_payload(self.payload)
+        if source_payload_sha256(frozen_payload) != self.payload_sha256:
+            raise ValueError("payload_sha256 does not match immutable source payload")
+        expected_id = source_envelope_id_value(
+            self.source_kind.value,
+            self.source_record_id,
+            self.payload_sha256,
+        )
+        if str(self.id) != expected_id:
+            raise ValueError("source envelope id does not match source identity and payload")
+        object.__setattr__(self, "payload", frozen_payload)
 
 
 @dataclass(frozen=True, slots=True)

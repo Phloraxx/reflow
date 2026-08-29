@@ -4,11 +4,11 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: deterministic foundation audited through Gates 0–6; settlement and bank proof engines are next.**
+> **Current phase: deterministic foundation independently audited through Gate 7; Bank Receipt Proof is next.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
-It is being built to compile messy merchant, Razorpay and bank evidence into a temporal **Money Graph**, prove how payments/refunds/transfers/adjustments compose into settlements, prove the bank receipt independently, and emit a machine-verifiable **Reconciliation Proof**. Anything the deterministic engine cannot prove becomes a residual, contradiction, ambiguity or exception.
+It compiles messy merchant, Razorpay and bank evidence into a temporal **Money Graph**, proves how payments/refunds/transfers/adjustments compose into settlements, proves bank receipt independently, and ultimately emits a versioned machine-verifiable **Reconciliation Proof**. Anything the deterministic engine cannot prove becomes a residual, contradiction, ambiguity or exception.
 
 AI has two planned, bounded jobs:
 
@@ -42,14 +42,14 @@ flowchart LR
   C[Bank evidence] --> J
 
   J --> D[Deterministic Source Adapters]
-  D --> E[Canonical Financial Objects]
+  D --> E[Canonical Financial Objects + Raw SourceLinks]
   E --> T[Temporal Payment Reducer]
   E --> G[Money Graph]
   T --> G
 
-  G --> S[Settlement Composition Proof - next]
-  S --> K[Bank Receipt Proof - next]
-  K --> P{Reconciliation Proof}
+  G --> S[Settlement Composition Proof]
+  S --> K[Bank Receipt Proof - Gate 8]
+  K --> P{Full Reconciliation Proof - Gate 9}
 
   P -->|proven| R[PROVEN]
   P -->|residual / contradiction / ambiguity| X[Exception]
@@ -58,44 +58,96 @@ flowchart LR
   U[Unknown Source] -. later .-> AS[AI Adapter Synthesizer]
 ```
 
-Raw evidence is journaled **before** canonicalization. This is intentional: malformed evidence must remain auditable even when the deterministic adapter rejects it.
+Raw evidence is journaled **before** canonicalization. Successful canonical rows retain immutable links back to the exact raw `SourceEnvelope`s that produced them. Money Graph evidence and Gate 7 proofs cite those raw envelope IDs rather than stopping at canonical row IDs.
 
 ---
 
 ## What exists today
 
-### Gates 0–3 — merged foundation
+### Gates 0–3 — foundation
 
 - repository engineering constitution;
 - one-command validation and GitHub Actions CI;
 - signed integer-paise money contracts;
 - strongly typed financial IDs;
-- timezone-aware canonical event models;
+- timezone-aware canonical models;
 - hidden synthetic financial-world generator;
 - adversarial observation corruption;
 - explicit separation of hidden truth from candidate observations.
 
-### Gates 4–6 — current audited checkpoint
+### Gates 4–6 — ingestion, temporal truth and Money Graph
 
 - fail-closed adapters for the **normalized synthetic/known fixture schemas**;
-- append-only raw source envelopes with deterministic hashes and deep payload immutability;
+- append-only raw source envelopes;
+- deeply immutable source payloads;
+- deterministic payload SHA-256 and deterministic `src_...` identity, both self-verified by `SourceEnvelope`;
 - journal-first ingestion, including retention of malformed rows before adapter failure;
+- immutable canonical `SourceLink`s back to journal envelopes;
 - idempotent source replay;
 - pure payment-state reconstruction independent of delivery order;
 - safe handling of `failed → captured` evidence;
 - retry deduplication that separates provider facts from local receive time;
-- Money Graph edges built only from deterministic evidence;
-- recon entries as first-class provenance nodes;
+- Money Graph construction only from journal-backed canonical batches;
+- recon entries as first-class graph nodes;
+- authoritative graph edges citing actual raw source-envelope evidence;
 - graph edge precision/recall tests against hidden truth;
 - duplicate recon evidence visible to the benchmark rather than silently collapsed.
 
-The audit that followed the first Gate 6 implementation found real defects in temporal truth, immutability, retry semantics, graph scoring and adapter validation. Those failures and their regression tests are preserved in [`FAILURE_LOG.md`](FAILURE_LOG.md).
+### Gate 7 — Settlement Composition Proof
+
+For every settlement, the proof engine now checks **identity, arithmetic, temporal admissibility and raw provenance** together.
+
+A composition can be proven only when:
+
+- the settlement and recon rows are journal-backed;
+- graph provenance resolves to the correct raw envelopes;
+- currencies agree;
+- one economic identity is not represented by contradictory rows;
+- distinct source rows do not duplicate one economic movement;
+- an economic movement is not claimed by multiple settlements;
+- no admitted recon component occurs after settlement processing;
+- exact signed component arithmetic equals the authoritative settlement amount;
+- no contradiction or missing-evidence reason remains.
+
+The key invariant is:
+
+```text
+zero residual != proof
+```
+
+A zero residual with duplicated identity, conflicting identity, wrong provenance or impossible timing remains non-proven.
 
 ---
 
-## Important source boundary
+## Two audits, not one
 
-The current Phase 4 recon adapter consumes a **normalized synthetic schema** containing fields such as:
+The first Gates 0–6 audit found eight real defects and fixed them before PR #2 was merged.
+
+Before accepting Gate 7, a **second independent pass** deliberately re-read the merged foundation without assuming the first review was sufficient. It found six additional classes of problems:
+
+1. canonical rows did not retain end-to-end raw-envelope provenance;
+2. Gate 7 duplicate detection compared values before economic identity;
+3. Gate 7 could admit recon evidence occurring after settlement processing;
+4. one economic movement could be claimed by multiple settlements;
+5. `SourceEnvelope` digest/ID integrity was not self-verifying;
+6. refund lifecycle semantics were mixed into the normalized payment-event model.
+
+All are now repaired with regression tests and recorded rather than hidden.
+
+See:
+
+- [`FAILURE_LOG.md`](FAILURE_LOG.md) — numbered genuine failures and repairs;
+- [`docs/18_IMPLEMENTATION_AUDIT.md`](docs/18_IMPLEMENTATION_AUDIT.md) — first implementation audit;
+- [`docs/19_SECOND_IMPLEMENTATION_AUDIT.md`](docs/19_SECOND_IMPLEMENTATION_AUDIT.md) — independent second audit;
+- [`LIMITATIONS.md`](LIMITATIONS.md) — current non-claims and unresolved scope.
+
+---
+
+## Important source boundaries
+
+### Normalized fixtures are not production adapters
+
+The current recon adapter consumes a normalized fixture schema containing fields such as:
 
 ```text
 gross_amount_paise
@@ -106,9 +158,13 @@ settlement_effect_paise
 
 It is **not** the final production Razorpay Settlement Recon adapter.
 
-The real Razorpay integration phase must normalize Razorpay's authoritative Recon fields such as `debit`, `credit`, `amount`, `fee` and `tax` using fixture-tested source semantics. Synthetic formulas are not allowed to masquerade as production API semantics.
+The real integration must normalize Razorpay's authoritative Recon fields such as `debit`, `credit`, `amount`, `fee` and `tax` using source-specific fixtures and Test Mode/API evidence. Synthetic formulas are not allowed to masquerade as production semantics.
 
-See [`LIMITATIONS.md`](LIMITATIONS.md) for the exact non-claims.
+Likewise, the current `ObservedBatch` / `RawRecord` transport belongs to the evaluation fixture layer. It does not contain hidden truth, but production integrations should eventually use provider-specific transport models.
+
+### Payment state and refund lifecycle are distinct
+
+Refunds remain first-class economic evidence. The current normalized payment-event reducer does not invent refund amount from a generic payment event. A real Razorpay integration must preserve the provider distinction between payment entity status and refund-specific evidence such as `refund_status`, `amount_refunded` and refund webhooks.
 
 ---
 
@@ -117,6 +173,7 @@ See [`LIMITATIONS.md`](LIMITATIONS.md) for the exact non-claims.
 - Money is signed **integer paise**, never float.
 - Currency and amount unit are explicit.
 - Raw source evidence is append-only and provenance is preserved.
+- A raw envelope's payload, digest and deterministic source ID must agree.
 - A malformed source row is retained even when canonicalization fails.
 - Duplicate/retried delivery cannot duplicate economic value.
 - Arrival order cannot silently define final payment truth.
@@ -125,8 +182,8 @@ See [`LIMITATIONS.md`](LIMITATIONS.md) for the exact non-claims.
 - Settlement processing and bank receipt are separate facts.
 - UTR/authoritative IDs outrank fuzzy similarity.
 - A zero residual is necessary but never sufficient proof of identity.
-- Ambiguity fails closed.
-- Unknown source unit/sign semantics quarantine the evidence rather than guess.
+- Ambiguity and contradiction fail closed.
+- Unknown source unit/sign semantics quarantine evidence rather than guess.
 - Hidden simulator truth cannot be imported by production/reconciliation modules.
 - AI cannot mutate financial truth or independently mark a settlement reconciled.
 
@@ -140,8 +197,8 @@ The evaluation design generates an authoritative hidden financial world and sepa
 
 Implemented adversarial shapes already include:
 
-- duplicate and reordered webhooks;
-- delayed webhooks;
+- duplicate and reordered payment evidence;
+- delayed events;
 - `failed → captured` evidence;
 - dropped events;
 - refunds and cross-period refunds;
@@ -154,7 +211,11 @@ Implemented adversarial shapes already include:
 - rupee/paise and sign traps;
 - prompt-like bank narration;
 - partial source outages;
-- high-cardinality settlement cases.
+- high-cardinality settlement cases;
+- same economic identity with conflicting recon values;
+- recon evidence after settlement processing;
+- cross-settlement economic-identity conflicts;
+- wrong/missing raw provenance.
 
 The safety metric that matters most is **silent false auto-match rate**. A confident wrong financial match is worse than an explicit unresolved case.
 
@@ -164,24 +225,13 @@ Final match-rate, accuracy, throughput and scale numbers will only be published 
 
 ## Next implementation gates
 
-### Phase 7 — Settlement Composition Proof
-
-For each settlement:
-
-- collect authoritative recon rows;
-- validate row identity and canonical signs;
-- detect duplicate economic evidence;
-- calculate exact net composition;
-- compare it to the settlement entity;
-- emit an exact component proof or residual.
-
-### Phase 8 — Bank Receipt Proof
+### Gate 8 — Bank Receipt Proof
 
 Bank identity will be conservative. Exact UTR plus exact amount and valid source/time constraints can prove a normal bank receipt. Same amount plus approximate date cannot.
 
-Split-credit support must require evidence binding all component bank rows to the settlement.
+Split-credit support must require evidence binding all component bank rows to the settlement. Exact UTR with a wrong amount must be a contradiction, not a match.
 
-### Phase 9 — Full Proof + versioning
+### Gate 9 — Full Proof + versioning
 
 Composition proof and bank proof become independent fragments of a versioned full reconciliation proof. Late evidence must reopen only affected proof fragments while preserving the old version.
 
@@ -232,11 +282,8 @@ CI runs the same validation path.
 - [`docs/15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](docs/15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md)
 - [`docs/16_MASTER_BUILD_PLAN.md`](docs/16_MASTER_BUILD_PLAN.md) — implementation contract
 - [`docs/17_RESEARCH_SOURCEBOOK.md`](docs/17_RESEARCH_SOURCEBOOK.md)
-
-### Honesty / review artifacts
-
-- [`FAILURE_LOG.md`](FAILURE_LOG.md) — genuine implementation failures and fixes
-- [`LIMITATIONS.md`](LIMITATIONS.md) — current limitations and explicit non-claims
+- [`docs/18_IMPLEMENTATION_AUDIT.md`](docs/18_IMPLEMENTATION_AUDIT.md)
+- [`docs/19_SECOND_IMPLEMENTATION_AUDIT.md`](docs/19_SECOND_IMPLEMENTATION_AUDIT.md)
 
 ---
 
@@ -264,9 +311,9 @@ CI runs the same validation path.
 - [x] append-only raw evidence journal
 - [x] journal-first ingestion
 - [x] temporal payment reducer
-- [x] provenance-preserving Money Graph
-- [ ] settlement composition proofs
-- [ ] bank receipt proofs
+- [x] journal-backed provenance-preserving Money Graph
+- [x] Settlement Composition Proof
+- [ ] Bank Receipt Proof
 - [ ] full proof versioning
 - [ ] residual solver
 - [ ] baseline evaluation harness

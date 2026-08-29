@@ -8,6 +8,10 @@ from . import domain, ingestion, payment_state
 type EdgeKey = tuple[str, str, str]
 
 
+class MoneyGraphError(ValueError):
+    """Canonical evidence is missing required journal-backed provenance."""
+
+
 @dataclass(frozen=True, slots=True)
 class MoneyGraph:
     nodes: frozenset[domain.EntityId]
@@ -59,7 +63,28 @@ def _edge(
     )
 
 
+def _source_evidence_id(
+    source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
+    source_kind: domain.SourceKind,
+    source_record_id: str,
+) -> str:
+    envelope_id = source_index.get((source_kind, source_record_id))
+    if envelope_id is None:
+        raise MoneyGraphError(
+            "canonical object is missing raw source provenance: "
+            f"{source_kind.value}/{source_record_id}"
+        )
+    return str(envelope_id)
+
+
 def build_money_graph(batch: ingestion.CanonicalBatch) -> MoneyGraph:
+    if not batch.source_links:
+        raise MoneyGraphError(
+            "Money Graph requires a journal-backed CanonicalBatch; "
+            "use ingest_observed_batch rather than adapt_observed_batch"
+        )
+    source_index = batch.source_index()
+
     nodes: set[domain.EntityId] = set()
     nodes.update(order.id for order in batch.orders)
     nodes.update(event.payment_id for event in batch.payment_events)
@@ -76,7 +101,11 @@ def build_money_graph(batch: ingestion.CanonicalBatch) -> MoneyGraph:
             continue
         nodes.add(state.order_id)
         evidence_ids = tuple(
-            event.source_event_id
+            _source_evidence_id(
+                source_index,
+                domain.SourceKind.RAZORPAY_EVENT,
+                event.source_event_id,
+            )
             for event in events_by_payment[state.payment_id]
             if event.order_id == state.order_id
         )
@@ -93,19 +122,24 @@ def build_money_graph(batch: ingestion.CanonicalBatch) -> MoneyGraph:
         nodes.add(recon.entity_id)
         nodes.add(recon.id)
         nodes.add(recon.settlement_id)
+        evidence_id = _source_evidence_id(
+            source_index,
+            domain.SourceKind.RAZORPAY_RECON,
+            str(recon.id),
+        )
         edges.extend(
             (
                 _edge(
                     relationship="entity_has_recon_entry",
                     from_id=recon.entity_id,
                     to_id=recon.id,
-                    evidence_ids=(str(recon.id),),
+                    evidence_ids=(evidence_id,),
                 ),
                 _edge(
                     relationship="recon_entry_contributes_to_settlement",
                     from_id=recon.id,
                     to_id=recon.settlement_id,
-                    evidence_ids=(str(recon.id),),
+                    evidence_ids=(evidence_id,),
                 ),
             )
         )

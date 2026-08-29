@@ -52,6 +52,15 @@ def test_wrong_refund_effect_fails_closed_even_when_still_negative() -> None:
         adapt_observed_batch(malformed)
 
 
+def test_refund_lifecycle_cannot_masquerade_as_payment_event() -> None:
+    observed = _observed()
+    rows = [dict(row) for row in observed.razorpay_events]
+    rows[0]["event_kind"] = "refunded"
+    malformed = replace(observed, razorpay_events=tuple(rows))
+    with pytest.raises(AdapterError, match="unsupported payment event kind"):
+        adapt_observed_batch(malformed)
+
+
 def test_prompt_like_bank_narration_is_data_not_instruction() -> None:
     canonical = adapt_observed_batch(_observed(CorruptionKind.PROMPT_LIKE_NARRATION))
     assert any("IGNORE PREVIOUS" in row.narration for row in canonical.bank_entries)

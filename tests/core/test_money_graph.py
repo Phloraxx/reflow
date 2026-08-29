@@ -1,11 +1,20 @@
 from dataclasses import replace
+from datetime import UTC, datetime
 
 import pytest
 
-from reflow.ingestion import adapt_observed_batch
-from reflow.money_graph import EdgeKey, build_money_graph, evaluate_edges
+from reflow.ingestion import adapt_observed_batch, ingest_observed_batch
+from reflow.journal import InMemoryJournal
+from reflow.money_graph import (
+    EdgeKey,
+    MoneyGraphError,
+    build_money_graph,
+    evaluate_edges,
+)
 from reflow.payment_state import PaymentStateError
 from reflow.simulator import CorruptionKind, CorruptionPlan, generate_world, observe_world
+
+RECEIVED = datetime(2026, 8, 29, 18, 0, tzinfo=UTC)
 
 
 def _expected_edges(seed: int) -> set[EdgeKey]:
@@ -35,14 +44,22 @@ def _expected_edges(seed: int) -> set[EdgeKey]:
     return expected
 
 
-def _graph(seed: int, *corruptions: CorruptionKind):
-    world = generate_world(seed)
-    observed = observe_world(
-        world,
+def _observed(seed: int, *corruptions: CorruptionKind):
+    return observe_world(
+        generate_world(seed),
         seed=seed + 1,
         plan=CorruptionPlan(kinds=tuple(corruptions)),
     ).observed
-    return build_money_graph(adapt_observed_batch(observed))
+
+
+def _graph(seed: int, *corruptions: CorruptionKind):
+    journal = InMemoryJournal()
+    canonical = ingest_observed_batch(
+        _observed(seed, *corruptions),
+        journal,
+        received_at=RECEIVED,
+    )
+    return build_money_graph(canonical)
 
 
 def test_clean_graph_has_perfect_edge_precision_and_recall() -> None:
@@ -79,26 +96,35 @@ def test_duplicate_economic_recon_row_is_visible_as_false_positive_evidence() ->
 
 
 def test_conflicting_order_identity_fails_closed_before_graph_proof() -> None:
-    world = generate_world(47)
-    observed = observe_world(
-        world,
-        seed=48,
-        plan=CorruptionPlan(kinds=()),
-    ).observed
-    canonical = adapt_observed_batch(observed)
+    journal = InMemoryJournal()
+    canonical = ingest_observed_batch(_observed(47), journal, received_at=RECEIVED)
     original = canonical.payment_events[0]
     other_order = next(order.id for order in canonical.orders if order.id != original.order_id)
-    conflicting = replace(
-        original,
-        source_event_id=f"{original.source_event_id}_conflict",
-        order_id=other_order,
-    )
+    conflicting = replace(original, order_id=other_order)
     bad_batch = replace(
         canonical,
-        payment_events=(*canonical.payment_events, conflicting),
+        payment_events=(conflicting, *canonical.payment_events[1:]),
     )
     with pytest.raises(PaymentStateError):
         build_money_graph(bad_batch)
+
+
+def test_adapter_only_batch_cannot_bypass_raw_evidence_journal() -> None:
+    canonical = adapt_observed_batch(_observed(48))
+    with pytest.raises(MoneyGraphError, match="journal-backed"):
+        build_money_graph(canonical)
+
+
+def test_graph_evidence_ids_resolve_to_raw_source_envelopes() -> None:
+    journal = InMemoryJournal()
+    canonical = ingest_observed_batch(_observed(49), journal, received_at=RECEIVED)
+    graph = build_money_graph(canonical)
+    journal_ids = {str(envelope.id) for envelope in journal.entries()}
+    assert graph.edges
+    for edge in graph.edges:
+        assert edge.evidence_ids
+        assert set(edge.evidence_ids).issubset(journal_ids)
+        assert all(evidence_id.startswith("src_") for evidence_id in edge.evidence_ids)
 
 
 def test_bank_narration_never_creates_proven_graph_relationship() -> None:

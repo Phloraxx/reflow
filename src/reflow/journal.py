@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
 from reflow.domain import SourceEnvelope, SourceEnvelopeId, SourceKind
+from reflow.domain.source_hash import source_envelope_id_value, source_payload_sha256
 
 
 class JournalConflictError(ValueError):
@@ -25,25 +24,11 @@ class AppendResult:
     envelope: SourceEnvelope
 
 
-def _json_default(value: object) -> object:
-    if isinstance(value, Mapping):
-        return dict(value)
-    raise TypeError(f"unsupported source payload value {type(value).__name__}")
-
-
 def payload_sha256(payload: Mapping[str, object]) -> str:
     try:
-        encoded = json.dumps(
-            dict(payload),
-            sort_keys=True,
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-            default=_json_default,
-        ).encode()
+        return source_payload_sha256(payload)
     except (TypeError, ValueError) as exc:
         raise TypeError("source payload must be deterministic JSON data") from exc
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def make_source_envelope(
@@ -56,8 +41,9 @@ def make_source_envelope(
     payload: Mapping[str, object],
 ) -> SourceEnvelope:
     digest = payload_sha256(payload)
-    identity = f"{source_kind.value}\0{source_record_id}\0{digest}".encode()
-    envelope_id = SourceEnvelopeId(f"src_{hashlib.sha256(identity).hexdigest()[:24]}")
+    envelope_id = SourceEnvelopeId(
+        source_envelope_id_value(source_kind.value, source_record_id, digest)
+    )
     return SourceEnvelope(
         id=envelope_id,
         source_kind=source_kind,

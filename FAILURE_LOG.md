@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None at the end of the Gates 0–6 audit. The audit fixes below pass Ruff, strict mypy and pytest on the Phase 4–6 branch.
+None after the second independent Gates 0–7 audit. The repaired branch has passed Ruff, strict mypy and pytest. Gate 8 remains blocked until this audited checkpoint is merged.
 
 ---
 
@@ -216,7 +216,7 @@ A malformed refund row could pass canonicalization and later contaminate settlem
 
 ### Fix
 
-For the **normalized synthetic fixture schema**, refund rows now require negative gross amount, zero fee/tax and `settlement_effect == gross_amount`.
+For the **normalized synthetic fixture schema**, refund rows require negative gross amount, zero fee/tax and `settlement_effect == gross_amount`.
 
 ### Regression protection
 
@@ -316,16 +316,11 @@ A finance proof system must be able to explain rejected or quarantined evidence.
 
 ### Fix
 
-A journal-first ingestion pipeline now stores each raw record before deterministic canonicalization. Raw envelopes permit `occurred_at=None` when the source time cannot be parsed, while always preserving an aware local `received_at`, immutable payload and deterministic content hash. Missing source record identifiers use a deterministic hash-derived fallback rather than dropping the row. Canonical financial models retain their strict timestamp validation.
+A journal-first ingestion pipeline stores each raw record before deterministic canonicalization. Raw envelopes permit `occurred_at=None` when the source time cannot be parsed, while always preserving an aware local `received_at`, immutable payload and deterministic content hash. Missing source record identifiers use a deterministic hash-derived fallback rather than dropping the row. Canonical financial models retain their strict timestamp validation.
 
 ### Regression protection
 
-`tests/ingestion/test_pipeline.py` verifies that:
-
-- every clean raw record is journaled before canonical objects are returned;
-- malformed-date evidence remains in the journal even though the adapter rejects the batch;
-- replaying the same raw batch later is idempotent;
-- changed raw content under the same source record identity fails closed.
+`tests/ingestion/test_pipeline.py` verifies raw retention before canonicalization, malformed-date retention, replay idempotency and changed-content conflicts.
 
 ### Metric impact
 
@@ -337,12 +332,251 @@ The journal is currently an in-memory reference implementation. Durable crash/re
 
 ---
 
+## F-0009 — Canonical objects lost their raw-envelope provenance
+
+**Date:** 2026-08-29  
+**Area:** ingestion / Money Graph  
+**Severity:** safety-critical
+
+### Symptom
+
+After journal-first ingestion, the adapter created canonical objects independently. `CanonicalBatch` did not retain which raw `SourceEnvelope` produced each object, and Money Graph edges cited canonical event/recon IDs rather than raw journal envelope IDs.
+
+### Initial assumption
+
+Journaling before adaptation was treated as sufficient end-to-end provenance.
+
+### Root cause
+
+Raw retention and canonical compilation were connected only by control flow, not by an explicit immutable identity link.
+
+### Why it matters
+
+A proof could cite a canonical relationship without being able to walk back to the immutable source payload actually ingested.
+
+### Fix
+
+`CanonicalBatch` now carries validated immutable `SourceLink`s after journal-first ingestion. The Money Graph rejects adapter-only batches and authoritative edges cite `SourceEnvelopeId` values. Gate 7 proofs also retain their raw source envelope IDs.
+
+### Regression protection
+
+Pipeline/graph/proof tests verify source-link completeness, journal resolution, graph rejection of adapter-only batches and exact raw-envelope evidence IDs.
+
+### Metric impact
+
+No published metric changed.
+
+### Remaining limitation
+
+Persistent raw evidence storage is still in-memory.
+
+---
+
+## F-0010 — Gate 7 compared row values before economic identity
+
+**Date:** 2026-08-29  
+**Area:** reconciliation engine  
+**Severity:** safety-critical
+
+### Symptom
+
+The initial Gate 7 duplicate fingerprint included amount fields and timestamp. Two recon rows claiming the same economic entity but disagreeing by one paise or timestamp could therefore look like two separate admissible movements.
+
+### Initial assumption
+
+A full-row fingerprint was assumed to be a sufficient duplicate-economic identity.
+
+### Root cause
+
+Value equality was evaluated before asking whether two rows claimed ownership of the same payment/refund/transfer/adjustment.
+
+### Why it matters
+
+Contradictory evidence about one economic movement could be double-counted and potentially contribute to a false green composition proof.
+
+### Fix
+
+Gate 7 groups rows first by `(entity_kind, entity_id)`. Same-source exact replay is idempotent; distinct rows with the same payload are duplicate economic evidence; differing payloads under one identity are an identity conflict. Conflicts force `COMPOSITION_CONTRADICTED`.
+
+### Regression protection
+
+Dedicated tests cover exact replay, distinct duplicate rows and same-identity/different-value evidence.
+
+### Metric impact
+
+No published metric changed.
+
+### Remaining limitation
+
+Real Razorpay recon identity semantics must be verified before generalizing the normalized fixture rule to production inputs.
+
+---
+
+## F-0011 — Gate 7 could use future recon evidence
+
+**Date:** 2026-08-29  
+**Area:** reconciliation engine  
+**Severity:** safety-critical
+
+### Symptom
+
+A recon entry whose `occurred_at` was later than the settlement's `processed_at` could still be admitted into settlement composition arithmetic.
+
+### Initial assumption
+
+The simulator's causal truth was assumed to make an explicit proof-level time check redundant.
+
+### Root cause
+
+The proof engine trusted fixture causality instead of independently validating temporal admissibility.
+
+### Why it matters
+
+Corrupted or real-world late/future evidence could create a mathematically exact proof for a settlement before that movement existed.
+
+### Fix
+
+Late rows are excluded from admissible arithmetic, recorded in `late_component_ids`, tagged `RECON_AFTER_SETTLEMENT` and force contradiction.
+
+### Regression protection
+
+`test_recon_after_settlement_is_contradicted_and_excluded_from_arithmetic`.
+
+### Metric impact
+
+No published metric changed.
+
+### Remaining limitation
+
+Production source clocks/time semantics require source-specific validation later.
+
+---
+
+## F-0012 — One economic movement could be claimed by multiple settlements
+
+**Date:** 2026-08-29  
+**Area:** reconciliation engine  
+**Severity:** safety-critical
+
+### Symptom
+
+Per-settlement proof calls could independently accept the same payment/refund/transfer/adjustment identity under two settlement IDs.
+
+### Initial assumption
+
+Settlement-local identity checks were assumed to be enough.
+
+### Root cause
+
+No batch-level ownership index existed for economic identities.
+
+### Why it matters
+
+Two otherwise valid-looking settlement proofs could both claim the same money movement.
+
+### Fix
+
+Gate 7 builds a batch-level economic-ownership index. Identities claimed by multiple settlements are excluded from admissible arithmetic and force `ECONOMIC_ENTITY_IN_MULTIPLE_SETTLEMENTS` contradictions in every affected proof.
+
+### Regression protection
+
+`test_same_economic_entity_cannot_belong_to_two_settlements`.
+
+### Metric impact
+
+No published metric changed.
+
+### Remaining limitation
+
+The production adapter must confirm provider identity semantics for each real recon entity type.
+
+---
+
+## F-0013 — Raw envelope digest and ID were not self-verifying
+
+**Date:** 2026-08-29  
+**Area:** evidence/provenance  
+**Severity:** safety-critical
+
+### Symptom
+
+`SourceEnvelope` checked only that `payload_sha256` looked like a SHA-256 digest. It did not recompute the digest from its immutable payload. It also did not verify that its `src_...` ID was the deterministic identity derived by the journal helper.
+
+### Initial assumption
+
+The journal helper was assumed to be the only construction path, so its correct derivation was treated as sufficient.
+
+### Root cause
+
+Integrity rules lived in the helper rather than in the domain object that promises immutable evidence.
+
+### Why it matters
+
+A manually constructed or future deserialized envelope could carry a false digest or unrelated valid-looking source ID and still enter the journal/proof chain.
+
+### Fix
+
+One canonical source hashing/identity module is shared by the journal and domain. `SourceEnvelope` freezes the payload, verifies the exact digest, derives the expected `src_...` identity from source kind + record ID + digest, and rejects any mismatch.
+
+### Regression protection
+
+Domain tests cover digest mismatch, source-envelope ID mismatch, deep immutability and successful rehashing of the frozen payload.
+
+### Metric impact
+
+No published metric changed.
+
+### Remaining limitation
+
+This proves internal evidence integrity, not external authenticity. Production webhook signature verification and authenticated source acquisition remain integration responsibilities.
+
+---
+
+## F-0014 — Refund lifecycle was mixed into the normalized payment-event model
+
+**Date:** 2026-08-29  
+**Area:** domain / ingestion  
+**Severity:** medium
+
+### Symptom
+
+`PaymentEventKind` exposed a generic `REFUNDED` event and the reducer converted it directly into a full refunded amount. `PaymentStatus` also contained an unused `PARTIALLY_REFUNDED` state.
+
+### Initial assumption
+
+Payment entity statuses and payment webhook event kinds were treated as interchangeable.
+
+### Root cause
+
+Provider status semantics and provider event semantics were conflated in the normalized model.
+
+### Why it matters
+
+A future real Razorpay webhook adapter could invent unsupported payment webhook events or infer refund amount from insufficient evidence.
+
+### Fix
+
+Refund lifecycle is no longer accepted as the current normalized payment event. The payment reducer no longer manufactures refund amount. The unused `PARTIALLY_REFUNDED` status was removed. Refunds remain first-class financial evidence and real integration must use authoritative refund/payment fields.
+
+### Regression protection
+
+The known fixture adapter explicitly rejects `event_kind="refunded"` in the payment-event stream.
+
+### Metric impact
+
+No published metric changed.
+
+### Remaining limitation
+
+The current normalized event fixtures are not yet the final raw Razorpay webhook adapter; production event/status mapping remains a later integration gate.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
 
 - settlement debit/credit sign mistakes in the real Razorpay adapter;
-- repeated economic-row counting in the Phase 7 proof engine;
 - same-amount bank ambiguity;
 - exact UTR with wrong amount;
 - split bank-credit handling;
@@ -357,4 +591,5 @@ These are test targets, not claimed failures:
 - benchmark scorer bugs;
 - residual solver combinatorial explosion;
 - high-memory batch behaviour;
-- crash/restart idempotency.
+- crash/restart idempotency;
+- production webhook signature/authenticity validation.
