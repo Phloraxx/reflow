@@ -3,8 +3,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
-from .domain import EdgeState, EntityId, EvidenceEdge, EvidenceEdgeId, EvidenceStrength
-from .ingestion import CanonicalBatch
+from . import domain, ingestion
 
 
 type EdgeKey = tuple[str, str, str]
@@ -12,8 +11,8 @@ type EdgeKey = tuple[str, str, str]
 
 @dataclass(frozen=True, slots=True)
 class MoneyGraph:
-    nodes: frozenset[EntityId]
-    edges: tuple[EvidenceEdge, ...]
+    nodes: frozenset[domain.EntityId]
+    edges: tuple[domain.EvidenceEdge, ...]
 
     @property
     def edge_keys(self) -> frozenset[EdgeKey]:
@@ -31,51 +30,53 @@ class EdgeMetrics:
 
 def _edge_id(
     relationship: str,
-    from_id: EntityId,
-    to_id: EntityId,
+    from_id: domain.EntityId,
+    to_id: domain.EntityId,
     evidence_ids: tuple[str, ...],
-) -> EvidenceEdgeId:
+) -> domain.EvidenceEdgeId:
     material = "\0".join(
         (relationship, str(from_id), str(to_id), *sorted(evidence_ids))
     ).encode()
-    return EvidenceEdgeId(f"edge_{hashlib.sha256(material).hexdigest()[:24]}")
+    return domain.EvidenceEdgeId(f"edge_{hashlib.sha256(material).hexdigest()[:24]}")
 
 
 def _edge(
     *,
     relationship: str,
-    from_id: EntityId,
-    to_id: EntityId,
+    from_id: domain.EntityId,
+    to_id: domain.EntityId,
     evidence_ids: tuple[str, ...],
-) -> EvidenceEdge:
+) -> domain.EvidenceEdge:
     evidence = tuple(sorted(set(evidence_ids)))
-    return EvidenceEdge(
+    return domain.EvidenceEdge(
         id=_edge_id(relationship, from_id, to_id, evidence),
         from_id=from_id,
         to_id=to_id,
         relationship=relationship,
-        strength=EvidenceStrength.AUTHORITATIVE,
-        state=EdgeState.PROVEN,
+        strength=domain.EvidenceStrength.AUTHORITATIVE,
+        state=domain.EdgeState.PROVEN,
         evidence_ids=evidence,
         reason_codes=("EXACT_SOURCE_IDENTIFIER",),
     )
 
 
-def build_money_graph(batch: CanonicalBatch) -> MoneyGraph:
-    nodes: set[EntityId] = set()
+def build_money_graph(batch: ingestion.CanonicalBatch) -> MoneyGraph:
+    nodes: set[domain.EntityId] = set()
     nodes.update(order.id for order in batch.orders)
     nodes.update(event.payment_id for event in batch.payment_events)
     nodes.update(settlement.id for settlement in batch.settlements)
     nodes.update(entry.id for entry in batch.bank_entries)
 
-    order_payment_evidence: dict[tuple[EntityId, EntityId], list[str]] = {}
+    order_payment_evidence: dict[
+        tuple[domain.EntityId, domain.EntityId], list[str]
+    ] = {}
     for event in batch.payment_events:
         if event.order_id is None:
             continue
         key = (event.order_id, event.payment_id)
         order_payment_evidence.setdefault(key, []).append(event.source_event_id)
 
-    edges: list[EvidenceEdge] = []
+    edges: list[domain.EvidenceEdge] = []
     for (order_id, payment_id), evidence_ids in sorted(
         order_payment_evidence.items(),
         key=lambda item: (str(item[0][0]), str(item[0][1])),
@@ -108,7 +109,7 @@ def build_money_graph(batch: CanonicalBatch) -> MoneyGraph:
     )
 
 
-def edge_key(edge: EvidenceEdge) -> EdgeKey:
+def edge_key(edge: domain.EvidenceEdge) -> EdgeKey:
     return (edge.relationship, str(edge.from_id), str(edge.to_id))
 
 
