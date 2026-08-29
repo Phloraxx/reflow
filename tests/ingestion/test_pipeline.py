@@ -24,6 +24,9 @@ def test_clean_ingestion_journals_every_raw_record_before_returning_canonical() 
     canonical = ingest_observed_batch(observed, journal, received_at=RECEIVED)
     assert len(journal) == observed.record_count
     assert len(canonical.orders) == len(observed.merchant_rows)
+    assert len(canonical.source_links) == len(journal)
+    journal_ids = {entry.id for entry in journal.entries()}
+    assert {link.envelope_id for link in canonical.source_links} == journal_ids
 
 
 def test_malformed_source_is_preserved_in_journal_before_adapter_rejects_batch() -> None:
@@ -38,14 +41,15 @@ def test_malformed_source_is_preserved_in_journal_before_adapter_rejects_batch()
 def test_reingesting_same_raw_batch_later_is_idempotent() -> None:
     observed = _observed()
     journal = InMemoryJournal()
-    journal_observed_batch(observed, journal, received_at=RECEIVED)
+    first_links = journal_observed_batch(observed, journal, received_at=RECEIVED)
     size = len(journal)
-    journal_observed_batch(
+    second_links = journal_observed_batch(
         observed,
         journal,
         received_at=RECEIVED + timedelta(hours=1),
     )
     assert len(journal) == size
+    assert second_links == first_links
 
 
 def test_same_source_record_id_with_changed_raw_payload_is_conflict() -> None:
