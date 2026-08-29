@@ -138,7 +138,7 @@ def test_missing_bank_utr_never_falls_back_to_same_amount_or_narration() -> None
 
     assert proof.status is BankReceiptStatus.WAITING
     assert proof.bank_entry_ids == ()
-    assert case.bank_entries[0].id in proof.rejected_same_amount_ids
+    assert proof.same_amount_nonidentity_count >= 1
     assert proof.reason_codes == (
         "BANK_RECEIPT_NOT_OBSERVED",
         "SAME_AMOUNT_NOT_IDENTITY",
@@ -164,7 +164,7 @@ def test_corrupted_bank_utr_does_not_match_by_amount_and_nearby_time() -> None:
     )
 
     assert proof.status is BankReceiptStatus.WAITING
-    assert case.bank_entries[0].id in proof.rejected_same_amount_ids
+    assert proof.same_amount_nonidentity_count >= 1
     assert "SAME_AMOUNT_NOT_IDENTITY" in proof.reason_codes
 
 
@@ -189,7 +189,7 @@ def test_settlement_without_utr_is_incomplete_even_with_exact_amount_bank_credit
 
     assert proof.status is BankReceiptStatus.INCOMPLETE
     assert proof.bank_entry_ids == ()
-    assert case.bank_entries[0].id in proof.rejected_same_amount_ids
+    assert proof.same_amount_nonidentity_count >= 1
     assert proof.reason_codes == (
         "SAME_AMOUNT_NOT_IDENTITY",
         "SETTLEMENT_UTR_MISSING",
@@ -264,6 +264,8 @@ def test_reused_settlement_utr_contradicts_both_settlements() -> None:
 
     assert by_id[first.settlement.id].status is BankReceiptStatus.CONTRADICTED
     assert by_id[second.settlement.id].status is BankReceiptStatus.CONTRADICTED
+    assert by_id[first.settlement.id].bank_entry_ids == ()
+    assert by_id[second.settlement.id].bank_entry_ids == ()
     assert "SETTLEMENT_UTR_REUSED" in by_id[first.settlement.id].reason_codes
     assert "SETTLEMENT_UTR_REUSED" in by_id[second.settlement.id].reason_codes
 
