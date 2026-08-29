@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Mapping, Sequence
 
 from .types import (
     AdjustmentId,
@@ -67,13 +67,13 @@ class Money:
 
     def __add__(self, other: Money) -> Money:
         if not isinstance(other, Money):
-            return NotImplemented
+            raise TypeError("Money can only be added to Money")
         self._same_currency(other)
         return Money(self.amount_paise + other.amount_paise, self.currency)
 
     def __sub__(self, other: Money) -> Money:
         if not isinstance(other, Money):
-            return NotImplemented
+            raise TypeError("Money can only be subtracted from Money")
         self._same_currency(other)
         return Money(self.amount_paise - other.amount_paise, self.currency)
 
@@ -181,7 +181,9 @@ class Refund:
     def __post_init__(self) -> None:
         _aware(self.created_at, "created_at")
         if self.amount.amount_paise <= 0:
-            raise ValueError("refund amount must be positive; direction is expressed by entity kind")
+            raise ValueError(
+                "refund amount must be positive; direction is expressed by entity kind"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,9 +336,15 @@ class ReconciliationProof:
 
     def __post_init__(self) -> None:
         currency = self.expected_settlement.currency
-        if self.observed_settlement.currency != currency or self.residual.amount.currency != currency:
+        if (
+            self.observed_settlement.currency != currency
+            or self.residual.amount.currency != currency
+        ):
             raise ValueError("proof money must use one currency")
-        if self.observed_bank_credit is not None and self.observed_bank_credit.currency != currency:
+        if (
+            self.observed_bank_credit is not None
+            and self.observed_bank_credit.currency != currency
+        ):
             raise ValueError("bank proof currency must match settlement currency")
         if self.status is ProofStatus.PROVEN_RECONCILED and not self.residual.amount.is_zero:
             raise ValueError("a proven reconciliation cannot carry a non-zero residual")
