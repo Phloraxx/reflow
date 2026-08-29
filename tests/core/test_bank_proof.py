@@ -59,28 +59,40 @@ def test_clean_world_matches_gate_8_supported_bank_semantics() -> None:
             assert proof.status is BankReceiptStatus.RESIDUAL
             assert proof.residual.amount_paise == 137
             assert proof.reason_codes == ("BANK_AMOUNT_MISMATCH",)
-        elif case.scenario == "split_bank_credit":
-            # Legacy simulator shape: multiple distinct bank transactions reuse one UTR.
-            # Gate 8 deliberately rejects this until Instant Settlement payout evidence
-            # (parent setlod -> setlodp payout -> payout UTR) is modeled explicitly.
-            assert proof.status is BankReceiptStatus.CONTRADICTED
-            assert proof.reason_codes == ("BANK_UTR_REUSED_ACROSS_ENTRIES",)
         else:
             assert proof.status is BankReceiptStatus.PROVEN
             assert proof.residual.is_zero
             assert proof.reason_codes == ()
 
 
-def test_multiple_distinct_bank_entries_sharing_standard_settlement_utr_are_contradicted() -> None:
+def test_two_distinct_bank_transactions_reusing_standard_settlement_utr_are_contradicted() -> None:
     seed = 102
     world = generate_world(seed)
-    _, _, proofs = _proofs(seed)
-    case = next(case for case in world.cases if case.scenario == "split_bank_credit")
-    proof = next(proof for proof in proofs if proof.settlement_id == case.settlement.id)
+    observed = _observed(seed)
+    case = next(case for case in world.cases if case.scenario == "clean")
+    original = next(
+        row for row in observed.bank_rows if row["bank_entry_id"] == str(case.bank_entries[0].id)
+    )
+    duplicate_utr = dict(original)
+    duplicate_utr["bank_entry_id"] = "bank_duplicate_utr_attack"
+    duplicate_utr["amount_paise"] = 1
+    duplicate_utr["occurred_at"] = (
+        case.bank_entries[0].occurred_at + timedelta(minutes=1)
+    ).isoformat()
+
+    batch, _ = _ingest(replace(observed, bank_rows=(*observed.bank_rows, duplicate_utr)))
+    proof = next(
+        proof
+        for proof in prove_all_bank_receipts(batch)
+        if proof.settlement_id == case.settlement.id
+    )
 
     assert proof.status is BankReceiptStatus.CONTRADICTED
     assert proof.bank_entry_ids == ()
-    assert set(proof.reused_bank_utr_ids) == {entry.id for entry in case.bank_entries}
+    assert set(str(entry_id) for entry_id in proof.reused_bank_utr_ids) == {
+        str(case.bank_entries[0].id),
+        "bank_duplicate_utr_attack",
+    }
     assert proof.observed_bank_credit.is_zero
     assert proof.reason_codes == ("BANK_UTR_REUSED_ACROSS_ENTRIES",)
 
@@ -222,8 +234,20 @@ def test_bank_credit_before_settlement_processing_is_contradicted_and_excluded()
     assert proof.reason_codes == ("BANK_CREDIT_PRECEDES_SETTLEMENT",)
 
 
-def test_reused_settlement_utr_contradicts_both_settlements() -> None:
+def test_credit_at_exact_settlement_processing_time_is_causally_admissible() -> None:
     seed = 109
+    world = generate_world(seed)
+    _, _, proofs = _proofs(seed)
+    case = next(case for case in world.cases if case.scenario == "immediate_bank_credit")
+    proof = next(proof for proof in proofs if proof.settlement_id == case.settlement.id)
+
+    assert case.bank_entries[0].occurred_at == case.settlement.processed_at
+    assert proof.status is BankReceiptStatus.PROVEN
+    assert proof.bank_entry_ids == (case.bank_entries[0].id,)
+
+
+def test_reused_settlement_utr_contradicts_both_settlements() -> None:
+    seed = 110
     world = generate_world(seed)
     observed = _observed(seed)
     first, second = world.cases[0], world.cases[1]
@@ -245,7 +269,7 @@ def test_reused_settlement_utr_contradicts_both_settlements() -> None:
 
 
 def test_identical_bank_source_replay_is_idempotent_not_double_counted() -> None:
-    seed = 110
+    seed = 111
     world = generate_world(seed)
     observed = _observed(seed)
     case = next(case for case in world.cases if case.scenario == "clean")
@@ -267,7 +291,7 @@ def test_identical_bank_source_replay_is_idempotent_not_double_counted() -> None
 
 
 def test_conflicting_duplicate_bank_identity_fails_closed() -> None:
-    batch, _ = _ingest(_observed(111))
+    batch, _ = _ingest(_observed(112))
     original = batch.bank_entries[0]
     conflicting = replace(
         original,
@@ -280,7 +304,7 @@ def test_conflicting_duplicate_bank_identity_fails_closed() -> None:
 
 
 def test_missing_bank_source_provenance_fails_closed() -> None:
-    batch, _ = _ingest(_observed(112))
+    batch, _ = _ingest(_observed(113))
     settlement = batch.settlements[0]
     exact_bank = tuple(
         row for row in batch.bank_entries if row.utr is not None and row.utr == settlement.utr
@@ -298,8 +322,8 @@ def test_missing_bank_source_provenance_fails_closed() -> None:
 
 
 def test_bank_delay_has_no_arbitrary_upper_time_cutoff() -> None:
-    clean_batch, _, clean_proofs = _proofs(113)
-    delayed_batch, _, delayed_proofs = _proofs(113, CorruptionKind.BANK_CREDIT_DELAY)
+    clean_batch, _, clean_proofs = _proofs(114)
+    delayed_batch, _, delayed_proofs = _proofs(114, CorruptionKind.BANK_CREDIT_DELAY)
 
     assert [proof.status for proof in delayed_proofs] == [proof.status for proof in clean_proofs]
     assert [proof.settlement_id for proof in delayed_proofs] == [
@@ -309,9 +333,9 @@ def test_bank_delay_has_no_arbitrary_upper_time_cutoff() -> None:
 
 
 def test_prompt_like_or_noisy_bank_narration_never_changes_bank_identity() -> None:
-    _, _, clean = _proofs(114)
-    _, _, prompt = _proofs(114, CorruptionKind.PROMPT_LIKE_NARRATION)
-    _, _, noisy = _proofs(114, CorruptionKind.BANK_NARRATION_NOISE)
+    _, _, clean = _proofs(115)
+    _, _, prompt = _proofs(115, CorruptionKind.PROMPT_LIKE_NARRATION)
+    _, _, noisy = _proofs(115, CorruptionKind.BANK_NARRATION_NOISE)
 
     clean_shape = [(proof.settlement_id, proof.status, proof.bank_entry_ids) for proof in clean]
     assert [(proof.settlement_id, proof.status, proof.bank_entry_ids) for proof in prompt] == (
@@ -323,7 +347,7 @@ def test_prompt_like_or_noisy_bank_narration_never_changes_bank_identity() -> No
 
 
 def test_same_amount_settlements_remain_independent_by_utr() -> None:
-    seed = 115
+    seed = 116
     world = generate_world(seed)
     _, _, proofs = _proofs(seed)
     by_id = {proof.settlement_id: proof for proof in proofs}
@@ -349,10 +373,10 @@ def test_gate_8_handles_hundreds_of_settlements_without_cross_partition_matching
         max_payments=3,
         high_cardinality_payments=3,
     )
-    world = generate_world(116, config)
+    world = generate_world(117, config)
     observed = observe_world(
         world,
-        seed=2116,
+        seed=2117,
         plan=CorruptionPlan(kinds=()),
     ).observed
     batch, _ = _ingest(observed)
@@ -366,7 +390,5 @@ def test_gate_8_handles_hundreds_of_settlements_without_cross_partition_matching
             assert proof.status is BankReceiptStatus.WAITING
         elif case.scenario == "incorrect_bank_amount":
             assert proof.status is BankReceiptStatus.RESIDUAL
-        elif case.scenario == "split_bank_credit":
-            assert proof.status is BankReceiptStatus.CONTRADICTED
         else:
             assert proof.status is BankReceiptStatus.PROVEN
