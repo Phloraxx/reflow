@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from types import MappingProxyType
 
+from .source_hash import source_payload_sha256
 from .types import (
     AdjustmentId,
     BankEntryId,
@@ -140,7 +141,10 @@ class SourceEnvelope:
             raise ValueError("payload_sha256 must be hexadecimal") from exc
         if not self.schema_version:
             raise ValueError("schema_version cannot be empty")
-        object.__setattr__(self, "payload", _freeze_payload(self.payload))
+        frozen_payload = _freeze_payload(self.payload)
+        if source_payload_sha256(frozen_payload) != self.payload_sha256:
+            raise ValueError("payload_sha256 does not match immutable source payload")
+        object.__setattr__(self, "payload", frozen_payload)
 
 
 @dataclass(frozen=True, slots=True)
