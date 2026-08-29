@@ -11,7 +11,7 @@ from reflow.domain import SourceEnvelope, SourceEnvelopeId, SourceKind
 
 
 class JournalConflictError(ValueError):
-    """A stable source identity was reused for different evidence."""
+    """A stable source identity was reused for different raw payload evidence."""
 
 
 class AppendDisposition(StrEnum):
@@ -50,7 +50,7 @@ def make_source_envelope(
     *,
     source_kind: SourceKind,
     source_record_id: str,
-    occurred_at: datetime,
+    occurred_at: datetime | None,
     received_at: datetime,
     schema_version: str,
     payload: Mapping[str, object],
@@ -83,11 +83,6 @@ class InMemoryJournal:
             self._records[key] = envelope
             return AppendResult(AppendDisposition.STORED, envelope)
         if existing.payload_sha256 == envelope.payload_sha256:
-            if existing.occurred_at != envelope.occurred_at:
-                raise JournalConflictError(
-                    "same source identity and payload arrived with a different occurred_at: "
-                    f"{envelope.source_kind.value}/{envelope.source_record_id}"
-                )
             return AppendResult(AppendDisposition.DUPLICATE, existing)
         raise JournalConflictError(
             "same source identity arrived with a different payload hash: "
