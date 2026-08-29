@@ -25,6 +25,12 @@ class AppendResult:
     envelope: SourceEnvelope
 
 
+def _json_default(value: object) -> object:
+    if isinstance(value, Mapping):
+        return dict(value)
+    raise TypeError(f"unsupported source payload value {type(value).__name__}")
+
+
 def payload_sha256(payload: Mapping[str, object]) -> str:
     try:
         encoded = json.dumps(
@@ -32,6 +38,8 @@ def payload_sha256(payload: Mapping[str, object]) -> str:
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,
+            allow_nan=False,
+            default=_json_default,
         ).encode()
     except (TypeError, ValueError) as exc:
         raise TypeError("source payload must be deterministic JSON data") from exc
@@ -58,7 +66,7 @@ def make_source_envelope(
         received_at=received_at,
         payload_sha256=digest,
         schema_version=schema_version,
-        payload=dict(payload),
+        payload=payload,
     )
 
 
@@ -75,6 +83,11 @@ class InMemoryJournal:
             self._records[key] = envelope
             return AppendResult(AppendDisposition.STORED, envelope)
         if existing.payload_sha256 == envelope.payload_sha256:
+            if existing.occurred_at != envelope.occurred_at:
+                raise JournalConflictError(
+                    "same source identity and payload arrived with a different occurred_at: "
+                    f"{envelope.source_kind.value}/{envelope.source_record_id}"
+                )
             return AppendResult(AppendDisposition.DUPLICATE, existing)
         raise JournalConflictError(
             "same source identity arrived with a different payload hash: "
