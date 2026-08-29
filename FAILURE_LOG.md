@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None after the second independent Gates 0–7 audit. The repaired branch has passed Ruff, strict mypy and pytest. Gate 8 remains blocked until this audited checkpoint is merged.
+None currently known in the deterministic implementation through Gate 8. Gate 8 still requires exact-head PR validation and merge before Gate 9 begins.
 
 ---
 
@@ -572,6 +572,55 @@ The current normalized event fixtures are not yet the final raw Razorpay webhook
 
 ---
 
+## F-0015 — Synthetic split-bank truth conflated standard and Instant Settlements
+
+**Date:** 2026-08-30  
+**Area:** simulator / bank proof / provider semantics  
+**Severity:** high
+
+### Symptom
+
+The hidden financial world contained a `split_bank_credit` scenario where two distinct bank transactions reused one standard settlement UTR and their values were summed to the settlement amount. The first Gate 8 implementation accepted this as a valid split bank receipt.
+
+### Initial assumption
+
+Because one settlement can conceptually result in multiple observed bank credits in some payout flows, reusing the standard settlement UTR across multiple synthetic bank rows was treated as sufficient explicit binding.
+
+### Root cause
+
+The simulator conflated Razorpay's standard settlement entity with the separate Instant Settlement payout topology.
+
+Razorpay documents a normal `setl_...` settlement with a UTR used to track that particular settlement in the bank account. Instant Settlements instead use a `settlement.ondemand` parent (`setlod_...`) with explicit `ondemand_payout` children (`setlodp_...`) that carry payout-level evidence and UTRs.
+
+### Why it matters
+
+If left unchanged, the hidden benchmark would reward the engine for accepting a provider-inaccurate identity shortcut. A model or deterministic matcher could then appear correct by summing unrelated bank transactions that happened to reuse or resemble a settlement reference.
+
+### Fix
+
+The standard-settlement simulator no longer contains valid split-bank truth. Its bank transactions require globally unique UTRs, and matched standard settlements have exactly one bank transaction. An `immediate_bank_credit` fixture now exercises the exact causal lower boundary instead.
+
+Gate 8 treats multiple distinct bank transactions sharing one standard settlement UTR as `BANK_RECEIPT_CONTRADICTED` with `BANK_UTR_REUSED_ACROSS_ENTRIES` and excludes those rows from accepted bank arithmetic.
+
+True multi-credit Instant Settlement support is deferred until the domain explicitly models `setlod` parent and `setlodp` payout identities plus payout-level UTR evidence.
+
+### Regression protection
+
+- hidden-world validation rejects bank-UTR reuse for standard settlement truth;
+- `test_standard_settlement_bank_utrs_are_unique_transactions`;
+- `test_immediate_bank_credit_respects_exact_lower_causal_boundary`;
+- `test_two_distinct_bank_transactions_reusing_standard_settlement_utr_are_contradicted`.
+
+### Metric impact
+
+No final benchmark had been published, so no external metric was withdrawn. The earlier passing development test that accepted split standard-settlement rows is intentionally superseded and preserved in git history.
+
+### Remaining limitation
+
+Instant Settlement reconciliation is not implemented. It requires a separate provider-specific adapter/proof for `setlod`/`setlodp` entities and cannot be inferred from arbitrary bank-row grouping.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
@@ -579,7 +628,7 @@ These are test targets, not claimed failures:
 - settlement debit/credit sign mistakes in the real Razorpay adapter;
 - same-amount bank ambiguity;
 - exact UTR with wrong amount;
-- split bank-credit handling;
+- explicit Instant Settlement `setlod`/`setlodp` payout reconciliation;
 - late source evidence reopening a proof;
 - schema drift;
 - AI adapter inferring the wrong amount unit or debit/credit sign;
