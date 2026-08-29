@@ -3,6 +3,8 @@
 from .adapters import (
     AdapterError,
     CanonicalBatch,
+    SourceIdentity,
+    SourceLink,
     adapt_bank_row,
     adapt_merchant_row,
     adapt_observed_batch,
@@ -15,6 +17,8 @@ from .pipeline import ingest_observed_batch, journal_observed_batch
 __all__ = [
     "AdapterError",
     "CanonicalBatch",
+    "SourceIdentity",
+    "SourceLink",
     "adapt_bank_row",
     "adapt_merchant_row",
     "adapt_observed_batch",
