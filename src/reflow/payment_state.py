@@ -11,13 +11,30 @@ class PaymentStateError(ValueError):
     """Payment evidence is internally inconsistent and cannot be reduced safely."""
 
 
+def _same_source_fact(left: PaymentEvent, right: PaymentEvent) -> bool:
+    """Compare source facts while ignoring local retry receipt metadata."""
+    return (
+        left.source_event_id == right.source_event_id
+        and left.payment_id == right.payment_id
+        and left.order_id == right.order_id
+        and left.kind is right.kind
+        and left.amount == right.amount
+        and left.occurred_at == right.occurred_at
+        and left.error_code == right.error_code
+        and left.error_reason == right.error_reason
+    )
+
+
 def _deduplicate(events: Sequence[PaymentEvent]) -> tuple[PaymentEvent, ...]:
     by_event_id: dict[str, PaymentEvent] = {}
     for event in events:
         existing = by_event_id.get(event.source_event_id)
         if existing is None:
             by_event_id[event.source_event_id] = event
-        elif existing != event:
+        elif _same_source_fact(existing, event):
+            if event.received_at < existing.received_at:
+                by_event_id[event.source_event_id] = event
+        else:
             raise PaymentStateError(
                 f"source event id {event.source_event_id!r} has conflicting payloads"
             )
