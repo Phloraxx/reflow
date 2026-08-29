@@ -101,19 +101,19 @@ def _serialize(world: HiddenWorld) -> ObservedBatch:
                     "error_reason": event.error_reason,
                 }
             )
-        for entry in case.recon_entries:
+        for recon_entry in case.recon_entries:
             recon.append(
                 {
-                    "recon_id": str(entry.id),
-                    "settlement_id": str(entry.settlement_id),
-                    "entity_kind": entry.entity_kind.value,
-                    "entity_id": str(entry.entity_id),
-                    "gross_amount_paise": entry.gross_amount.amount_paise,
-                    "fee_paise": entry.fee.amount_paise,
-                    "tax_paise": entry.tax.amount_paise,
-                    "settlement_effect_paise": entry.settlement_effect.amount_paise,
-                    "currency": entry.settlement_effect.currency.value,
-                    "occurred_at": _iso(entry.occurred_at),
+                    "recon_id": str(recon_entry.id),
+                    "settlement_id": str(recon_entry.settlement_id),
+                    "entity_kind": recon_entry.entity_kind.value,
+                    "entity_id": str(recon_entry.entity_id),
+                    "gross_amount_paise": recon_entry.gross_amount.amount_paise,
+                    "fee_paise": recon_entry.fee.amount_paise,
+                    "tax_paise": recon_entry.tax.amount_paise,
+                    "settlement_effect_paise": recon_entry.settlement_effect.amount_paise,
+                    "currency": recon_entry.settlement_effect.currency.value,
+                    "occurred_at": _iso(recon_entry.occurred_at),
                 }
             )
         settlements.append(
@@ -125,15 +125,15 @@ def _serialize(world: HiddenWorld) -> ObservedBatch:
                 "utr": case.settlement.utr,
             }
         )
-        for entry in case.bank_entries:
+        for bank_entry in case.bank_entries:
             bank.append(
                 {
-                    "bank_entry_id": str(entry.id),
-                    "amount_paise": entry.amount.amount_paise,
-                    "currency": entry.amount.currency.value,
-                    "occurred_at": _iso(entry.occurred_at),
-                    "narration": entry.narration,
-                    "utr": entry.utr,
+                    "bank_entry_id": str(bank_entry.id),
+                    "amount_paise": bank_entry.amount.amount_paise,
+                    "currency": bank_entry.amount.currency.value,
+                    "occurred_at": _iso(bank_entry.occurred_at),
+                    "narration": bank_entry.narration,
+                    "utr": bank_entry.utr,
                 }
             )
 
