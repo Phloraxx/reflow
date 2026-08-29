@@ -54,6 +54,15 @@ def _text(row: RawRecord, key: str, *, allow_none: bool = False) -> str | None:
     return value.strip()
 
 
+def _optional_string(row: RawRecord, key: str) -> str | None:
+    value = row.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise AdapterError(f"{key!r} must be a string or null")
+    return value
+
+
 def _paise(row: RawRecord, key: str, *, allow_negative: bool = True) -> int:
     value = _required(row, key)
     if isinstance(value, bool):
@@ -77,6 +86,7 @@ def _paise(row: RawRecord, key: str, *, allow_negative: bool = True) -> int:
 
 def _currency(row: RawRecord, key: str = "currency") -> Currency:
     value = _text(row, key)
+    assert value is not None
     try:
         return Currency(value)
     except ValueError as exc:
@@ -119,9 +129,7 @@ def _id(row: RawRecord, key: str, id_type: type[EntityId]) -> EntityId:
 def adapt_merchant_row(row: RawRecord) -> MerchantOrder:
     order_id = _id(row, "order_id", OrderId)
     assert isinstance(order_id, OrderId)
-    external = row.get("external_reference")
-    if external is not None and not isinstance(external, str):
-        raise AdapterError("external_reference must be string or null")
+    external = _optional_string(row, "external_reference")
     amount = _paise(row, "amount_paise", allow_negative=False)
     if amount <= 0:
         raise AdapterError("merchant order amount must be positive")
@@ -147,18 +155,18 @@ def adapt_payment_event(row: RawRecord) -> PaymentEvent:
     amount = _paise(row, "amount_paise", allow_negative=False)
     if amount <= 0:
         raise AdapterError("payment event amount must be positive")
+    event_id = _text(row, "event_id")
+    assert event_id is not None
     return PaymentEvent(
-        source_event_id=str(_required(row, "event_id")),
+        source_event_id=event_id,
         payment_id=payment_id,
         order_id=order_id,
         kind=kind,
         amount=Money(amount, _currency(row)),
         occurred_at=_time(row, "occurred_at"),
         received_at=_time(row, "received_at"),
-        error_code=row.get("error_code") if isinstance(row.get("error_code"), str) else None,
-        error_reason=(
-            row.get("error_reason") if isinstance(row.get("error_reason"), str) else None
-        ),
+        error_code=_optional_string(row, "error_code"),
+        error_reason=_optional_string(row, "error_reason"),
     )
 
 
@@ -227,14 +235,14 @@ def adapt_settlement_row(row: RawRecord) -> Settlement:
     amount = _paise(row, "amount_paise", allow_negative=False)
     if amount <= 0:
         raise AdapterError("settlement amount must be positive")
-    utr_value = row.get("utr")
-    if utr_value is not None and (not isinstance(utr_value, str) or not utr_value.strip()):
-        raise AdapterError("settlement UTR must be string or null")
+    utr_value = _optional_string(row, "utr")
+    if utr_value is not None and not utr_value.strip():
+        raise AdapterError("settlement UTR cannot be blank")
     return Settlement(
         id=settlement_id,
         amount=Money(amount, _currency(row)),
         processed_at=_time(row, "processed_at"),
-        utr=utr_value.strip() if isinstance(utr_value, str) else None,
+        utr=utr_value.strip() if utr_value is not None else None,
     )
 
 
@@ -246,15 +254,13 @@ def adapt_bank_row(row: RawRecord) -> BankEntry:
         raise AdapterError("bank settlement-credit feed requires a positive credit")
     narration = _text(row, "narration")
     assert narration is not None
-    utr_value = row.get("utr")
-    if utr_value is not None and not isinstance(utr_value, str):
-        raise AdapterError("bank UTR must be string or null")
+    utr_value = _optional_string(row, "utr")
     return BankEntry(
         id=bank_id,
         amount=Money(amount, _currency(row)),
         occurred_at=_time(row, "occurred_at"),
         narration=narration,
-        utr=utr_value.strip() if isinstance(utr_value, str) and utr_value.strip() else None,
+        utr=utr_value.strip() if utr_value is not None and utr_value.strip() else None,
     )
 
 
