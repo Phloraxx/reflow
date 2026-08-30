@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import hashlib
+import json
+from dataclasses import asdict, dataclass
 from datetime import datetime
 
 from reflow.domain import (
@@ -34,6 +36,8 @@ class AdapterError(ValueError):
 
 type SourceIdentity = tuple[SourceKind, str]
 
+_CANONICAL_CONTRACT_VERSION = "normalized-fixture-canonical-v1"
+
 
 @dataclass(frozen=True, slots=True)
 class SourceLink:
@@ -46,6 +50,41 @@ class SourceLink:
         return (self.source_kind, self.source_record_id)
 
 
+def _canonical_json_default(value: object) -> object:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    raise TypeError(f"unsupported canonical digest value {type(value).__name__}")
+
+
+def _canonical_compilation_sha256(
+    *,
+    orders: tuple[MerchantOrder, ...],
+    payment_events: tuple[PaymentEvent, ...],
+    recon_entries: tuple[SettlementReconEntry, ...],
+    settlements: tuple[Settlement, ...],
+    bank_entries: tuple[BankEntry, ...],
+    source_links: tuple[SourceLink, ...],
+) -> str:
+    payload: dict[str, object] = {
+        "contract_version": _CANONICAL_CONTRACT_VERSION,
+        "orders": [asdict(row) for row in orders],
+        "payment_events": [asdict(row) for row in payment_events],
+        "recon_entries": [asdict(row) for row in recon_entries],
+        "settlements": [asdict(row) for row in settlements],
+        "bank_entries": [asdict(row) for row in bank_entries],
+        "source_links": [asdict(link) for link in source_links],
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+        default=_canonical_json_default,
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
+
+
 @dataclass(frozen=True, slots=True)
 class CanonicalBatch:
     orders: tuple[MerchantOrder, ...]
@@ -54,9 +93,12 @@ class CanonicalBatch:
     settlements: tuple[Settlement, ...]
     bank_entries: tuple[BankEntry, ...]
     source_links: tuple[SourceLink, ...] = ()
+    compilation_sha256: str | None = None
 
     def __post_init__(self) -> None:
         if not self.source_links:
+            if self.compilation_sha256 is not None:
+                raise ValueError("unbound canonical batch cannot carry a compilation digest")
             return
 
         indexed: dict[SourceIdentity, SourceEnvelopeId] = {}
@@ -109,8 +151,42 @@ class CanonicalBatch:
                 )
             raise ValueError("canonical source provenance mismatch: " + "; ".join(detail))
 
+        if self.compilation_sha256 is None:
+            raise ValueError("journal-backed canonical batch requires compilation integrity")
+        expected_digest = _canonical_compilation_sha256(
+            orders=self.orders,
+            payment_events=self.payment_events,
+            recon_entries=self.recon_entries,
+            settlements=self.settlements,
+            bank_entries=self.bank_entries,
+            source_links=self.source_links,
+        )
+        if self.compilation_sha256 != expected_digest:
+            raise ValueError("canonical batch facts no longer match its compiled source binding")
+
     def source_index(self) -> dict[SourceIdentity, SourceEnvelopeId]:
         return {link.identity: link.envelope_id for link in self.source_links}
+
+    def bind_source_links(self, source_links: tuple[SourceLink, ...]) -> CanonicalBatch:
+        if self.source_links or self.compilation_sha256 is not None:
+            raise ValueError("canonical batch is already bound to source provenance")
+        digest = _canonical_compilation_sha256(
+            orders=self.orders,
+            payment_events=self.payment_events,
+            recon_entries=self.recon_entries,
+            settlements=self.settlements,
+            bank_entries=self.bank_entries,
+            source_links=source_links,
+        )
+        return CanonicalBatch(
+            orders=self.orders,
+            payment_events=self.payment_events,
+            recon_entries=self.recon_entries,
+            settlements=self.settlements,
+            bank_entries=self.bank_entries,
+            source_links=source_links,
+            compilation_sha256=digest,
+        )
 
 
 def _required(row: RawRecord, key: str) -> object:
