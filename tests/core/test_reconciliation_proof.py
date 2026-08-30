@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from reflow.bank_proof import BankReceiptStatus, prove_all_bank_receipts
-from reflow.domain import ProofVersionId
+from reflow.domain import ProofVersionId, SourceEnvelopeId
 from reflow.ingestion import ObservedBatch, ingest_observed_batch
 from reflow.journal import InMemoryJournal
 from reflow.money_graph import build_money_graph
@@ -178,7 +178,10 @@ def test_late_exact_bank_credit_versions_only_affected_settlement() -> None:
     v1 = ledger.latest(target.settlement.id)
     assert v1 is not None
     assert v1.status is ReconciliationStatus.PENDING_BANK_CREDIT
-    assert next(p for p in bank1 if p.settlement_id == target.settlement.id).status is BankReceiptStatus.WAITING
+    target_bank_proof = next(
+        proof for proof in bank1 if proof.settlement_id == target.settlement.id
+    )
+    assert target_bank_proof.status is BankReceiptStatus.WAITING
 
     later = T0 + timedelta(hours=2)
     batch2, comp2, bank2 = _ingest(observed, journal, later)
@@ -336,3 +339,31 @@ def test_proof_diff_rejects_different_settlement_series() -> None:
     assert first.settlement_id != second.settlement_id
     with pytest.raises(ReconciliationProofError, match="different settlements"):
         diff_proof_versions(first, second)
+
+def test_batch_failure_is_atomic_and_does_not_partially_append_versions() -> None:
+    observed = observe_world(generate_world(141), seed=142).observed
+    journal = InMemoryJournal()
+    batch, composition, bank = _ingest(observed, journal, T0)
+    ledger = InMemoryProofLedger()
+    last_settlement_id = sorted((row.id for row in batch.settlements), key=str)[-1]
+    damaged_bank = tuple(
+        replace(
+            proof,
+            source_envelope_ids=(SourceEnvelopeId("src_not_in_batch"),),
+        )
+        if proof.settlement_id == last_settlement_id
+        else proof
+        for proof in bank
+    )
+
+    with pytest.raises(ReconciliationProofError, match="outside canonical batch"):
+        ledger.apply_batch(
+            batch,
+            journal,
+            composition,
+            damaged_bank,
+            knowledge_cutoff=T0,
+            generated_at=T0 + timedelta(seconds=1),
+        )
+
+    assert all(ledger.history(row.id) == () for row in batch.settlements)

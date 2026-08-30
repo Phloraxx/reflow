@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from collections.abc import Callable
 from enum import StrEnum
 
 from . import domain
@@ -395,8 +395,11 @@ class InMemoryProofLedger:
                     reopened=reopened,
                 ),
             )
-            self._history.setdefault(settlement_id, []).append(proof)
             created.append(proof)
+
+        # Commit only after every settlement in the batch has passed validation.
+        for proof in created:
+            self._history.setdefault(proof.settlement_id, []).append(proof)
 
         return ProofUpdate(
             created_versions=tuple(created),
