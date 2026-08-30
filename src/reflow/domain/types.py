@@ -13,12 +13,14 @@ class EntityId:
     def __post_init__(self) -> None:
         if not isinstance(self.value, str) or not self.value:
             raise TypeError(f"{type(self).__name__} requires a non-empty string")
+        if self.value != self.value.strip():
+            raise ValueError(f"{type(self).__name__} cannot contain surrounding whitespace")
         if self.prefix:
             if not self.value.startswith(self.prefix):
                 raise ValueError(
                     f"{type(self).__name__} must start with {self.prefix!r}: {self.value!r}"
                 )
-            if len(self.value) == len(self.prefix):
+            if not self.value[len(self.prefix) :].strip():
                 raise ValueError(
                     f"{type(self).__name__} requires content after {self.prefix!r}"
                 )
