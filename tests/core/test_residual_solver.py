@@ -157,7 +157,7 @@ def test_blocked_late_recon_row_can_only_form_blocked_hypothesis() -> None:
         if explanation.remaining_residual.is_zero
     )
     assert exact.uses_blocked_evidence
-    assert "BLOCKED_EVIDENCE_USED" in exact.reason_codes
+    assert "USES_BLOCKED_EVIDENCE" in exact.reason_codes
     assert "NOT_FINANCIAL_PROOF" in exact.reason_codes
 
 
