@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: deterministic foundation through Gate 8; independent pre-Gate-9 audit in progress. Gate 9 stays blocked until the audit checkpoint is green and merged.**
+> **Current phase: Gate 9 versioned full-reconciliation proof implemented and under checkpoint validation. Deterministic core remains AI-free.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
@@ -292,11 +292,11 @@ Final match-rate, accuracy, throughput and scale numbers will only be published 
 
 ---
 
-## Next implementation gate
+## Current proof gate
 
-### Gate 9 — Full Reconciliation Proof + versioning
+### Gate 9 — Versioned Full Reconciliation Proof
 
-Gate 9 will combine the two independent fragments:
+Gate 9 now combines only the audited batch-safe Gate 7 and Gate 8 fragments:
 
 ```text
 Settlement Composition Proof
@@ -306,9 +306,11 @@ Settlement Composition Proof
 Versioned Full Reconciliation Proof
 ```
 
-Late evidence must create a new proof version while preserving what was known before. A settlement that is composition-proven but waiting for its bank credit must not have history rewritten when the credit appears later.
+A settlement gets a new immutable proof version only when its authoritative financial input changes. Unrelated same-amount diagnostics and source delivery order do not manufacture new versions. Every version records a settlement-scoped input hash, the batch compilation hash, ruleset versions, knowledge cutoff, predecessor, reopening state and raw evidence union.
 
-Only after Gate 9 passes do baseline benchmarking, residual solving, AI adapter synthesis, AI exception investigation and UI work begin.
+Late authoritative evidence creates a new version; a previously proven settlement can reopen to a non-reconciled state without rewriting history. Batch updates are staged and committed atomically.
+
+After this Gate 9 checkpoint merges, Phase 10 is the deterministic residual solver. AI remains later.
 
 ---
 
@@ -389,7 +391,7 @@ CI runs the same validation path.
 - [x] journal-backed provenance-preserving Money Graph
 - [x] Settlement Composition Proof
 - [x] Bank Receipt Proof
-- [ ] full proof versioning
+- [x] full proof versioning
 - [ ] residual solver
 - [ ] baseline evaluation harness
 - [ ] exception fingerprinting

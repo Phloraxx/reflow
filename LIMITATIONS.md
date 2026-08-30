@@ -18,7 +18,7 @@ ReFlow has implemented the deterministic foundation through **Gate 8**. A pre-Ga
 - deterministic Settlement Composition Proofs with identity, provenance and temporal contradiction checks;
 - conservative standard-settlement Bank Receipt Proofs using exact UTR identity, exact amount and causal bank timing.
 
-Gate 9 full proof/versioning, the residual solver, final evaluation harness, AI layers, production Razorpay integration and operator UI are **not complete yet**.
+Gate 9 full proof/versioning is implemented on its checkpoint branch. The residual solver, final evaluation harness, AI layers, production Razorpay integration and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 
@@ -85,7 +85,7 @@ For the current standard-settlement contract, automatic proof requires:
 - no settlement-UTR reuse in the batch;
 - complete raw source provenance.
 
-A `BANK_RECEIPT_PROVEN` result still does not mean the settlement is fully reconciled. Gate 9 must combine it with the independent composition fragment.
+A `BANK_RECEIPT_PROVEN` result alone does not mean the settlement is fully reconciled. Gate 9 combines it with the independent composition fragment and only emits `PROVEN_RECONCILED` when both required fragments are proven.
 
 ### 7. Same amount and nearby time are never bank identity
 
@@ -111,7 +111,7 @@ A later Instant Settlement adapter/proof must model the parent and payout identi
 
 Razorpay documents that a processed settlement may only become visible in the bank account after the bank-transfer timeline. Gate 8 therefore enforces a causal lower bound but no fixed upper delay bound.
 
-A very late exact-UTR bank observation may still become admissible evidence. Gate 9 must version the proof rather than rewriting what was known earlier.
+A very late exact-UTR bank observation may still become admissible evidence. Gate 9 creates a new immutable proof version rather than rewriting what was known earlier.
 
 ### 10. Current economic-identity ownership is conservative
 

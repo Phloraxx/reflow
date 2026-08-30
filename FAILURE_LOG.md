@@ -941,6 +941,87 @@ The in-memory journal is an integrity reference implementation, not authenticate
 
 ---
 
+
+## F-0029 — Batch-global contradictions omitted counterparty raw evidence
+
+**Date:** 2026-08-30
+**Area:** Gate 7 / Gate 8 provenance
+**Severity:** high
+
+### Symptom
+A proof could report a cross-settlement economic-identity or reused-settlement-UTR contradiction while citing only the current settlement's evidence, not the other raw record that made the contradiction true.
+
+### Root cause
+Batch-global conflict detection returned conflict flags/IDs but did not propagate the counterparty source envelopes into each affected proof fragment.
+
+### Fix
+Gate 7 now cites all recon source envelopes participating in a cross-settlement economic claim. Gate 8 now cites the other settlement source envelopes when a UTR is reused.
+
+### Regression protection
+The cross-settlement composition and reused-UTR bank-proof tests require both affected proofs to carry the counterparty raw evidence.
+
+---
+
+## F-0030 — Gate 9 ledger update was not atomic
+
+**Date:** 2026-08-30
+**Area:** Gate 9 proof ledger
+**Severity:** safety-critical
+
+### Symptom
+An early Gate 9 implementation appended proof versions settlement-by-settlement. A later validation failure could leave earlier settlements committed from a rejected batch.
+
+### Root cause
+Validation and mutation occurred in the same loop.
+
+### Fix
+Gate 9 now validates and stages every new proof version first, then mutates the append-only ledger only after the whole batch succeeds.
+
+### Regression protection
+A batch with a deliberately invalid final settlement must leave the proof ledger completely unchanged.
+
+---
+
+## F-0031 — Batch compilation hash could outrun the declared knowledge cutoff
+
+**Date:** 2026-08-30
+**Area:** Gate 9 temporal provenance
+**Severity:** high
+
+### Symptom
+A settlement proof could cite only evidence received before its cutoff while also recording a global batch compilation SHA that included unrelated evidence received after that cutoff.
+
+### Root cause
+The first cutoff check covered settlement-scoped cited evidence but not every source envelope represented by the recorded batch compilation.
+
+### Fix
+Gate 9 now requires every source envelope in the canonical batch to have `received_at <= knowledge_cutoff` whenever that batch SHA is recorded in a proof version.
+
+### Regression protection
+A future unrelated bank row in the batch causes Gate 9 to reject an earlier knowledge cutoff even when that row does not version the settlement's scoped financial truth.
+
+---
+
+## F-0032 — Full proof metadata was not fully self-verifying
+
+**Date:** 2026-08-30
+**Area:** Gate 9 proof integrity
+**Severity:** high
+
+### Symptom
+A reconstructed full proof could retain a valid-looking deterministic ID while carrying altered ruleset metadata, source-union metadata, or a stale settlement-scoped hash.
+
+### Root cause
+The first `ReconciliationProofVersion` constructor validated status/reasons/ID shape but trusted some metadata fields supplied by the caller.
+
+### Fix
+The proof now recomputes the authoritative source-envelope union and settlement-scoped input SHA from its embedded Gate 7/8 fragments, verifies all Gate 7/8/9 ruleset version strings, and re-derives its deterministic `proofv_...` identity.
+
+### Regression protection
+Direct replacement/forgery tests cover ruleset metadata, source-union metadata, scoped hash, typed proof IDs, backward cutoff, and backward generation time.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
