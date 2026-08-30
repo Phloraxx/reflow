@@ -42,6 +42,25 @@ def test_delivery_permutations_produce_same_captured_truth() -> None:
     assert state.warnings == ("FAILED_AND_CAPTURED_OBSERVED",)
 
 
+def test_failed_evidence_after_capture_is_rejected_independent_of_delivery_order() -> None:
+    timeline = (
+        _event("evt_created", PaymentEventKind.CREATED, 1),
+        _event("evt_captured", PaymentEventKind.CAPTURED, 2),
+        _event("evt_failed", PaymentEventKind.FAILED, 3),
+    )
+    for delivery_order in permutations(timeline):
+        with pytest.raises(PaymentStateError, match="after captured"):
+            reduce_payment_events(delivery_order)
+
+
+def test_equal_time_failed_and_captured_evidence_remains_conservative_but_usable() -> None:
+    failed = _event("evt_failed", PaymentEventKind.FAILED, 2)
+    captured = _event("evt_captured", PaymentEventKind.CAPTURED, 2)
+    state = reduce_payment_events((captured, failed))
+    assert state.status is PaymentStatus.CAPTURED
+    assert state.warnings == ("FAILED_AND_CAPTURED_OBSERVED",)
+
+
 def test_exact_duplicate_event_does_not_change_state() -> None:
     captured = _event("evt_captured", PaymentEventKind.CAPTURED, 3)
     once = reduce_payment_events((captured,))
