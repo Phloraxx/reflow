@@ -60,35 +60,43 @@ class InMemoryJournal:
     """Append-only reference journal used before a persistence backend is selected."""
 
     def __init__(self) -> None:
-        self._records: dict[tuple[SourceKind, str], SourceEnvelope] = {}
+        self._primary_by_identity: dict[tuple[SourceKind, str], SourceEnvelope] = {}
+        self._records_by_id: dict[SourceEnvelopeId, SourceEnvelope] = {}
 
     def append(self, envelope: SourceEnvelope) -> AppendResult:
         key = (envelope.source_kind, envelope.source_record_id)
-        existing = self._records.get(key)
-        if existing is None:
-            self._records[key] = envelope
+        primary = self._primary_by_identity.get(key)
+        if primary is None:
+            self._primary_by_identity[key] = envelope
+            self._records_by_id[envelope.id] = envelope
             return AppendResult(AppendDisposition.STORED, envelope)
-        if existing.payload_sha256 == envelope.payload_sha256:
-            return AppendResult(AppendDisposition.DUPLICATE, existing)
+
+        if primary.payload_sha256 == envelope.payload_sha256:
+            return AppendResult(AppendDisposition.DUPLICATE, primary)
+
+        # A conflicting source version is still evidence. Preserve it before failing closed.
+        self._records_by_id.setdefault(envelope.id, envelope)
         raise JournalConflictError(
             "same source identity arrived with a different payload hash: "
             f"{envelope.source_kind.value}/{envelope.source_record_id}"
         )
 
     def get(self, source_kind: SourceKind, source_record_id: str) -> SourceEnvelope | None:
-        return self._records.get((source_kind, source_record_id))
+        """Return the first retained source fact for a stable source identity."""
+        return self._primary_by_identity.get((source_kind, source_record_id))
 
     def entries(self) -> tuple[SourceEnvelope, ...]:
         return tuple(
             sorted(
-                self._records.values(),
+                self._records_by_id.values(),
                 key=lambda row: (
                     row.received_at,
                     row.source_kind.value,
                     row.source_record_id,
+                    str(row.id),
                 ),
             )
         )
 
     def __len__(self) -> int:
-        return len(self._records)
+        return len(self._records_by_id)
