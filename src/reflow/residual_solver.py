@@ -222,61 +222,71 @@ def enumerate_residual_candidates(
             *proof.bank.reused_bank_utr_ids,
         }
         if target.amount.amount_paise > 0:
-            for entry in batch.bank_entries:
-                if entry.id in excluded or entry.amount.currency != target.amount.currency:
+            for bank_entry in batch.bank_entries:
+                if (
+                    bank_entry.id in excluded
+                    or bank_entry.amount.currency != target.amount.currency
+                ):
                     continue
                 if (
-                    entry.amount.amount_paise <= 0
-                    or entry.amount.amount_paise > target.amount.amount_paise
+                    bank_entry.amount.amount_paise <= 0
+                    or bank_entry.amount.amount_paise > target.amount.amount_paise
                 ):
                     continue
                 source_ids = (
-                    _source_id(batch, domain.SourceKind.BANK, str(entry.id)),
+                    _source_id(batch, domain.SourceKind.BANK, str(bank_entry.id)),
                 )
                 candidates.append(
                     ResidualCandidate(
                         id=_candidate_id(
                             ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
-                            str(entry.id),
-                            entry.amount,
+                            str(bank_entry.id),
+                            bank_entry.amount,
                             source_ids,
                         ),
                         settlement_id=proof.settlement_id,
                         scope=target.scope,
                         kind=ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
-                        amount=entry.amount,
+                        amount=bank_entry.amount,
                         source_envelope_ids=source_ids,
-                        source_entity_id=str(entry.id),
+                        source_entity_id=str(bank_entry.id),
                         disposition=CandidateDisposition.ADMISSIBLE_HYPOTHESIS,
                         reason_codes=("AMOUNT_ONLY_NOT_IDENTITY",),
                     )
                 )
     else:
         included = set(proof.composition.component_ids)
-        for entry in batch.recon_entries:
-            if entry.settlement_id != proof.settlement_id or entry.id in included:
+        for recon_entry in batch.recon_entries:
+            if (
+                recon_entry.settlement_id != proof.settlement_id
+                or recon_entry.id in included
+            ):
                 continue
-            if entry.settlement_effect.currency != target.amount.currency:
+            if recon_entry.settlement_effect.currency != target.amount.currency:
                 continue
-            if entry.settlement_effect.is_zero:
+            if recon_entry.settlement_effect.is_zero:
                 continue
             source_ids = (
-                _source_id(batch, domain.SourceKind.RAZORPAY_RECON, str(entry.id)),
+                _source_id(
+                    batch,
+                    domain.SourceKind.RAZORPAY_RECON,
+                    str(recon_entry.id),
+                ),
             )
             candidates.append(
                 ResidualCandidate(
                     id=_candidate_id(
                         ResidualCandidateKind.BLOCKED_RECON_COMPONENT,
-                        str(entry.id),
-                        entry.settlement_effect,
+                        str(recon_entry.id),
+                        recon_entry.settlement_effect,
                         source_ids,
                     ),
                     settlement_id=proof.settlement_id,
                     scope=target.scope,
                     kind=ResidualCandidateKind.BLOCKED_RECON_COMPONENT,
-                    amount=entry.settlement_effect,
+                    amount=recon_entry.settlement_effect,
                     source_envelope_ids=source_ids,
-                    source_entity_id=str(entry.id),
+                    source_entity_id=str(recon_entry.id),
                     disposition=CandidateDisposition.BLOCKED_EVIDENCE,
                     reason_codes=("BLOCKED_BY_UPSTREAM_PROOF",),
                 )
