@@ -12,13 +12,14 @@ from reflow.domain import (
     SettlementId,
     SourceEnvelopeId,
 )
-from reflow.ingestion import ObservedBatch, ingest_observed_batch
+from reflow.ingestion import CanonicalBatch, ObservedBatch, ingest_observed_batch
 from reflow.journal import InMemoryJournal
 from reflow.money_graph import build_money_graph
 from reflow.reconciliation_proof import InMemoryProofLedger, ReconciliationProofVersion
 from reflow.residual_solver import (
     CandidateDisposition,
     ResidualCandidate,
+    ResidualCandidateIndex,
     ResidualCandidateKind,
     ResidualExplanationState,
     ResidualScope,
@@ -34,6 +35,7 @@ from reflow.simulator import (
     BankExpectation,
     CorruptionKind,
     CorruptionPlan,
+    WorldConfig,
     generate_world,
     observe_world,
 )
@@ -217,3 +219,85 @@ def test_candidate_enumeration_rejects_wrong_canonical_batch() -> None:
     assert first_batch.compilation_sha256 != second_batch.compilation_sha256
     with pytest.raises(ResidualSolverError, match="proof's canonical batch"):
         enumerate_residual_candidates(proof, second_batch, target)
+
+def test_bank_candidate_identified_to_other_settlement_is_blocked() -> None:
+    world = generate_world(241)
+    target_case = next(
+        case for case in world.cases if case.bank_expectation is BankExpectation.MISSING
+    )
+    other_case = next(
+        case
+        for case in world.cases
+        if case.settlement.id != target_case.settlement.id
+        and case.settlement.utr is not None
+        and case.bank_entries
+    )
+    observed = _clean(world, 242)
+    template = dict(observed.bank_rows[0])
+    template["bank_entry_id"] = "bank_claimed_elsewhere_candidate"
+    template["amount_paise"] = 1
+    template["utr"] = other_case.settlement.utr
+    template["narration"] = "amount candidate already identified elsewhere"
+    changed = replace(observed, bank_rows=(*observed.bank_rows, template))
+    batch, proofs = _prove(changed)
+    proof = _proof_for(proofs, target_case.settlement.id)
+    target = next(
+        item for item in residual_targets(proof) if item.scope is ResidualScope.BANK
+    )
+    candidates, _ = enumerate_residual_candidates(proof, batch, target)
+    candidate = next(
+        item
+        for item in candidates
+        if item.source_entity_id == "bank_claimed_elsewhere_candidate"
+    )
+    assert candidate.disposition is CandidateDisposition.BLOCKED_EVIDENCE
+    assert "BANK_ENTRY_IDENTIFIED_TO_OTHER_SETTLEMENT" in candidate.reason_codes
+
+
+def test_reusable_index_keeps_same_source_hypotheses_target_scoped() -> None:
+    world = generate_world(251, WorldConfig(settlement_count=20))
+    observed = _clean(world, 252)
+    template = dict(observed.bank_rows[0])
+    template["bank_entry_id"] = "bank_shared_amount_candidate"
+    template["amount_paise"] = 1
+    template["utr"] = "UTR_UNCLAIMED_SHARED_CANDIDATE"
+    template["narration"] = "one amount-only row visible to two residual targets"
+    changed = replace(observed, bank_rows=(*observed.bank_rows, template))
+    batch, proofs = _prove(changed)
+    missing_cases = [
+        case for case in world.cases if case.bank_expectation is BankExpectation.MISSING
+    ]
+    assert len(missing_cases) >= 2
+    index = ResidualCandidateIndex(batch)
+    ids = []
+    for case in missing_cases[:2]:
+        proof = _proof_for(proofs, case.settlement.id)
+        target = next(
+            item for item in residual_targets(proof) if item.scope is ResidualScope.BANK
+        )
+        candidates, _ = enumerate_residual_candidates(
+            proof,
+            batch,
+            target,
+            index=index,
+        )
+        candidate = next(
+            item
+            for item in candidates
+            if item.source_entity_id == "bank_shared_amount_candidate"
+        )
+        ids.append(candidate.id)
+    assert ids[0] != ids[1]
+
+
+def test_candidate_index_rejects_unbound_batch() -> None:
+    with pytest.raises(ResidualSolverError, match="journal-backed"):
+        ResidualCandidateIndex(
+            CanonicalBatch(
+                orders=(),
+                payment_events=(),
+                recon_entries=(),
+                settlements=(),
+                bank_entries=(),
+            )
+        )

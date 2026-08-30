@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from bisect import bisect_right
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -11,6 +12,7 @@ from .reconciliation_proof import ReconciliationProofVersion
 __all__ = [
     "CandidateDisposition",
     "ResidualCandidate",
+    "ResidualCandidateIndex",
     "ResidualCandidateKind",
     "ResidualExplanation",
     "ResidualExplanationState",
@@ -132,6 +134,98 @@ class ResidualSolveResult:
     search_budget_exhausted: bool
 
 
+class ResidualCandidateIndex:
+    """Reusable batch index so residual enumeration scales with local candidate sets."""
+
+    def __init__(self, batch: CanonicalBatch) -> None:
+        if batch.compilation_sha256 is None or not batch.source_links:
+            raise ResidualSolverError("residual candidate index requires a journal-backed batch")
+        self.batch_compilation_sha256 = batch.compilation_sha256
+        self.source_index = batch.source_index()
+
+        bank_by_currency: dict[domain.Currency, list[domain.BankEntry]] = {}
+        for bank_entry in batch.bank_entries:
+            bank_by_currency.setdefault(bank_entry.amount.currency, []).append(bank_entry)
+        self._bank_by_currency: dict[domain.Currency, tuple[domain.BankEntry, ...]] = {}
+        self._bank_amounts_by_currency: dict[domain.Currency, tuple[int, ...]] = {}
+        for currency, entries in bank_by_currency.items():
+            ordered = tuple(
+                sorted(entries, key=lambda row: (row.amount.amount_paise, str(row.id)))
+            )
+            self._bank_by_currency[currency] = ordered
+            self._bank_amounts_by_currency[currency] = tuple(
+                row.amount.amount_paise for row in ordered
+            )
+
+        recon_by_settlement: dict[
+            domain.SettlementId, list[domain.SettlementReconEntry]
+        ] = {}
+        for recon_entry in batch.recon_entries:
+            recon_by_settlement.setdefault(recon_entry.settlement_id, []).append(recon_entry)
+        self._recon_by_settlement = {
+            settlement_id: tuple(sorted(entries, key=lambda row: str(row.id)))
+            for settlement_id, entries in recon_by_settlement.items()
+        }
+
+        settlement_ids_by_utr: dict[str, set[domain.SettlementId]] = {}
+        for settlement in batch.settlements:
+            if settlement.utr is not None:
+                settlement_ids_by_utr.setdefault(settlement.utr, set()).add(settlement.id)
+        self._settlement_ids_by_utr = {
+            utr: frozenset(settlement_ids)
+            for utr, settlement_ids in settlement_ids_by_utr.items()
+        }
+
+    def source_envelope_id(
+        self,
+        source_kind: domain.SourceKind,
+        source_record_id: str,
+    ) -> domain.SourceEnvelopeId:
+        envelope_id = self.source_index.get((source_kind, source_record_id))
+        if envelope_id is None:
+            raise ResidualSolverError(
+                "candidate evidence is missing provenance: "
+                f"{source_kind.value}/{source_record_id}"
+            )
+        return envelope_id
+
+    def recon_entries(
+        self,
+        settlement_id: domain.SettlementId,
+    ) -> tuple[domain.SettlementReconEntry, ...]:
+        return self._recon_by_settlement.get(settlement_id, ())
+
+    def bank_candidates_at_or_below(
+        self,
+        currency: domain.Currency,
+        amount_paise: int,
+        *,
+        excluded_ids: frozenset[domain.BankEntryId],
+        limit: int,
+    ) -> tuple[tuple[domain.BankEntry, ...], bool]:
+        entries = self._bank_by_currency.get(currency, ())
+        amounts = self._bank_amounts_by_currency.get(currency, ())
+        end = bisect_right(amounts, amount_paise)
+        found: list[domain.BankEntry] = []
+        cursor = end - 1
+        while cursor >= 0 and len(found) <= limit:
+            entry = entries[cursor]
+            cursor -= 1
+            if entry.id in excluded_ids or entry.amount.amount_paise <= 0:
+                continue
+            found.append(entry)
+        truncated = len(found) > limit
+        return tuple(found[:limit]), truncated
+
+    def settlement_owners_for_utr(
+        self,
+        utr: str | None,
+    ) -> frozenset[domain.SettlementId]:
+        if utr is None:
+            return frozenset()
+        return self._settlement_ids_by_utr.get(utr, frozenset())
+
+
 def residual_targets(proof: ReconciliationProofVersion) -> tuple[ResidualTarget, ...]:
     targets: list[ResidualTarget] = []
     if not proof.composition.residual.is_zero:
@@ -156,6 +250,8 @@ def residual_targets(proof: ReconciliationProofVersion) -> tuple[ResidualTarget,
 
 
 def _candidate_id(
+    settlement_id: domain.SettlementId,
+    scope: ResidualScope,
     kind: ResidualCandidateKind,
     source_entity_id: str,
     amount: domain.Money,
@@ -163,6 +259,8 @@ def _candidate_id(
 ) -> domain.ResidualCandidateId:
     material = "\0".join(
         (
+            str(settlement_id),
+            scope.value,
             kind.value,
             source_entity_id,
             str(amount.amount_paise),
@@ -173,19 +271,6 @@ def _candidate_id(
     return domain.ResidualCandidateId(
         f"rcand_{hashlib.sha256(material).hexdigest()[:24]}"
     )
-
-
-def _source_id(
-    batch: CanonicalBatch,
-    source_kind: domain.SourceKind,
-    source_record_id: str,
-) -> domain.SourceEnvelopeId:
-    envelope_id = batch.source_index().get((source_kind, source_record_id))
-    if envelope_id is None:
-        raise ResidualSolverError(
-            f"candidate evidence is missing provenance: {source_kind.value}/{source_record_id}"
-        )
-    return envelope_id
 
 
 def _candidate_sort_key(
@@ -207,6 +292,7 @@ def enumerate_residual_candidates(
     target: ResidualTarget,
     *,
     limits: ResidualSolverLimits | None = None,
+    index: ResidualCandidateIndex | None = None,
 ) -> tuple[tuple[ResidualCandidate, ...], bool]:
     cfg = limits or ResidualSolverLimits()
     if target.settlement_id != proof.settlement_id or target.proof_version_id != proof.id:
@@ -214,31 +300,51 @@ def enumerate_residual_candidates(
     if batch.compilation_sha256 != proof.batch_compilation_sha256:
         raise ResidualSolverError("candidate enumeration requires the proof's canonical batch")
 
+    candidate_index = index or ResidualCandidateIndex(batch)
+    if candidate_index.batch_compilation_sha256 != proof.batch_compilation_sha256:
+        raise ResidualSolverError("residual candidate index belongs to another canonical batch")
+
     candidates: list[ResidualCandidate] = []
+    index_truncated = False
     if target.scope is ResidualScope.BANK:
-        excluded = {
-            *proof.bank.bank_entry_ids,
-            *proof.bank.early_bank_entry_ids,
-            *proof.bank.reused_bank_utr_ids,
-        }
+        excluded = frozenset(
+            {
+                *proof.bank.bank_entry_ids,
+                *proof.bank.early_bank_entry_ids,
+                *proof.bank.reused_bank_utr_ids,
+            }
+        )
         if target.amount.amount_paise > 0:
-            for bank_entry in batch.bank_entries:
-                if (
-                    bank_entry.id in excluded
-                    or bank_entry.amount.currency != target.amount.currency
-                ):
-                    continue
-                if (
-                    bank_entry.amount.amount_paise <= 0
-                    or bank_entry.amount.amount_paise > target.amount.amount_paise
-                ):
-                    continue
+            bank_entries, index_truncated = candidate_index.bank_candidates_at_or_below(
+                target.amount.currency,
+                target.amount.amount_paise,
+                excluded_ids=excluded,
+                limit=cfg.max_candidates + 1,
+            )
+            for bank_entry in bank_entries:
                 source_ids = (
-                    _source_id(batch, domain.SourceKind.BANK, str(bank_entry.id)),
+                    candidate_index.source_envelope_id(
+                        domain.SourceKind.BANK,
+                        str(bank_entry.id),
+                    ),
                 )
+                owners = candidate_index.settlement_owners_for_utr(bank_entry.utr)
+                claimed_elsewhere = any(
+                    owner != proof.settlement_id for owner in owners
+                )
+                disposition = (
+                    CandidateDisposition.BLOCKED_EVIDENCE
+                    if claimed_elsewhere
+                    else CandidateDisposition.ADMISSIBLE_HYPOTHESIS
+                )
+                reasons = {"AMOUNT_ONLY_NOT_IDENTITY"}
+                if claimed_elsewhere:
+                    reasons.add("BANK_ENTRY_IDENTIFIED_TO_OTHER_SETTLEMENT")
                 candidates.append(
                     ResidualCandidate(
                         id=_candidate_id(
+                            proof.settlement_id,
+                            target.scope,
                             ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
                             str(bank_entry.id),
                             bank_entry.amount,
@@ -250,25 +356,21 @@ def enumerate_residual_candidates(
                         amount=bank_entry.amount,
                         source_envelope_ids=source_ids,
                         source_entity_id=str(bank_entry.id),
-                        disposition=CandidateDisposition.ADMISSIBLE_HYPOTHESIS,
-                        reason_codes=("AMOUNT_ONLY_NOT_IDENTITY",),
+                        disposition=disposition,
+                        reason_codes=tuple(sorted(reasons)),
                     )
                 )
     else:
         included = set(proof.composition.component_ids)
-        for recon_entry in batch.recon_entries:
-            if (
-                recon_entry.settlement_id != proof.settlement_id
-                or recon_entry.id in included
-            ):
+        for recon_entry in candidate_index.recon_entries(proof.settlement_id):
+            if recon_entry.id in included:
                 continue
             if recon_entry.settlement_effect.currency != target.amount.currency:
                 continue
             if recon_entry.settlement_effect.is_zero:
                 continue
             source_ids = (
-                _source_id(
-                    batch,
+                candidate_index.source_envelope_id(
                     domain.SourceKind.RAZORPAY_RECON,
                     str(recon_entry.id),
                 ),
@@ -276,6 +378,8 @@ def enumerate_residual_candidates(
             candidates.append(
                 ResidualCandidate(
                     id=_candidate_id(
+                        proof.settlement_id,
+                        target.scope,
                         ResidualCandidateKind.BLOCKED_RECON_COMPONENT,
                         str(recon_entry.id),
                         recon_entry.settlement_effect,
@@ -293,7 +397,7 @@ def enumerate_residual_candidates(
             )
 
     ordered = sorted(candidates, key=lambda candidate: _candidate_sort_key(target, candidate))
-    truncated = len(ordered) > cfg.max_candidates
+    truncated = index_truncated or len(ordered) > cfg.max_candidates
     return tuple(ordered[: cfg.max_candidates]), truncated
 
 
