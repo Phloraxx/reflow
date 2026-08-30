@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import replace
 from datetime import datetime
 
 from reflow.domain import SourceKind
@@ -156,4 +155,4 @@ def ingest_observed_batch(
     """Journal the immutable raw batch first, then compile and bind canonical objects."""
     source_links = journal_observed_batch(batch, journal, received_at=received_at)
     canonical = adapt_observed_batch(batch)
-    return replace(canonical, source_links=source_links)
+    return canonical.bind_source_links(source_links)
