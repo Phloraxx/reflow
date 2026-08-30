@@ -61,13 +61,13 @@ def _canonical_json_default(value: object) -> object:
 def _feed_digest_rows(
     digest: Any,
     label: str,
-    rows: Iterable[object],
+    rows: Iterable[Any],
 ) -> None:
     digest.update(label.encode())
     digest.update(b"\0")
     for row in rows:
         encoded = json.dumps(
-            asdict(row),  # type: ignore[arg-type]
+            asdict(row),
             sort_keys=True,
             separators=(",", ":"),
             ensure_ascii=False,
