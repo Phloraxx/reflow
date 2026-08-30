@@ -92,11 +92,58 @@ class ResidualCandidate:
     disposition: CandidateDisposition
     reason_codes: tuple[str, ...] = ()
 
+    @classmethod
+    def create(
+        cls,
+        *,
+        settlement_id: domain.SettlementId,
+        scope: ResidualScope,
+        kind: ResidualCandidateKind,
+        amount: domain.Money,
+        source_envelope_ids: tuple[domain.SourceEnvelopeId, ...],
+        source_entity_id: str,
+        disposition: CandidateDisposition,
+        reason_codes: tuple[str, ...] = (),
+    ) -> ResidualCandidate:
+        source_ids = tuple(sorted(set(source_envelope_ids), key=str))
+        return cls(
+            id=_candidate_id(
+                settlement_id,
+                scope,
+                kind,
+                source_entity_id,
+                amount,
+                source_ids,
+            ),
+            settlement_id=settlement_id,
+            scope=scope,
+            kind=kind,
+            amount=amount,
+            source_envelope_ids=source_ids,
+            source_entity_id=source_entity_id,
+            disposition=disposition,
+            reason_codes=tuple(sorted(set(reason_codes))),
+        )
+
     def __post_init__(self) -> None:
         if self.amount.is_zero:
             raise ValueError("residual candidate effect must be non-zero")
         if not self.source_envelope_ids:
             raise ValueError("residual candidate must cite raw evidence")
+        if self.source_envelope_ids != tuple(
+            sorted(set(self.source_envelope_ids), key=str)
+        ):
+            raise ValueError("residual candidate source evidence must be unique and sorted")
+        expected_id = _candidate_id(
+            self.settlement_id,
+            self.scope,
+            self.kind,
+            self.source_entity_id,
+            self.amount,
+            self.source_envelope_ids,
+        )
+        if self.id != expected_id:
+            raise ValueError("residual candidate id does not match its deterministic identity")
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +169,13 @@ class ResidualExplanation:
             raise ValueError("published residual explanation must exactly close the target")
         if not self.source_envelope_ids:
             raise ValueError("residual explanation must cite raw evidence")
+        if len(set(self.candidate_ids)) != len(self.candidate_ids):
+            raise ValueError("residual explanation candidate ids must be unique")
+        if self.candidate_ids != tuple(sorted(self.candidate_ids, key=str)):
+            raise ValueError("residual explanation candidate ids must be sorted")
+        expected_id = _explanation_id_from_ids(self.target, self.candidate_ids)
+        if self.id != expected_id:
+            raise ValueError("residual explanation id does not match its deterministic identity")
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +186,7 @@ class ResidualSolveResult:
     nodes_visited: int
     candidate_space_truncated: bool
     search_budget_exhausted: bool
+    solution_limit_reached: bool
 
 
 class ResidualCandidateIndex:
@@ -341,15 +396,7 @@ def enumerate_residual_candidates(
                 if claimed_elsewhere:
                     reasons.add("BANK_ENTRY_IDENTIFIED_TO_OTHER_SETTLEMENT")
                 candidates.append(
-                    ResidualCandidate(
-                        id=_candidate_id(
-                            proof.settlement_id,
-                            target.scope,
-                            ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
-                            str(bank_entry.id),
-                            bank_entry.amount,
-                            source_ids,
-                        ),
+                    ResidualCandidate.create(
                         settlement_id=proof.settlement_id,
                         scope=target.scope,
                         kind=ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
@@ -376,15 +423,7 @@ def enumerate_residual_candidates(
                 ),
             )
             candidates.append(
-                ResidualCandidate(
-                    id=_candidate_id(
-                        proof.settlement_id,
-                        target.scope,
-                        ResidualCandidateKind.BLOCKED_RECON_COMPONENT,
-                        str(recon_entry.id),
-                        recon_entry.settlement_effect,
-                        source_ids,
-                    ),
+                ResidualCandidate.create(
                     settlement_id=proof.settlement_id,
                     scope=target.scope,
                     kind=ResidualCandidateKind.BLOCKED_RECON_COMPONENT,
@@ -401,20 +440,28 @@ def enumerate_residual_candidates(
     return tuple(ordered[: cfg.max_candidates]), truncated
 
 
-def _explanation_id(
+def _explanation_id_from_ids(
     target: ResidualTarget,
-    candidates: tuple[ResidualCandidate, ...],
+    candidate_ids: tuple[domain.ResidualCandidateId, ...],
 ) -> domain.ResidualExplanationId:
     material = "\0".join(
         (
             str(target.proof_version_id),
             target.scope.value,
-            *(str(candidate.id) for candidate in candidates),
+            *(str(candidate_id) for candidate_id in candidate_ids),
         )
     ).encode()
     return domain.ResidualExplanationId(
         f"rexp_{hashlib.sha256(material).hexdigest()[:24]}"
     )
+
+
+def _explanation_id(
+    target: ResidualTarget,
+    candidates: tuple[ResidualCandidate, ...],
+) -> domain.ResidualExplanationId:
+    candidate_ids = tuple(sorted((candidate.id for candidate in candidates), key=str))
+    return _explanation_id_from_ids(target, candidate_ids)
 
 
 def _make_explanation(
@@ -447,7 +494,7 @@ def _make_explanation(
     return ResidualExplanation(
         id=_explanation_id(target, candidates),
         target=target,
-        candidate_ids=tuple(candidate.id for candidate in candidates),
+        candidate_ids=tuple(sorted((candidate.id for candidate in candidates), key=str)),
         explained_amount=explained,
         remaining_residual=target.amount - explained,
         source_envelope_ids=source_ids,
@@ -513,4 +560,5 @@ def solve_residual(
         nodes_visited=nodes,
         candidate_space_truncated=candidate_space_truncated,
         search_budget_exhausted=exhausted,
+        solution_limit_reached=len(solutions) >= cfg.max_solutions,
     )

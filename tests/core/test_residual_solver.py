@@ -8,7 +8,6 @@ from reflow.domain import (
     Currency,
     Money,
     ProofVersionId,
-    ResidualCandidateId,
     SettlementId,
     SourceEnvelopeId,
 )
@@ -166,8 +165,7 @@ def test_blocked_late_recon_row_can_only_form_blocked_hypothesis() -> None:
 def _candidate(suffix: str, amount: int) -> ResidualCandidate:
     source = SourceEnvelopeId(f"src_{suffix}")
     money = Money(amount, Currency.INR)
-    return ResidualCandidate(
-        id=ResidualCandidateId(f"rcand_{suffix}"),
+    return ResidualCandidate.create(
         settlement_id=SettlementId("setl_manual"),
         scope=ResidualScope.BANK,
         kind=ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
@@ -301,3 +299,24 @@ def test_candidate_index_rejects_unbound_batch() -> None:
                 bank_entries=(),
             )
         )
+
+def test_solution_cap_is_reported_as_incomplete_search() -> None:
+    target = ResidualTarget(
+        settlement_id=SettlementId("setl_manual"),
+        proof_version_id=ProofVersionId("proofv_manual"),
+        scope=ResidualScope.BANK,
+        amount=Money(300, Currency.INR),
+    )
+    candidates = (
+        _candidate("cap_a", 300),
+        _candidate("cap_b", 300),
+        _candidate("cap_c", 300),
+    )
+    result = solve_residual(
+        target,
+        candidates,
+        limits=ResidualSolverLimits(max_solutions=1),
+    )
+    assert len(result.explanations) == 1
+    assert result.solution_limit_reached
+    assert not result.search_budget_exhausted
