@@ -27,6 +27,7 @@ from reflow.residual_solver import (
     ResidualTarget,
     enumerate_residual_candidates,
     residual_targets,
+    solve_all_residuals,
     solve_residual,
 )
 from reflow.settlement_proof import prove_all_settlement_compositions
@@ -320,3 +321,23 @@ def test_solution_cap_is_reported_as_incomplete_search() -> None:
     assert len(result.explanations) == 1
     assert result.solution_limit_reached
     assert not result.search_budget_exhausted
+
+def test_batch_solver_reuses_one_index_and_emits_only_hypotheses() -> None:
+    world = generate_world(261, WorldConfig(settlement_count=20))
+    batch, proofs = _prove(_clean(world, 262))
+    results = solve_all_residuals(proofs, batch)
+    expected_targets = sum(len(residual_targets(proof)) for proof in proofs)
+    assert len(results) == expected_targets
+    assert results
+    assert all(
+        explanation.state is ResidualExplanationState.HYPOTHESIS
+        for result in results
+        for explanation in result.explanations
+    )
+
+
+def test_batch_solver_rejects_duplicate_proof_versions() -> None:
+    world = generate_world(271)
+    batch, proofs = _prove(_clean(world, 272))
+    with pytest.raises(ResidualSolverError, match="duplicate proof version"):
+        solve_all_residuals((*proofs, proofs[0]), batch)
