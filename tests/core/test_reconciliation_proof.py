@@ -550,3 +550,63 @@ def test_global_batch_hash_cannot_claim_cutoff_before_unrelated_evidence() -> No
             knowledge_cutoff=T0,
             generated_at=later + timedelta(seconds=1),
         )
+
+
+def test_full_proof_self_verifies_scoped_hash_sources_and_ruleset_metadata() -> None:
+    observed = _clean_observed(generate_world(191), 192)
+    journal = InMemoryJournal()
+    batch, composition, bank = _ingest(observed, journal, T0)
+    version = InMemoryProofLedger().apply_batch(
+        batch,
+        journal,
+        composition,
+        bank,
+        knowledge_cutoff=T0,
+        generated_at=T0 + timedelta(seconds=1),
+    ).created_versions[0]
+
+    with pytest.raises(ValueError, match="scoped input hash"):
+        replace(version, scoped_input_sha256="0" * 64)
+    with pytest.raises(ValueError, match="source evidence"):
+        replace(version, source_envelope_ids=version.source_envelope_ids[:-1])
+    with pytest.raises(ValueError, match="composition ruleset"):
+        replace(version, composition_ruleset_version="gate7-forged")
+    with pytest.raises(ValueError, match="bank ruleset"):
+        replace(version, bank_ruleset_version="gate8-forged")
+    with pytest.raises(ValueError, match="combiner ruleset"):
+        replace(version, combiner_ruleset_version="gate9-forged")
+
+
+def test_cutoff_and_generation_time_cannot_move_backwards_for_existing_series() -> None:
+    observed = _clean_observed(generate_world(201), 202)
+    journal = InMemoryJournal()
+    batch, composition, bank = _ingest(observed, journal, T0)
+    ledger = InMemoryProofLedger()
+    ledger.apply_batch(
+        batch,
+        journal,
+        composition,
+        bank,
+        knowledge_cutoff=T0 + timedelta(hours=1),
+        generated_at=T0 + timedelta(hours=2),
+    )
+
+    with pytest.raises(ReconciliationProofError, match="knowledge cutoff moved backwards"):
+        ledger.apply_batch(
+            batch,
+            journal,
+            composition,
+            bank,
+            knowledge_cutoff=T0 + timedelta(minutes=30),
+            generated_at=T0 + timedelta(hours=3),
+        )
+
+    with pytest.raises(ReconciliationProofError, match="generation time moved backwards"):
+        ledger.apply_batch(
+            batch,
+            journal,
+            composition,
+            bank,
+            knowledge_cutoff=T0 + timedelta(hours=1),
+            generated_at=T0 + timedelta(hours=1, minutes=30),
+        )

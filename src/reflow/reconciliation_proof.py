@@ -74,8 +74,20 @@ class ReconciliationProofVersion:
             raise ValueError("proof fragments disagree on authoritative settlement amount")
         if not self.source_envelope_ids:
             raise ValueError("full proof must cite authoritative raw evidence")
+        expected_sources = _source_envelope_ids(self.composition, self.bank)
+        if self.source_envelope_ids != expected_sources:
+            raise ValueError("full proof source evidence must equal its fragment evidence union")
         _require_sha256(self.scoped_input_sha256, "scoped input hash")
         _require_sha256(self.batch_compilation_sha256, "batch compilation hash")
+        expected_scoped_hash = _scoped_input_sha256(self.composition, self.bank)
+        if self.scoped_input_sha256 != expected_scoped_hash:
+            raise ValueError("scoped input hash does not match its proof fragments")
+        if self.composition_ruleset_version != COMPOSITION_RULESET_VERSION:
+            raise ValueError("composition ruleset metadata does not match Gate 7")
+        if self.bank_ruleset_version != BANK_RULESET_VERSION:
+            raise ValueError("bank ruleset metadata does not match Gate 8")
+        if self.combiner_ruleset_version != GATE9_RULESET_VERSION:
+            raise ValueError("combiner ruleset metadata does not match Gate 9")
         _require_aware(self.knowledge_cutoff, "knowledge cutoff")
         _require_aware(self.generated_at, "generated at")
         if self.generated_at < self.knowledge_cutoff:
@@ -99,8 +111,12 @@ class ReconciliationProofVersion:
             raise ValueError("proof version id does not match its deterministic identity")
         if self.version == 1 and self.prior_version_id is not None:
             raise ValueError("first proof version cannot have a predecessor")
+        if self.version == 1 and self.reopened:
+            raise ValueError("first proof version cannot be reopened")
         if self.version > 1 and self.prior_version_id is None:
             raise ValueError("later proof version requires a predecessor")
+        if self.reopened and self.status is ReconciliationStatus.PROVEN_RECONCILED:
+            raise ValueError("reopened proof version cannot already be reconciled")
 
 
 @dataclass(frozen=True, slots=True)
