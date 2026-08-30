@@ -6,7 +6,10 @@ from enum import StrEnum
 from . import domain, ingestion
 from .ingestion import CanonicalBatch
 
+BANK_RULESET_VERSION = "gate8-bank-v1"
+
 __all__ = [
+    "BANK_RULESET_VERSION",
     "BankReceiptProof",
     "BankReceiptProofError",
     "BankReceiptStatus",
@@ -116,7 +119,7 @@ def _prove_from_candidates(
     *,
     same_amount_nonidentity_count: int,
     source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
-    settlement_utr_reused: bool,
+    conflicting_settlement_source_ids: tuple[domain.SourceEnvelopeId, ...],
 ) -> BankReceiptProof:
     settlement_source_id = _require_source_envelope(
         source_index,
@@ -124,7 +127,10 @@ def _prove_from_candidates(
         str(settlement.id),
     )
 
-    source_envelope_ids: set[domain.SourceEnvelopeId] = {settlement_source_id}
+    source_envelope_ids: set[domain.SourceEnvelopeId] = {
+        settlement_source_id,
+        *conflicting_settlement_source_ids,
+    }
     for entry in exact_utr_entries:
         source_envelope_ids.add(
             _require_source_envelope(
@@ -153,6 +159,7 @@ def _prove_from_candidates(
             key=lambda row: str(row.id),
         )
     )
+    settlement_utr_reused = bool(conflicting_settlement_source_ids)
     identity_ambiguous = settlement_utr_reused or bool(reused_bank_utr_entries)
     accepted_entries = (
         ()
@@ -217,9 +224,9 @@ def _prove_bank_receipt(
     bank_entries: tuple[domain.BankEntry, ...],
     *,
     source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
-    settlement_utr_reused: bool,
+    conflicting_settlement_source_ids: tuple[domain.SourceEnvelopeId, ...],
 ) -> BankReceiptProof:
-    """Low-level test seam; callers must supply batch-global UTR reuse context."""
+    """Low-level test seam; callers must supply batch-global UTR conflict evidence."""
     unique_bank_entries = _deduplicate_bank_entries(bank_entries)
     exact_utr_entries = (
         ()
@@ -237,7 +244,7 @@ def _prove_bank_receipt(
         exact_utr_entries,
         same_amount_nonidentity_count=same_amount_nonidentity_count,
         source_index=source_index,
-        settlement_utr_reused=settlement_utr_reused,
+        conflicting_settlement_source_ids=conflicting_settlement_source_ids,
     )
 
 
@@ -285,15 +292,29 @@ def prove_all_bank_receipts(batch: CanonicalBatch) -> tuple[BankReceiptProof, ..
             bank_amount_counts.get(_amount_key(settlement.amount), 0)
             - exact_same_amount_count,
         )
+        conflicting_settlement_source_ids: tuple[domain.SourceEnvelopeId, ...] = ()
+        if settlement.utr is not None and settlement.utr in reused_utrs:
+            conflicting_settlement_source_ids = tuple(
+                sorted(
+                    (
+                        _require_source_envelope(
+                            source_index,
+                            domain.SourceKind.RAZORPAY_SETTLEMENT,
+                            str(other_id),
+                        )
+                        for other_id in settlement_ids_by_utr[settlement.utr]
+                        if other_id != settlement.id
+                    ),
+                    key=str,
+                )
+            )
         proofs.append(
             _prove_from_candidates(
                 settlement,
                 exact_entries,
                 same_amount_nonidentity_count=same_amount_nonidentity_count,
                 source_index=source_index,
-                settlement_utr_reused=(
-                    settlement.utr is not None and settlement.utr in reused_utrs
-                ),
+                conflicting_settlement_source_ids=conflicting_settlement_source_ids,
             )
         )
 

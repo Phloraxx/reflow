@@ -268,6 +268,16 @@ def test_reused_settlement_utr_contradicts_both_settlements() -> None:
     assert by_id[second.settlement.id].bank_entry_ids == ()
     assert "SETTLEMENT_UTR_REUSED" in by_id[first.settlement.id].reason_codes
     assert "SETTLEMENT_UTR_REUSED" in by_id[second.settlement.id].reason_codes
+    source_index = batch.source_index()
+    first_source = source_index[(SourceKind.RAZORPAY_SETTLEMENT, str(first.settlement.id))]
+    second_source = source_index[(SourceKind.RAZORPAY_SETTLEMENT, str(second.settlement.id))]
+    expected_conflict_sources = {first_source, second_source}
+    assert expected_conflict_sources.issubset(
+        by_id[first.settlement.id].source_envelope_ids
+    )
+    assert expected_conflict_sources.issubset(
+        by_id[second.settlement.id].source_envelope_ids
+    )
 
 
 def test_identical_bank_source_replay_is_idempotent_not_double_counted() -> None:
@@ -308,7 +318,7 @@ def test_conflicting_duplicate_bank_identity_fails_closed() -> None:
             settlement,
             (*batch.bank_entries, conflicting),
             source_index=batch.source_index(),
-            settlement_utr_reused=False,
+            conflicting_settlement_source_ids=(),
         )
 
 
@@ -327,7 +337,7 @@ def test_missing_bank_source_provenance_fails_closed() -> None:
             settlement,
             batch.bank_entries,
             source_index=source_index,
-            settlement_utr_reused=False,
+            conflicting_settlement_source_ids=(),
         )
 
 

@@ -4,7 +4,7 @@ from random import Random
 
 import pytest
 
-from reflow.domain import SourceKind
+from reflow.domain import ReconEntryId, SourceKind
 from reflow.ingestion import ingest_observed_batch
 from reflow.journal import InMemoryJournal
 from reflow.money_graph import MoneyGraph, build_money_graph
@@ -186,7 +186,18 @@ def test_same_economic_entity_cannot_belong_to_two_settlements() -> None:
     ]
     assert len(affected) == 2
     assert all(proof.status is CompositionStatus.CONTRADICTED for proof in affected)
-    assert all(proof.cross_settlement_conflict_ids for proof in affected)
+    expected_conflict_ids = {
+        ReconEntryId(str(original["recon_id"])),
+        ReconEntryId(str(clone["recon_id"])),
+    }
+    source_index = batch.source_index()
+    expected_conflict_sources = {
+        source_index[(SourceKind.RAZORPAY_RECON, str(entry_id))]
+        for entry_id in expected_conflict_ids
+    }
+    for proof in affected:
+        assert set(proof.cross_settlement_conflict_ids) == expected_conflict_ids
+        assert expected_conflict_sources.issubset(proof.source_envelope_ids)
 
 
 def test_missing_provenance_makes_zero_residual_incomplete() -> None:

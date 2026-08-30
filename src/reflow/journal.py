@@ -85,6 +85,10 @@ class InMemoryJournal:
         """Return the first retained source fact for a stable source identity."""
         return self._primary_by_identity.get((source_kind, source_record_id))
 
+    def get_by_id(self, envelope_id: SourceEnvelopeId) -> SourceEnvelope | None:
+        """Return an exact retained envelope by immutable evidence identity."""
+        return self._records_by_id.get(envelope_id)
+
     def entries(self) -> tuple[SourceEnvelope, ...]:
         return tuple(
             sorted(
