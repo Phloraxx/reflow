@@ -355,7 +355,7 @@ def test_journal_backed_batch_cannot_drop_settlement_and_provenance_together() -
 
 def test_journal_backed_batch_cannot_duplicate_settlement_identity() -> None:
     batch = _batch(28)
-    with pytest.raises(ValueError, match="compiled source binding"):
+    with pytest.raises(ValueError, match="duplicate source identities"):
         replace(batch, settlements=(*batch.settlements, batch.settlements[0]))
 
 
