@@ -312,7 +312,7 @@ def test_bank_shape_does_not_affect_composition_proof() -> None:
     graph = build_money_graph(batch)
     proofs = prove_all_settlement_compositions(batch, graph)
     world = generate_world(seed)
-    for scenario in ("split_bank_credit", "missing_bank_receipt", "incorrect_bank_amount"):
+    for scenario in ("immediate_bank_credit", "missing_bank_receipt", "incorrect_bank_amount"):
         case = next(case for case in world.cases if case.scenario == scenario)
         proof = next(proof for proof in proofs if proof.settlement_id == case.settlement.id)
         assert proof.status is CompositionStatus.PROVEN

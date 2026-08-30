@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None after the second independent Gates 0–7 audit. The repaired branch has passed Ruff, strict mypy and pytest. Gate 8 remains blocked until this audited checkpoint is merged.
+None currently known in the deterministic implementation through Gate 8. Gate 8 still requires exact-head PR validation and merge before Gate 9 begins.
 
 ---
 
@@ -572,14 +572,183 @@ The current normalized event fixtures are not yet the final raw Razorpay webhook
 
 ---
 
+## F-0015 — Synthetic split-bank truth conflated standard and Instant Settlements
+
+**Date:** 2026-08-30  
+**Area:** simulator / bank proof / provider semantics  
+**Severity:** high
+
+### Symptom
+
+The hidden financial world contained a `split_bank_credit` scenario where two distinct bank transactions reused one standard settlement UTR and their values were summed to the settlement amount. The first Gate 8 implementation accepted this as a valid split bank receipt.
+
+### Initial assumption
+
+Because one settlement can conceptually result in multiple observed bank credits in some payout flows, reusing the standard settlement UTR across multiple synthetic bank rows was treated as sufficient explicit binding.
+
+### Root cause
+
+The simulator conflated Razorpay's standard settlement entity with the separate Instant Settlement payout topology.
+
+Razorpay documents a normal `setl_...` settlement with a UTR used to track that particular settlement in the bank account. Instant Settlements instead use a `settlement.ondemand` parent (`setlod_...`) with explicit `ondemand_payout` children (`setlodp_...`) that carry payout-level evidence and UTRs.
+
+### Why it matters
+
+If left unchanged, the hidden benchmark would reward the engine for accepting a provider-inaccurate identity shortcut. A model or deterministic matcher could then appear correct by summing unrelated bank transactions that happened to reuse or resemble a settlement reference.
+
+### Fix
+
+The standard-settlement simulator no longer contains valid split-bank truth. Its bank transactions require globally unique UTRs, and matched standard settlements have exactly one bank transaction. An `immediate_bank_credit` fixture now exercises the exact causal lower boundary instead.
+
+Gate 8 treats multiple distinct bank transactions sharing one standard settlement UTR as `BANK_RECEIPT_CONTRADICTED` with `BANK_UTR_REUSED_ACROSS_ENTRIES` and excludes those rows from accepted bank arithmetic.
+
+True multi-credit Instant Settlement support is deferred until the domain explicitly models `setlod` parent and `setlodp` payout identities plus payout-level UTR evidence.
+
+### Regression protection
+
+- hidden-world validation rejects bank-UTR reuse for standard settlement truth;
+- `test_standard_settlement_bank_utrs_are_unique_transactions`;
+- `test_immediate_bank_credit_respects_exact_lower_causal_boundary`;
+- `test_two_distinct_bank_transactions_reusing_standard_settlement_utr_are_contradicted`.
+
+### Metric impact
+
+No final benchmark had been published, so no external metric was withdrawn. The earlier passing development test that accepted split standard-settlement rows is intentionally superseded and preserved in git history.
+
+### Remaining limitation
+
+Instant Settlement reconciliation is not implemented. It requires a separate provider-specific adapter/proof for `setlod`/`setlodp` entities and cannot be inferred from arbitrary bank-row grouping.
+
+---
+
+## F-0016 — Reused settlement UTR still attributed the same bank transaction twice
+
+**Date:** 2026-08-30  
+**Area:** bank proof / identity attribution  
+**Severity:** safety-critical
+
+### Symptom
+
+An intermediate Gate 8 version correctly marked two settlement entities that reused one UTR as `BANK_RECEIPT_CONTRADICTED`, but each proof could still contain the same matching bank row in `bank_entry_ids` and count its amount as observed accepted bank credit.
+
+### Initial assumption
+
+A contradicted status was assumed to be enough to prevent downstream misuse of the bank relationship.
+
+### Root cause
+
+Proof status and proof attribution were treated as separate concerns. The status failed closed, but the proof payload still represented the ambiguous relationship as accepted evidence.
+
+### Why it matters
+
+Gate 9 or an operator UI could accidentally treat `bank_entry_ids` as an attribution graph even while the proof status was red, causing one bank transaction to appear owned by two settlements.
+
+### Fix
+
+Settlement-UTR ambiguity now makes bank identity non-attributable. Affected proofs preserve the raw source envelopes and contradiction reason, but `bank_entry_ids == ()` and `observed_bank_credit == 0` until identity is unambiguous.
+
+### Regression protection
+
+`tests/core/test_bank_proof_identity_regression.py::test_reused_settlement_utr_does_not_attribute_one_bank_row_to_two_settlements` plus assertions in the main Gate 8 suite.
+
+### Metric impact
+
+No published metric changed.
+
+### Remaining limitation
+
+Gate 9 must continue treating accepted attribution fields as proof-state-dependent rather than merely checking whether an evidence row exists.
+
+---
+
+## F-0017 — Same-amount diagnostics could make Gate 8 proof payloads approach quadratic growth
+
+**Date:** 2026-08-30  
+**Area:** bank proof / scale  
+**Severity:** high
+
+### Symptom
+
+The first conservative same-amount implementation preserved every later bank row with the same amount but a non-matching UTR as a rejected candidate ID and source envelope inside each settlement proof.
+
+### Initial assumption
+
+Keeping all rejected fuzzy candidates directly in the proof object was considered the most auditable design.
+
+### Root cause
+
+Non-identity investigation evidence was mixed into the authoritative proof payload. At a common price point, many settlements could each copy nearly the same large candidate set.
+
+### Why it matters
+
+A merchant with thousands of repeated amounts could drive proof output size and matching work toward quadratic growth even though same amount can never establish identity in Gate 8.
+
+### Fix
+
+The batch proof path now indexes exact UTR candidates and `(amount, currency)` counts. Authoritative proofs retain exact-UTR source evidence only and expose `same_amount_nonidentity_count` as a bounded diagnostic scalar instead of embedding fuzzy row IDs. Investigation layers can query non-identity rows separately when needed.
+
+### Regression protection
+
+`tests/core/test_bank_proof_scale_shape.py::test_common_amount_volume_does_not_embed_all_fuzzy_candidates_in_each_proof` forces 1,000 settlements to a common observed amount and verifies bounded proof source/identity payloads.
+
+### Metric impact
+
+No throughput claim had been published. This is a structural complexity hardening, not a benchmark result.
+
+### Remaining limitation
+
+Final throughput, memory and maximum-volume claims still require the dedicated benchmark harness and measured runtime data.
+
+---
+
+## F-0018 — Valid low-cardinality world configuration could create a non-positive cross-period settlement
+
+**Date:** 2026-08-30  
+**Area:** simulator / evaluation  
+**Severity:** high
+
+### Symptom
+
+The 1,000-settlement common-amount stress test used the valid configuration `min_payments=max_payments=high_cardinality_payments=1`. World generation failed before Gate 8 ran with `AssertionError: generator produced non-positive settlement`.
+
+### Initial assumption
+
+Bounding a refund only by the source payment amount was assumed to be enough to preserve valid settlement truth.
+
+### Root cause
+
+A cross-period refund references a prior payment. With only one small payment in the current settlement period, the refund from a much larger prior payment could exceed the current period's positive settlement composition even though the refund itself was valid relative to the original payment.
+
+### Why it matters
+
+`WorldConfig` explicitly accepts one-payment settlements. A supposedly valid configuration that cannot always generate valid hidden truth makes scale experiments seed-dependent and could silently bias evaluation toward easier cardinalities.
+
+### Fix
+
+Synthetic refund generation now also respects the current settlement's positive capacity. The refund remains bounded by the source payment and the synthetic ₹250 cap, but is additionally capped so the current settlement retains at least one paise of positive composition under the current positive-settlement domain contract.
+
+### Regression protection
+
+`test_low_cardinality_world_keeps_cross_period_refund_settlement_positive` regenerates the exact 1,000-settlement one-payment configuration that failed and validates the complete world. The unchanged Gate 8 common-amount stress fixture then runs on that world.
+
+### Metric impact
+
+The failed CI run had Ruff and strict mypy green with 106 tests passing and only this new stress test blocked in world generation. No external benchmark number had been published. After the generator fix, the exact configuration and full suite pass.
+
+### Remaining limitation
+
+The simulator currently models positive standard settlement entities. If zero/negative settlement behavior becomes a real target, it must be introduced as an explicit provider-backed domain case rather than reached accidentally through generator arithmetic.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
 
 - settlement debit/credit sign mistakes in the real Razorpay adapter;
-- same-amount bank ambiguity;
-- exact UTR with wrong amount;
-- split bank-credit handling;
+- same-amount bank ambiguity beyond the current exact-UTR proof boundary;
+- exact UTR with wrong amount in real provider fixtures;
+- explicit Instant Settlement `setlod`/`setlodp` payout reconciliation;
 - late source evidence reopening a proof;
 - schema drift;
 - AI adapter inferring the wrong amount unit or debit/credit sign;

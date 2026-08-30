@@ -31,7 +31,6 @@ from reflow.domain import (
 
 class BankExpectation(StrEnum):
     MATCHED = "matched"
-    SPLIT_MATCHED = "split_matched"
     MISSING = "missing"
     MISMATCHED = "mismatched"
 
@@ -85,6 +84,7 @@ class HiddenWorld:
     def validate(self) -> None:
         settlement_ids: set[SettlementId] = set()
         settlement_utrs: set[str] = set()
+        bank_utrs: set[str] = set()
         order_ids: set[OrderId] = set()
         payment_ids: set[PaymentId] = set()
         event_ids: set[str] = set()
@@ -213,21 +213,23 @@ class HiddenWorld:
                     raise AssertionError("bank credit precedes settlement processing")
                 if bank_entry.utr != case.settlement.utr:
                     raise AssertionError("bank truth UTR does not match settlement UTR")
+                if bank_entry.utr is None:
+                    raise AssertionError("standard settlement bank truth requires UTR")
+                if bank_entry.utr in bank_utrs:
+                    raise AssertionError("bank UTR reused across transactions in hidden truth")
+                bank_utrs.add(bank_entry.utr)
 
             if case.bank_expectation is BankExpectation.MATCHED:
                 if len(case.bank_entries) != 1 or bank_total != case.settlement.amount:
                     raise AssertionError("matched bank truth is inconsistent")
-            elif case.bank_expectation is BankExpectation.SPLIT_MATCHED:
-                if len(case.bank_entries) < 2 or bank_total != case.settlement.amount:
-                    raise AssertionError("split bank truth is inconsistent")
             elif case.bank_expectation is BankExpectation.MISSING:
                 if case.bank_entries:
                     raise AssertionError("missing-bank truth must contain no bank entries")
             elif (
                 case.bank_expectation is BankExpectation.MISMATCHED
-                and (not case.bank_entries or bank_total == case.settlement.amount)
+                and (len(case.bank_entries) != 1 or bank_total == case.settlement.amount)
             ):
-                raise AssertionError("mismatched bank truth must carry a non-zero residual")
+                raise AssertionError("mismatched bank truth must carry one non-zero residual")
 
 
 def _fee_and_tax(gross_paise: int) -> tuple[int, int]:
@@ -242,7 +244,7 @@ def _scenario_for(index: int) -> str:
         "clean",
         "refund",
         "adjustment",
-        "split_bank_credit",
+        "immediate_bank_credit",
         "missing_bank_receipt",
         "incorrect_bank_amount",
         "cross_period_refund",
@@ -338,7 +340,17 @@ def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
             )
             payment_id = source_payment.payment_id
             payment_amount = source_payment.amount.amount_paise
-            refund_amount = min(payment_amount // 3, 25_000)
+            current_capacity = sum_money(
+                [entry.settlement_effect for entry in recon]
+            ).amount_paise
+            max_refund_without_zeroing_settlement = current_capacity - 1
+            if max_refund_without_zeroing_settlement <= 0:
+                raise AssertionError("payment recon must leave positive refund capacity")
+            refund_amount = min(
+                payment_amount // 3,
+                25_000,
+                max_refund_without_zeroing_settlement,
+            )
             refund_time = case_time + timedelta(hours=1)
             refund = Refund(
                 id=RefundId(f"rfnd_{case_index:06d}_00000"),
@@ -441,29 +453,7 @@ def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
 
         bank_expectation = BankExpectation.MATCHED
         bank_entries: list[BankEntry] = []
-        if scenario == "split_bank_credit":
-            first = current_total.amount_paise * 2 // 5
-            second = current_total.amount_paise - first
-            bank_expectation = BankExpectation.SPLIT_MATCHED
-            bank_entries.extend(
-                [
-                    BankEntry(
-                        BankEntryId(f"bank_{case_index:06d}_a"),
-                        Money(first),
-                        settlement_time + timedelta(hours=1),
-                        f"RAZORPAY PART 1 {utr}",
-                        utr,
-                    ),
-                    BankEntry(
-                        BankEntryId(f"bank_{case_index:06d}_b"),
-                        Money(second),
-                        settlement_time + timedelta(hours=1, minutes=5),
-                        f"RAZORPAY PART 2 {utr}",
-                        utr,
-                    ),
-                ]
-            )
-        elif scenario == "missing_bank_receipt":
+        if scenario == "missing_bank_receipt":
             bank_expectation = BankExpectation.MISSING
         elif scenario == "incorrect_bank_amount":
             bank_expectation = BankExpectation.MISMATCHED
@@ -477,11 +467,16 @@ def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
                 )
             )
         else:
+            bank_time = (
+                settlement_time
+                if scenario == "immediate_bank_credit"
+                else settlement_time + timedelta(hours=1)
+            )
             bank_entries.append(
                 BankEntry(
                     BankEntryId(f"bank_{case_index:06d}_a"),
                     current_total,
-                    settlement_time + timedelta(hours=1),
+                    bank_time,
                     f"RAZORPAY SETTLEMENT {utr}",
                     utr,
                 )

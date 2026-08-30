@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: deterministic foundation independently audited through Gate 7; Bank Receipt Proof is next.**
+> **Current phase: deterministic foundation through Gate 8; Full Reconciliation Proof + versioning is next.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
@@ -21,7 +21,7 @@ AI has two planned, bounded jobs:
 
 ## Why this project
 
-A simplistic reconciliation implementation matches one gateway row to one bank row. ReFlow deliberately targets a harder shape: one settlement can be composed from many economic movements before one or more bank-side credits appear.
+A simplistic reconciliation implementation matches one gateway row to one bank row. ReFlow deliberately targets the harder financial shape around a settlement: many economic movements can compose one settlement, while bank receipt is a separate fact that must be independently evidenced.
 
 The core question is not:
 
@@ -29,7 +29,7 @@ The core question is not:
 
 It is:
 
-> **“Can we produce an auditable proof of every financial movement that explains this settlement, and state exactly what evidence is missing when we cannot?”**
+> **“Can we produce an auditable proof of every financial movement that explains this settlement, prove its bank receipt independently, and state exactly what evidence is missing when we cannot?”**
 
 ---
 
@@ -48,8 +48,9 @@ flowchart LR
   T --> G
 
   G --> S[Settlement Composition Proof]
-  S --> K[Bank Receipt Proof - Gate 8]
-  K --> P{Full Reconciliation Proof - Gate 9}
+  E --> K[Bank Receipt Proof]
+  S --> P{Full Reconciliation Proof - Gate 9}
+  K --> P
 
   P -->|proven| R[PROVEN]
   P -->|residual / contradiction / ambiguity| X[Exception]
@@ -58,7 +59,7 @@ flowchart LR
   U[Unknown Source] -. later .-> AS[AI Adapter Synthesizer]
 ```
 
-Raw evidence is journaled **before** canonicalization. Successful canonical rows retain immutable links back to the exact raw `SourceEnvelope`s that produced them. Money Graph evidence and Gate 7 proofs cite those raw envelope IDs rather than stopping at canonical row IDs.
+Raw evidence is journaled **before** canonicalization. Successful canonical rows retain immutable links back to the exact raw `SourceEnvelope`s that produced them. Money Graph evidence and proof fragments cite raw envelope IDs rather than stopping at canonical row IDs.
 
 ---
 
@@ -91,15 +92,15 @@ Raw evidence is journaled **before** canonicalization. Successful canonical rows
 - recon entries as first-class graph nodes;
 - authoritative graph edges citing actual raw source-envelope evidence;
 - graph edge precision/recall tests against hidden truth;
-- duplicate recon evidence visible to the benchmark rather than silently collapsed.
+- duplicate recon evidence visible to evaluation rather than silently collapsed.
 
 ### Gate 7 — Settlement Composition Proof
 
-For every settlement, the proof engine now checks **identity, arithmetic, temporal admissibility and raw provenance** together.
+For every settlement, the composition engine checks **identity, arithmetic, temporal admissibility and raw provenance** together.
 
 A composition can be proven only when:
 
-- the settlement and recon rows are journal-backed;
+- settlement and recon rows are journal-backed;
 - graph provenance resolves to the correct raw envelopes;
 - currencies agree;
 - one economic identity is not represented by contradictory rows;
@@ -117,28 +118,88 @@ zero residual != proof
 
 A zero residual with duplicated identity, conflicting identity, wrong provenance or impossible timing remains non-proven.
 
+### Gate 8 — Bank Receipt Proof
+
+Gate 8 proves bank receipt **independently** from settlement composition.
+
+For the current standard Razorpay settlement model, automatic proof requires:
+
+```text
+settlement UTR exists
+AND exactly one distinct bank transaction has that UTR
+AND exact amount and currency match
+AND bank time is not before settlement processing
+AND settlement UTR is not reused by another settlement
+AND raw settlement/bank provenance is complete
+```
+
+Possible outcomes are:
+
+```text
+BANK_RECEIPT_PROVEN
+BANK_RECEIPT_WAITING
+BANK_RECEIPT_RESIDUAL
+BANK_RECEIPT_INCOMPLETE
+BANK_RECEIPT_CONTRADICTED
+```
+
+Important safety rules:
+
+- same amount + nearby date is **not** identity;
+- narration is untrusted/supporting text and cannot authorize a match;
+- missing/corrupted UTR fails closed instead of switching to fuzzy matching;
+- exact UTR + wrong amount produces an explicit residual;
+- a bank row before settlement processing is contradictory and excluded;
+- a bank observation may arrive later—there is no arbitrary maximum-delay cutoff;
+- exact duplicate delivery of one bank source record is idempotent;
+- conflicting payload under one bank-entry identity fails closed;
+- multiple distinct bank transactions reusing one **standard settlement** UTR are contradictory rather than summed.
+
 ---
 
-## Two audits, not one
+## Standard settlements are not Instant Settlements
+
+Gate 8 research exposed and corrected an important simulator assumption.
+
+Razorpay's standard settlement entity (`setl_...`) exposes a UTR that Razorpay documents for tracking that particular settlement in the bank account.
+
+Razorpay **Instant Settlements** use a different topology: a `settlement.ondemand` parent (`setlod_...`) can expose explicit `ondemand_payouts` with child IDs such as `setlodp_...` and payout-level UTR evidence.
+
+Therefore ReFlow does **not** treat multiple arbitrary bank rows under one standard `setl_...` UTR as a valid split settlement. True multi-credit Instant Settlement support will require an explicit future model:
+
+```text
+setlod parent
+  ↓
+setlodp payout(s)
+  ↓
+payout UTR(s)
+  ↓
+bank transaction(s)
+```
+
+The old synthetic `split_bank_credit` truth fixture was removed instead of teaching Gate 8 to reward an inaccurate provider model. The failure is preserved in `FAILURE_LOG.md`.
+
+See [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md) for the complete Gate 8 contract and source references.
+
+---
+
+## Audits and failure history
 
 The first Gates 0–6 audit found eight real defects and fixed them before PR #2 was merged.
 
-Before accepting Gate 7, a **second independent pass** deliberately re-read the merged foundation without assuming the first review was sufficient. It found six additional classes of problems:
+A second independent pass before accepting Gate 7 found six additional classes of problems, including end-to-end raw provenance, economic identity, future recon evidence, cross-settlement ownership, envelope self-integrity and refund-event semantics.
 
-1. canonical rows did not retain end-to-end raw-envelope provenance;
-2. Gate 7 duplicate detection compared values before economic identity;
-3. Gate 7 could admit recon evidence occurring after settlement processing;
-4. one economic movement could be claimed by multiple settlements;
-5. `SourceEnvelope` digest/ID integrity was not self-verifying;
-6. refund lifecycle semantics were mixed into the normalized payment-event model.
+Gate 8 then found another provider-semantic failure in the synthetic bank truth: standard settlements and Instant Settlement payout topology had been conflated.
 
-All are now repaired with regression tests and recorded rather than hidden.
+These findings are preserved rather than rewritten out of history.
 
 See:
 
 - [`FAILURE_LOG.md`](FAILURE_LOG.md) — numbered genuine failures and repairs;
 - [`docs/18_IMPLEMENTATION_AUDIT.md`](docs/18_IMPLEMENTATION_AUDIT.md) — first implementation audit;
 - [`docs/19_SECOND_IMPLEMENTATION_AUDIT.md`](docs/19_SECOND_IMPLEMENTATION_AUDIT.md) — independent second audit;
+- [`docs/20_GATE_7_CHECKPOINT.md`](docs/20_GATE_7_CHECKPOINT.md) — Gate 7 checkpoint;
+- [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md) — Gate 8 checkpoint;
 - [`LIMITATIONS.md`](LIMITATIONS.md) — current non-claims and unresolved scope.
 
 ---
@@ -160,11 +221,11 @@ It is **not** the final production Razorpay Settlement Recon adapter.
 
 The real integration must normalize Razorpay's authoritative Recon fields such as `debit`, `credit`, `amount`, `fee` and `tax` using source-specific fixtures and Test Mode/API evidence. Synthetic formulas are not allowed to masquerade as production semantics.
 
-Likewise, the current `ObservedBatch` / `RawRecord` transport belongs to the evaluation fixture layer. It does not contain hidden truth, but production integrations should eventually use provider-specific transport models.
+Likewise, the current bank adapter is a normalized positive settlement-credit feed contract, not a universal bank-statement parser.
 
 ### Payment state and refund lifecycle are distinct
 
-Refunds remain first-class economic evidence. The current normalized payment-event reducer does not invent refund amount from a generic payment event. A real Razorpay integration must preserve the provider distinction between payment entity status and refund-specific evidence such as `refund_status`, `amount_refunded` and refund webhooks.
+Refunds remain first-class economic evidence. The current normalized payment-event reducer does not invent refund amount from a generic payment event. A real Razorpay integration must preserve the provider distinction between payment entity state and refund-specific evidence.
 
 ---
 
@@ -179,9 +240,11 @@ Refunds remain first-class economic evidence. The current normalized payment-eve
 - Arrival order cannot silently define final payment truth.
 - `payment.failed → payment.captured` is a valid evidence sequence.
 - Settlement composition arithmetic is deterministic.
-- Settlement processing and bank receipt are separate facts.
+- Settlement composition and bank receipt are independent proof fragments.
 - UTR/authoritative IDs outrank fuzzy similarity.
 - A zero residual is necessary but never sufficient proof of identity.
+- Same amount + approximate date cannot establish bank identity.
+- Bank narration cannot authorize a match.
 - Ambiguity and contradiction fail closed.
 - Unknown source unit/sign semantics quarantine evidence rather than guess.
 - Hidden simulator truth cannot be imported by production/reconciliation modules.
@@ -195,7 +258,7 @@ Refunds remain first-class economic evidence. The current normalized payment-eve
 
 The evaluation design generates an authoritative hidden financial world and separately generates imperfect observations. Candidate reconciliation code receives only the observed side.
 
-Implemented adversarial shapes already include:
+Implemented adversarial shapes include:
 
 - duplicate and reordered payment evidence;
 - delayed events;
@@ -204,9 +267,13 @@ Implemented adversarial shapes already include:
 - refunds and cross-period refunds;
 - transfers and adjustments;
 - missing, duplicate and wrong recon rows;
-- missing, delayed, split and incorrect bank credits;
+- missing, delayed and incorrect bank credits;
+- a bank credit at the exact settlement-processing boundary;
 - same-amount settlement collisions;
 - UTR removal/corruption;
+- reused settlement UTR;
+- multiple distinct bank rows reusing one standard settlement UTR;
+- bank credit before settlement processing;
 - malformed dates and schema drift;
 - rupee/paise and sign traps;
 - prompt-like bank narration;
@@ -215,7 +282,8 @@ Implemented adversarial shapes already include:
 - same economic identity with conflicting recon values;
 - recon evidence after settlement processing;
 - cross-settlement economic-identity conflicts;
-- wrong/missing raw provenance.
+- wrong/missing raw provenance;
+- a 200-settlement bank-proof batch.
 
 The safety metric that matters most is **silent false auto-match rate**. A confident wrong financial match is worse than an explicit unresolved case.
 
@@ -223,19 +291,23 @@ Final match-rate, accuracy, throughput and scale numbers will only be published 
 
 ---
 
-## Next implementation gates
+## Next implementation gate
 
-### Gate 8 — Bank Receipt Proof
+### Gate 9 — Full Reconciliation Proof + versioning
 
-Bank identity will be conservative. Exact UTR plus exact amount and valid source/time constraints can prove a normal bank receipt. Same amount plus approximate date cannot.
+Gate 9 will combine the two independent fragments:
 
-Split-credit support must require evidence binding all component bank rows to the settlement. Exact UTR with a wrong amount must be a contradiction, not a match.
+```text
+Settlement Composition Proof
+            +
+      Bank Receipt Proof
+            ↓
+Versioned Full Reconciliation Proof
+```
 
-### Gate 9 — Full Proof + versioning
+Late evidence must create a new proof version while preserving what was known before. A settlement that is composition-proven but waiting for its bank credit must not have history rewritten when the credit appears later.
 
-Composition proof and bank proof become independent fragments of a versioned full reconciliation proof. Late evidence must reopen only affected proof fragments while preserving the old version.
-
-Only after those gates pass do baseline benchmarking, AI adapter synthesis, AI exception investigation and UI work begin.
+Only after Gate 9 passes do baseline benchmarking, residual solving, AI adapter synthesis, AI exception investigation and UI work begin.
 
 ---
 
@@ -284,6 +356,8 @@ CI runs the same validation path.
 - [`docs/17_RESEARCH_SOURCEBOOK.md`](docs/17_RESEARCH_SOURCEBOOK.md)
 - [`docs/18_IMPLEMENTATION_AUDIT.md`](docs/18_IMPLEMENTATION_AUDIT.md)
 - [`docs/19_SECOND_IMPLEMENTATION_AUDIT.md`](docs/19_SECOND_IMPLEMENTATION_AUDIT.md)
+- [`docs/20_GATE_7_CHECKPOINT.md`](docs/20_GATE_7_CHECKPOINT.md)
+- [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md)
 
 ---
 
@@ -313,13 +387,14 @@ CI runs the same validation path.
 - [x] temporal payment reducer
 - [x] journal-backed provenance-preserving Money Graph
 - [x] Settlement Composition Proof
-- [ ] Bank Receipt Proof
+- [x] Bank Receipt Proof
 - [ ] full proof versioning
 - [ ] residual solver
 - [ ] baseline evaluation harness
 - [ ] exception fingerprinting
 - [ ] scale benchmark
 - [ ] real Razorpay Test Mode / Settlement Recon adapter evidence
+- [ ] Instant Settlement `setlod` / `setlodp` proof support
 
 ### AI / product surface
 
