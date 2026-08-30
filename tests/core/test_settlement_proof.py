@@ -318,9 +318,8 @@ def test_bank_shape_does_not_affect_composition_proof() -> None:
         assert proof.status is CompositionStatus.PROVEN
 
 
-def test_recon_for_unknown_settlement_fails_closed() -> None:
+def test_journal_backed_batch_cannot_drop_settlement_and_provenance_together() -> None:
     batch = _batch(27)
-    graph = build_money_graph(batch)
     removed_id = batch.settlements[0].id
     source_links = tuple(
         link
@@ -330,18 +329,33 @@ def test_recon_for_unknown_settlement_fails_closed() -> None:
             and link.source_record_id == str(removed_id)
         )
     )
-    malformed = replace(
-        batch,
-        settlements=tuple(row for row in batch.settlements if row.id != removed_id),
-        source_links=source_links,
-    )
-    with pytest.raises(CompositionProofError, match="unknown settlement"):
-        prove_all_settlement_compositions(malformed, graph)
+
+    with pytest.raises(ValueError, match="compiled source binding"):
+        replace(
+            batch,
+            settlements=tuple(row for row in batch.settlements if row.id != removed_id),
+            source_links=source_links,
+        )
 
 
-def test_duplicate_settlement_identity_fails_closed() -> None:
+def test_journal_backed_batch_cannot_duplicate_settlement_identity() -> None:
     batch = _batch(28)
+    with pytest.raises(ValueError, match="compiled source binding"):
+        replace(batch, settlements=(*batch.settlements, batch.settlements[0]))
+
+
+def test_single_composition_call_rejects_rows_for_another_settlement() -> None:
+    batch = _batch(35)
     graph = build_money_graph(batch)
-    malformed = replace(batch, settlements=(*batch.settlements, batch.settlements[0]))
-    with pytest.raises(CompositionProofError, match="duplicate settlement id"):
-        prove_all_settlement_compositions(malformed, graph)
+    settlement = batch.settlements[0]
+    foreign_row = next(
+        row for row in batch.recon_entries if row.settlement_id != settlement.id
+    )
+
+    with pytest.raises(CompositionProofError, match="another settlement"):
+        prove_settlement_composition(
+            settlement,
+            (foreign_row,),
+            graph,
+            source_index=batch.source_index(),
+        )
