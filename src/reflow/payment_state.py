@@ -67,22 +67,28 @@ def reduce_payment_events(events: Sequence[PaymentEvent]) -> PaymentCurrentState
     kinds = {event.kind for event in unique}
     warnings: list[str] = []
     captured_events = [event for event in unique if event.kind is PaymentEventKind.CAPTURED]
+    failed_events = [event for event in unique if event.kind is PaymentEventKind.FAILED]
 
-    if PaymentEventKind.FAILED in kinds and PaymentEventKind.CAPTURED in kinds:
+    captured_at = (
+        min(event.occurred_at for event in captured_events) if captured_events else None
+    )
+    if captured_at is not None and any(
+        event.occurred_at > captured_at for event in failed_events
+    ):
+        raise PaymentStateError("failed payment evidence occurs after captured evidence")
+
+    if failed_events and captured_events:
         warnings.append("FAILED_AND_CAPTURED_OBSERVED")
 
-    if PaymentEventKind.CAPTURED in kinds:
+    if captured_events:
         status = PaymentStatus.CAPTURED
-    elif PaymentEventKind.FAILED in kinds:
+    elif failed_events:
         status = PaymentStatus.FAILED
     elif PaymentEventKind.AUTHORIZED in kinds:
         status = PaymentStatus.AUTHORIZED
     else:
         status = PaymentStatus.CREATED
 
-    captured_at = (
-        min(event.occurred_at for event in captured_events) if captured_events else None
-    )
     return PaymentCurrentState(
         payment_id=payment_id,
         order_id=order_id,
