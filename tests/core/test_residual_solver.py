@@ -1,0 +1,201 @@
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+
+import pytest
+
+from reflow.bank_proof import prove_all_bank_receipts
+from reflow.domain import (
+    Currency,
+    Money,
+    ProofVersionId,
+    ResidualCandidateId,
+    SettlementId,
+    SourceEnvelopeId,
+)
+from reflow.ingestion import ObservedBatch, ingest_observed_batch
+from reflow.journal import InMemoryJournal
+from reflow.money_graph import build_money_graph
+from reflow.reconciliation_proof import InMemoryProofLedger, ReconciliationProofVersion
+from reflow.residual_solver import (
+    CandidateDisposition,
+    ResidualCandidate,
+    ResidualCandidateKind,
+    ResidualScope,
+    ResidualSolverError,
+    ResidualSolverLimits,
+    ResidualTarget,
+    enumerate_residual_candidates,
+    residual_targets,
+    solve_residual,
+)
+from reflow.settlement_proof import prove_all_settlement_compositions
+from reflow.simulator import (
+    BankExpectation,
+    CorruptionKind,
+    CorruptionPlan,
+    generate_world,
+    observe_world,
+)
+
+T0 = datetime(2026, 8, 30, 8, 0, tzinfo=UTC)
+
+
+def _clean(world, seed: int) -> ObservedBatch:
+    return observe_world(world, seed=seed, plan=CorruptionPlan(kinds=())).observed
+
+
+def _prove(observed: ObservedBatch, *, received_at: datetime = T0):
+    journal = InMemoryJournal()
+    batch = ingest_observed_batch(observed, journal, received_at=received_at)
+    graph = build_money_graph(batch)
+    composition = prove_all_settlement_compositions(batch, graph)
+    bank = prove_all_bank_receipts(batch)
+    ledger = InMemoryProofLedger()
+    update = ledger.apply_batch(
+        batch,
+        journal,
+        composition,
+        bank,
+        knowledge_cutoff=received_at,
+        generated_at=received_at + timedelta(seconds=1),
+    )
+    return batch, update.created_versions
+
+
+def _proof_for(
+    proofs: tuple[ReconciliationProofVersion, ...],
+    settlement_id: SettlementId,
+) -> ReconciliationProofVersion:
+    return next(proof for proof in proofs if proof.settlement_id == settlement_id)
+
+
+def test_wrong_recon_amount_creates_composition_residual_target() -> None:
+    world = generate_world(201)
+    observed = observe_world(
+        world,
+        seed=202,
+        plan=CorruptionPlan(kinds=(CorruptionKind.WRONG_RECON_AMOUNT,)),
+    ).observed
+    batch, proofs = _prove(observed)
+    proof = next(proof for proof in proofs if not proof.composition.residual.is_zero)
+    targets = residual_targets(proof)
+    target = next(target for target in targets if target.scope is ResidualScope.COMPOSITION)
+    assert target.amount.amount_paise == -111
+    assert target.proof_version_id == proof.id
+    assert batch.compilation_sha256 == proof.batch_compilation_sha256
+
+
+def test_amount_only_bank_candidate_is_hypothesis_not_proof() -> None:
+    world = generate_world(211)
+    case = next(
+        case
+        for case in world.cases
+        if case.bank_expectation is BankExpectation.MATCHED and case.bank_entries
+    )
+    observed = _clean(world, 212)
+    target_bank_id = str(case.bank_entries[0].id)
+    original = next(row for row in observed.bank_rows if row["bank_entry_id"] == target_bank_id)
+    candidate = dict(original)
+    candidate["bank_entry_id"] = "bank_amount_only_candidate"
+    candidate["utr"] = "UTR_WRONG_IDENTITY"
+    candidate["narration"] = "same amount but not authoritative identity"
+    changed = replace(
+        observed,
+        bank_rows=tuple(
+            row for row in observed.bank_rows if row["bank_entry_id"] != target_bank_id
+        )
+        + (candidate,),
+    )
+    batch, proofs = _prove(changed)
+    proof = _proof_for(proofs, case.settlement.id)
+    target = next(target for target in residual_targets(proof) if target.scope is ResidualScope.BANK)
+    candidates, truncated = enumerate_residual_candidates(proof, batch, target)
+    result = solve_residual(target, candidates, candidate_space_truncated=truncated)
+
+    assert len(result.explanations) == 1
+    explanation = result.explanations[0]
+    assert explanation.remaining_residual.is_zero
+    assert "NOT_FINANCIAL_PROOF" in explanation.reason_codes
+    assert "AMOUNT_ONLY_NOT_IDENTITY" in explanation.reason_codes
+    assert not explanation.uses_blocked_evidence
+    assert proof.bank.bank_entry_ids == ()
+
+
+def test_blocked_late_recon_row_can_only_form_blocked_hypothesis() -> None:
+    world = generate_world(221)
+    case = next(case for case in world.cases if case.recon_entries)
+    observed = _clean(world, 222)
+    target_recon = str(case.recon_entries[0].id)
+    recon_rows = [dict(row) for row in observed.recon_rows]
+    row = next(row for row in recon_rows if row["recon_id"] == target_recon)
+    row["occurred_at"] = (case.settlement.processed_at + timedelta(minutes=1)).isoformat()
+    batch, proofs = _prove(replace(observed, recon_rows=tuple(recon_rows)))
+    proof = _proof_for(proofs, case.settlement.id)
+    target = next(
+        target for target in residual_targets(proof) if target.scope is ResidualScope.COMPOSITION
+    )
+    candidates, truncated = enumerate_residual_candidates(proof, batch, target)
+    result = solve_residual(target, candidates, candidate_space_truncated=truncated)
+
+    exact = next(explanation for explanation in result.explanations if explanation.remaining_residual.is_zero)
+    assert exact.uses_blocked_evidence
+    assert "BLOCKED_EVIDENCE_USED" in exact.reason_codes
+    assert "NOT_FINANCIAL_PROOF" in exact.reason_codes
+
+
+def _candidate(suffix: str, amount: int) -> ResidualCandidate:
+    source = SourceEnvelopeId(f"src_{suffix}")
+    money = Money(amount, Currency.INR)
+    return ResidualCandidate(
+        id=ResidualCandidateId(f"rcand_{suffix}"),
+        settlement_id=SettlementId("setl_manual"),
+        scope=ResidualScope.BANK,
+        kind=ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
+        amount=money,
+        source_envelope_ids=(source,),
+        source_entity_id=f"bank_{suffix}",
+        disposition=CandidateDisposition.ADMISSIBLE_HYPOTHESIS,
+        reason_codes=("AMOUNT_ONLY_NOT_IDENTITY",),
+    )
+
+
+def test_bounded_solver_finds_exact_two_candidate_combination() -> None:
+    target = ResidualTarget(
+        settlement_id=SettlementId("setl_manual"),
+        proof_version_id=ProofVersionId("proofv_manual"),
+        scope=ResidualScope.BANK,
+        amount=Money(300, Currency.INR),
+    )
+    result = solve_residual(target, (_candidate("a", 100), _candidate("b", 200)))
+    assert len(result.explanations) == 1
+    assert len(result.explanations[0].candidate_ids) == 2
+    assert result.explanations[0].remaining_residual.is_zero
+    assert not result.search_budget_exhausted
+
+
+def test_node_budget_is_deterministic_and_fail_closed() -> None:
+    target = ResidualTarget(
+        settlement_id=SettlementId("setl_manual"),
+        proof_version_id=ProofVersionId("proofv_manual"),
+        scope=ResidualScope.BANK,
+        amount=Money(999, Currency.INR),
+    )
+    candidates = tuple(_candidate(str(index), 10 + index) for index in range(10))
+    limits = ResidualSolverLimits(max_candidates=10, max_combination_size=3, max_nodes=3)
+    first = solve_residual(target, candidates, limits=limits)
+    second = solve_residual(target, tuple(reversed(candidates)), limits=limits)
+    assert first.search_budget_exhausted
+    assert first.nodes_visited == 3
+    assert first == second
+
+
+def test_candidate_enumeration_rejects_wrong_canonical_batch() -> None:
+    first_world = generate_world(231)
+    second_world = generate_world(232)
+    first_batch, first_proofs = _prove(_clean(first_world, 233))
+    second_batch, _ = _prove(_clean(second_world, 234))
+    proof = next(proof for proof in first_proofs if residual_targets(proof))
+    target = residual_targets(proof)[0]
+    assert first_batch.compilation_sha256 != second_batch.compilation_sha256
+    with pytest.raises(ResidualSolverError, match="proof's canonical batch"):
+        enumerate_residual_candidates(proof, second_batch, target)
