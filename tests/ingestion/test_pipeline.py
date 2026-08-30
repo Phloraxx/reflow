@@ -52,17 +52,29 @@ def test_reingesting_same_raw_batch_later_is_idempotent() -> None:
     assert second_links == first_links
 
 
-def test_same_source_record_id_with_changed_raw_payload_is_conflict() -> None:
+def test_same_source_record_id_with_changed_raw_payload_is_retained_then_rejected() -> None:
     observed = _observed()
     journal = InMemoryJournal()
     journal_observed_batch(observed, journal, received_at=RECEIVED)
+    original_size = len(journal)
 
     merchant_rows = [dict(row) for row in observed.merchant_rows]
+    order_id = merchant_rows[0]["order_id"]
     merchant_rows[0]["external_reference"] = "changed-after-first-ingest"
     changed = replace(observed, merchant_rows=tuple(merchant_rows))
+
     with pytest.raises(JournalConflictError):
         journal_observed_batch(
             changed,
             journal,
             received_at=RECEIVED + timedelta(minutes=1),
         )
+
+    assert len(journal) == original_size + 1
+    versions = [
+        entry
+        for entry in journal.entries()
+        if entry.source_kind.value == "merchant" and entry.source_record_id == order_id
+    ]
+    assert len(versions) == 2
+    assert versions[0].payload_sha256 != versions[1].payload_sha256
