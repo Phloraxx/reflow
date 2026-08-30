@@ -290,6 +290,17 @@ class InMemoryProofLedger:
             raise ReconciliationProofError(
                 "Gate 9 requires a journal-backed canonical compilation"
             )
+        batch_compilation_sha256 = batch.compilation_sha256
+        for link in batch.source_links:
+            envelope = journal.get_by_id(link.envelope_id)
+            if envelope is None:
+                raise ReconciliationProofError(
+                    f"canonical batch cites unretained evidence {link.envelope_id}"
+                )
+            if envelope.received_at > knowledge_cutoff:
+                raise ReconciliationProofError(
+                    "canonical batch contains evidence after knowledge cutoff"
+                )
 
         settlements: dict[domain.SettlementId, domain.Settlement] = {}
         for settlement in batch.settlements:
@@ -381,7 +392,7 @@ class InMemoryProofLedger:
                 bank=bank,
                 source_envelope_ids=source_ids,
                 scoped_input_sha256=scoped_hash,
-                batch_compilation_sha256=batch.compilation_sha256,
+                batch_compilation_sha256=batch_compilation_sha256,
                 composition_ruleset_version=COMPOSITION_RULESET_VERSION,
                 bank_ruleset_version=BANK_RULESET_VERSION,
                 combiner_ruleset_version=GATE9_RULESET_VERSION,

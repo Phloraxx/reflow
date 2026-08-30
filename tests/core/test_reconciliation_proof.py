@@ -380,3 +380,173 @@ def test_batch_failure_is_atomic_and_does_not_partially_append_versions() -> Non
         )
 
     assert all(ledger.history(row.id) == () for row in batch.settlements)
+
+
+def _matched_target_with_multiple_recon(seed: int):
+    world = generate_world(seed)
+    case = next(
+        case
+        for case in world.cases
+        if case.bank_expectation is BankExpectation.MATCHED
+        and case.bank_entries
+        and len(case.recon_entries) > 1
+    )
+    return world, case, _clean_observed(world, seed + 1)
+
+
+def _remove_recon_row(observed: ObservedBatch, recon_id: str) -> ObservedBatch:
+    return replace(
+        observed,
+        recon_rows=tuple(row for row in observed.recon_rows if row["recon_id"] != recon_id),
+    )
+
+
+def test_late_recon_component_versions_only_affected_settlement() -> None:
+    _, target, observed = _matched_target_with_multiple_recon(151)
+    removed_id = str(target.recon_entries[0].id)
+    partial = _remove_recon_row(observed, removed_id)
+    journal = InMemoryJournal()
+    batch1, comp1, bank1 = _ingest(partial, journal, T0)
+    ledger = InMemoryProofLedger()
+    ledger.apply_batch(
+        batch1,
+        journal,
+        comp1,
+        bank1,
+        knowledge_cutoff=T0,
+        generated_at=T0 + timedelta(seconds=1),
+    )
+    v1 = ledger.latest(target.settlement.id)
+    assert v1 is not None
+    assert v1.status is ReconciliationStatus.RESIDUAL
+
+    later = T0 + timedelta(hours=2)
+    batch2, comp2, bank2 = _ingest(observed, journal, later)
+    update = ledger.apply_batch(
+        batch2,
+        journal,
+        comp2,
+        bank2,
+        knowledge_cutoff=later,
+        generated_at=later + timedelta(seconds=1),
+    )
+    v2 = ledger.latest(target.settlement.id)
+    assert v2 is not None
+
+    assert [proof.settlement_id for proof in update.created_versions] == [target.settlement.id]
+    assert v2.status is ReconciliationStatus.PROVEN_RECONCILED
+    assert not v2.reopened
+    diff = diff_proof_versions(v1, v2)
+    assert diff.changed_fragments == ("composition",)
+    assert diff.added_source_envelope_ids
+
+
+def test_new_duplicate_recon_evidence_reopens_proven_settlement() -> None:
+    _, target, observed = _matched_target_with_multiple_recon(161)
+    journal = InMemoryJournal()
+    batch1, comp1, bank1 = _ingest(observed, journal, T0)
+    ledger = InMemoryProofLedger()
+    ledger.apply_batch(
+        batch1,
+        journal,
+        comp1,
+        bank1,
+        knowledge_cutoff=T0,
+        generated_at=T0 + timedelta(seconds=1),
+    )
+    v1 = ledger.latest(target.settlement.id)
+    assert v1 is not None
+    assert v1.status is ReconciliationStatus.PROVEN_RECONCILED
+
+    original_id = str(target.recon_entries[0].id)
+    original = next(row for row in observed.recon_rows if row["recon_id"] == original_id)
+    duplicate = dict(original)
+    duplicate["recon_id"] = f"{original_id}_late_duplicate"
+    changed = replace(observed, recon_rows=(*observed.recon_rows, duplicate))
+    later = T0 + timedelta(hours=2)
+    batch2, comp2, bank2 = _ingest(changed, journal, later)
+    update = ledger.apply_batch(
+        batch2,
+        journal,
+        comp2,
+        bank2,
+        knowledge_cutoff=later,
+        generated_at=later + timedelta(seconds=1),
+    )
+    v2 = ledger.latest(target.settlement.id)
+    assert v2 is not None
+
+    assert [proof.settlement_id for proof in update.created_versions] == [target.settlement.id]
+    assert v2.status is ReconciliationStatus.CONTRADICTED
+    assert v2.reopened
+    assert "REOPENED_AFTER_PROVEN" in v2.reason_codes
+    assert "COMPOSITION:DUPLICATE_ECONOMIC_ROW" in v2.reason_codes
+    diff = diff_proof_versions(v1, v2)
+    assert diff.changed_fragments == ("composition",)
+    assert diff.reopened
+
+
+def test_proof_identity_is_invariant_to_raw_delivery_order() -> None:
+    observed = _clean_observed(generate_world(171), 172)
+    reversed_observed = replace(
+        observed,
+        merchant_rows=tuple(reversed(observed.merchant_rows)),
+        razorpay_events=tuple(reversed(observed.razorpay_events)),
+        recon_rows=tuple(reversed(observed.recon_rows)),
+        settlement_rows=tuple(reversed(observed.settlement_rows)),
+        bank_rows=tuple(reversed(observed.bank_rows)),
+    )
+
+    journal1 = InMemoryJournal()
+    batch1, comp1, bank1 = _ingest(observed, journal1, T0)
+    update1 = InMemoryProofLedger().apply_batch(
+        batch1,
+        journal1,
+        comp1,
+        bank1,
+        knowledge_cutoff=T0,
+        generated_at=T0 + timedelta(seconds=1),
+    )
+
+    journal2 = InMemoryJournal()
+    batch2, comp2, bank2 = _ingest(reversed_observed, journal2, T0)
+    update2 = InMemoryProofLedger().apply_batch(
+        batch2,
+        journal2,
+        comp2,
+        bank2,
+        knowledge_cutoff=T0,
+        generated_at=T0 + timedelta(minutes=5),
+    )
+
+    assert batch1.compilation_sha256 == batch2.compilation_sha256
+    assert [proof.id for proof in update1.created_versions] == [
+        proof.id for proof in update2.created_versions
+    ]
+    assert [proof.scoped_input_sha256 for proof in update1.created_versions] == [
+        proof.scoped_input_sha256 for proof in update2.created_versions
+    ]
+
+
+def test_global_batch_hash_cannot_claim_cutoff_before_unrelated_evidence() -> None:
+    _, target, observed = _matched_target(181)
+    journal = InMemoryJournal()
+    _ingest(observed, journal, T0)
+    changed = _append_unrelated_bank_row(
+        observed,
+        str(target.bank_entries[0].id),
+        bank_entry_id="bank_future_unrelated",
+        utr="UTR_FUTURE_UNRELATED",
+    )
+    later = T0 + timedelta(hours=2)
+    batch2, comp2, bank2 = _ingest(changed, journal, later)
+
+    with pytest.raises(ReconciliationProofError, match="batch contains evidence after"):
+        InMemoryProofLedger().apply_batch(
+            batch2,
+            journal,
+            comp2,
+            bank2,
+            knowledge_cutoff=T0,
+            generated_at=later + timedelta(seconds=1),
+        )
