@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
-from reflow.domain import Money, PaymentCurrentState, PaymentEvent, PaymentEventKind, PaymentId
+from reflow.domain import PaymentCurrentState, PaymentEvent, PaymentEventKind, PaymentId
 from reflow.domain.types import OrderId, PaymentStatus
 
 
@@ -96,7 +96,6 @@ def reduce_payment_events(events: Sequence[PaymentEvent]) -> PaymentCurrentState
         status=status,
         last_occurred_at=max(event.occurred_at for event in unique),
         captured_at=captured_at,
-        refunded_amount=Money.zero(amount.currency),
         warnings=tuple(sorted(warnings)),
     )
 
