@@ -11,7 +11,6 @@ from reflow.money_graph import (
     build_money_graph,
     evaluate_edges,
 )
-from reflow.payment_state import PaymentStateError
 from reflow.simulator import CorruptionKind, CorruptionPlan, generate_world, observe_world
 
 RECEIVED = datetime(2026, 8, 29, 18, 0, tzinfo=UTC)
@@ -95,18 +94,18 @@ def test_duplicate_economic_recon_row_is_visible_as_false_positive_evidence() ->
     assert metrics.false_negative == 0
 
 
-def test_conflicting_order_identity_fails_closed_before_graph_proof() -> None:
+def test_conflicting_order_identity_cannot_mutate_journal_backed_batch() -> None:
     journal = InMemoryJournal()
     canonical = ingest_observed_batch(_observed(47), journal, received_at=RECEIVED)
     original = canonical.payment_events[0]
     other_order = next(order.id for order in canonical.orders if order.id != original.order_id)
     conflicting = replace(original, order_id=other_order)
-    bad_batch = replace(
-        canonical,
-        payment_events=(conflicting, *canonical.payment_events[1:]),
-    )
-    with pytest.raises(PaymentStateError):
-        build_money_graph(bad_batch)
+
+    with pytest.raises(ValueError, match="compiled source binding"):
+        replace(
+            canonical,
+            payment_events=(conflicting, *canonical.payment_events[1:]),
+        )
 
 
 def test_adapter_only_batch_cannot_bypass_raw_evidence_journal() -> None:

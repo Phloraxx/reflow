@@ -5,7 +5,9 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from random import Random
 
-from .observed import CorruptionRecord, ObservationBundle, ObservedBatch, RawRecord
+from reflow.ingestion.records import ObservedBatch, RawRecord
+
+from .observed import CorruptionRecord, ObservationBundle
 from .truth import HiddenWorld
 
 
@@ -146,7 +148,7 @@ def _serialize(world: HiddenWorld) -> ObservedBatch:
     )
 
 
-def _copy_rows(rows: tuple[RawRecord, ...]) -> list[RawRecord]:
+def _copy_rows(rows: tuple[RawRecord, ...]) -> list[dict[str, object]]:
     return [dict(row) for row in rows]
 
 
@@ -242,11 +244,19 @@ def observe_world(
             )
 
         elif kind is CorruptionKind.WRONG_RECON_AMOUNT and recon:
-            row = rng.choice(recon)
+            payment_rows = [row for row in recon if row.get("entity_kind") == "payment"]
+            row = rng.choice(payment_rows or recon)
+            row["gross_amount_paise"] = _as_int(row["gross_amount_paise"]) + 111
             row["settlement_effect_paise"] = _as_int(
                 row["settlement_effect_paise"]
             ) + 111
-            _record(manifest, kind, "recon_rows", row["recon_id"], "+111 paise effect")
+            _record(
+                manifest,
+                kind,
+                "recon_rows",
+                row["recon_id"],
+                "+111 paise gross/effect with row arithmetic preserved",
+            )
 
         elif kind is CorruptionKind.MALFORMED_DATE and recon:
             row = rng.choice(recon)

@@ -6,14 +6,15 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — current implementation contract and phase gates.
-2. [`15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — exactly what Razorpay asks for and how ReFlow will prove it.
-3. [`11_NOVEL_PRODUCT_THESIS.md`](11_NOVEL_PRODUCT_THESIS.md) — why ReFlow is a financial truth compiler rather than an “AI makes financial decisions” demo.
-4. [`12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md) — core deterministic financial model.
-5. [`13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](13_MESSY_DATA_AND_CONNECTOR_COMPILER.md) — safe AI use for unfamiliar financial sources and schema drift.
-6. [`14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](14_SCALE_PERFORMANCE_AND_RESILIENCE.md) — same correctness model from tiny CSV batches to high-volume event processing.
-7. [`18_CREATIVE_FEATURE_CATALOG.md`](18_CREATIVE_FEATURE_CATALOG.md) — ranked differentiators and scope controls.
-8. [`17_RESEARCH_SOURCEBOOK.md`](17_RESEARCH_SOURCEBOOK.md) — primary sources and the design implications taken from them.
+1. [`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — latest implemented invariants, findings and Gate 9 admission criteria.
+2. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — current roadmap and phase gates.
+3. [`15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — exactly what Razorpay asks for and how ReFlow will prove it.
+4. [`11_NOVEL_PRODUCT_THESIS.md`](11_NOVEL_PRODUCT_THESIS.md) — why ReFlow is a financial truth compiler rather than an “AI makes financial decisions” demo.
+5. [`12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md) — core deterministic financial model.
+6. [`13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](13_MESSY_DATA_AND_CONNECTOR_COMPILER.md) — safe AI use for unfamiliar financial sources and schema drift.
+7. [`14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](14_SCALE_PERFORMANCE_AND_RESILIENCE.md) — same correctness model from tiny CSV batches to high-volume event processing.
+8. [`18_CREATIVE_FEATURE_CATALOG.md`](18_CREATIVE_FEATURE_CATALOG.md) — ranked differentiators and scope controls.
+9. [`17_RESEARCH_SOURCEBOOK.md`](17_RESEARCH_SOURCEBOOK.md) — primary sources and the design implications taken from them.
 
 ---
 
@@ -41,6 +42,7 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — judging metrics, baselines and final evidence requirements.
 - [`../FAILURE_LOG.md`](../FAILURE_LOG.md) — genuine implementation failures and fixes as they happen.
 - [`../LIMITATIONS.md`](../LIMITATIONS.md) — current limitations and explicit non-claims.
+- [`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — latest line-by-line implementation audit.
 
 ## Execution and submission
 
@@ -54,11 +56,12 @@ If you are reviewing the project for the first time, **do not read the files str
 
 If two planning documents conflict, use this order:
 
-1. `16_MASTER_BUILD_PLAN.md`
-2. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
-3. `11`–`14` and `18`
-4. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
-5. `04`–`09` as earlier planning history
+1. implementation + tests + latest audit (`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`)
+2. `16_MASTER_BUILD_PLAN.md`
+3. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
+4. `11`–`14` and `18`
+5. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
+6. `04`–`09` as earlier planning history
 
 If implementation/evaluation contradicts any document, update the plan and preserve the finding in `FAILURE_LOG.md` where appropriate.
 

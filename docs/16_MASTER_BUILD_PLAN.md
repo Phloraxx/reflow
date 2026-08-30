@@ -116,10 +116,8 @@ Typed models for:
 - Settlement
 - BankEntry
 - EvidenceEdge
-- Residual
-- ProofVersion
-- ReconciliationProof
-- ExceptionCase
+
+Full-reconciliation proof/version/exception contracts are deliberately **not** predeclared in Phase 1. They must be defined at Gate 9 from the audited Gate 7 composition and Gate 8 bank-proof outputs rather than from speculative scaffolding.
 
 ### Required tests
 
@@ -159,7 +157,7 @@ bank credits
 - adjustments;
 - cross-period refund;
 - same-amount settlements;
-- split bank credits;
+- Instant Settlement multi-payout shape — deferred until explicit `setlod` / `setlodp` provider modeling;
 - missing bank receipt;
 - incorrect bank amount;
 - duplicate economic row;
@@ -283,30 +281,29 @@ Injected missing/wrong rows become correct explicit residuals rather than false 
 
 ## Phase 8 — Bank receipt proof engine
 
-Candidate hierarchy:
+Standard-settlement proof hierarchy:
 
-1. exact UTR;
-2. partition/account/currency;
-3. exact amount;
-4. time relationship;
-5. supporting narration tokens;
-6. explicit ambiguity.
+1. exact settlement UTR establishes candidate identity;
+2. settlement UTR must be unique across settlement entities in the batch;
+3. exactly one distinct bank transaction may carry that standard-settlement UTR;
+4. exact amount/currency and causal timing are independently verified;
+5. same amount, nearby time and narration remain diagnostics only and never establish identity.
 
-Add constrained split-credit fixture support.
+Do **not** model arbitrary split credits for a standard `setl_...` settlement. Razorpay Instant Settlements require their own explicit `setlod` / `setlodp` payout topology.
 
 ### Gate 8
 
 No ambiguous same-amount fixture is silently auto-matched.
 
-Exact UTR + wrong amount must be a contradiction.
+Exact UTR + wrong amount is `BANK_RECEIPT_RESIDUAL` / `BANK_AMOUNT_MISMATCH`: identity evidence exists, financial equality does not, and the settlement is not reconciled.
 
 ---
 
 ## Phase 9 — Full Reconciliation Proof + versioning
 
-Combine composition and bank receipt proof.
+Combine the **batch-safe** Gate 7 composition proof and Gate 8 bank receipt proof. Gate 9 must consume those complete proof sets; it must not call narrower per-settlement test seams that lack global ownership/UTR context.
 
-Implement:
+Define the Gate 9 proof contract only now, from audited inputs. Implement:
 
 - proof version input hash;
 - knowledge cutoff;
@@ -616,7 +613,7 @@ A reviewer can clone, run a deterministic benchmark and reproduce the headline c
 
 ## P2 — differentiating stretch
 
-- split-credit settlement proof;
+- provider-specific Instant Settlement payout proof (`setlod` / `setlodp`);
 - exception incident clustering;
 - bounded combination solver;
 - model fleet comparison;

@@ -84,11 +84,11 @@ Every scenario gets an explicit fixture or generated category and at least one r
 | Refund | captured payment later refunded and debit appears in settlement | exact net arithmetic |
 | Adjustment | adjustment explains otherwise unexplained residual | resolve with evidence |
 | Missing recon row | settlement amount cannot be reconstructed | composition exception |
-| Wrong recon amount | entity IDs align but money does not | fail closed |
+| Wrong recon amount | row remains internally valid but its economic amount/effect is wrong | Gate 7 explicit composition residual |
 | Bank credit delayed | settlement processed; credit not yet observed | pending/wait, not immediate missing |
 | Missing bank credit | observation horizon elapsed | missing-credit exception |
 | Same-amount settlements | two settlements have identical amount | do not cross-match; prefer UTR |
-| Exact UTR, wrong amount | identity points to row but amount impossible | mismatch exception |
+| Exact UTR, wrong amount | identity points to row but bank value differs | `BANK_RECEIPT_RESIDUAL`, never reconciled |
 | Duplicate bank row | same UTR/credit duplicated | do not credit twice |
 | Unknown bank credit | unrelated credit exists | leave unmatched |
 | Garbled narration | UTR omitted or damaged | candidate generation only, no unsafe fuzzy auto-match |
@@ -99,6 +99,14 @@ Every scenario gets an explicit fixture or generated category and at least one r
 | Agent hallucination | model cites nonexistent evidence ID | proposal rejected |
 | Agent timeout | provider stalls | deterministic result remains; investigation unresolved |
 | Agent unavailable | no API key/network | core benchmark still runs |
+
+### Anti-leakage fixture rules
+
+Synthetic scenario labels and hidden-truth metadata must never appear in candidate inputs. Scenario **position is shuffled deterministically by world seed** so settlement/order ID position cannot become a shortcut for anomaly class. Held-out evaluation must use unseen seeds after policy freeze.
+
+Corruptions must test the intended layer. `WRONG_RECON_AMOUNT`, for example, stays internally schema/arithmetic-valid so it reaches the settlement proof engine; malformed arithmetic belongs in adapter/schema-integrity tests rather than masquerading as a reconciliation mismatch.
+
+Canonical compilation identity is invariant to source-row delivery order, so row permutation cannot manufacture a new evidence version.
 
 ## Deterministic-core metrics
 

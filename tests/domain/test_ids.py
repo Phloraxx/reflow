@@ -19,6 +19,15 @@ def test_wrong_id_prefix_is_rejected() -> None:
 def test_prefix_without_identifier_suffix_is_rejected() -> None:
     with pytest.raises(ValueError):
         PaymentId("pay_")
+    with pytest.raises(ValueError):
+        PaymentId("pay_   ")
+
+
+def test_surrounding_identifier_whitespace_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        PaymentId(" pay_abc")
+    with pytest.raises(ValueError):
+        PaymentId("pay_abc ")
 
 
 def test_valid_order_id() -> None:

@@ -7,6 +7,13 @@ from . import domain, ingestion
 from .ingestion import CanonicalBatch
 from .money_graph import MoneyGraph
 
+__all__ = [
+    "CompositionProofError",
+    "CompositionStatus",
+    "SettlementCompositionProof",
+    "prove_all_settlement_compositions",
+]
+
 
 class CompositionStatus(StrEnum):
     PROVEN = "composition_proven"
@@ -215,13 +222,13 @@ def _required_provenance_edges(
     return tuple(sorted((edge.id for edge in matches), key=str))
 
 
-def prove_settlement_composition(
+def _prove_settlement_composition(
     settlement: domain.Settlement,
     entries: tuple[domain.SettlementReconEntry, ...],
     graph: MoneyGraph,
     *,
     source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
-    cross_settlement_claims: frozenset[EconomicClaim] = frozenset(),
+    cross_settlement_claims: frozenset[EconomicClaim],
 ) -> SettlementCompositionProof:
     if any(entry.settlement_id != settlement.id for entry in entries):
         raise CompositionProofError("composition call contains rows for another settlement")
@@ -356,7 +363,7 @@ def prove_all_settlement_compositions(
     )
 
     return tuple(
-        prove_settlement_composition(
+        _prove_settlement_composition(
             settlements[settlement_id],
             tuple(rows_by_settlement[settlement_id]),
             graph,

@@ -239,20 +239,37 @@ def _fee_and_tax(gross_paise: int) -> tuple[int, int]:
     return fee, tax
 
 
-def _scenario_for(index: int) -> str:
-    scenarios = (
-        "clean",
-        "refund",
-        "adjustment",
-        "immediate_bank_credit",
-        "missing_bank_receipt",
-        "incorrect_bank_amount",
-        "cross_period_refund",
-        "same_amount_collision",
-        "high_cardinality",
-        "transfer",
-    )
-    return scenarios[index % len(scenarios)]
+_SCENARIOS = (
+    "clean",
+    "refund",
+    "adjustment",
+    "immediate_bank_credit",
+    "missing_bank_receipt",
+    "incorrect_bank_amount",
+    "cross_period_refund",
+    "same_amount_collision",
+    "high_cardinality",
+    "transfer",
+)
+
+
+def _scenario_sequence(rng: Random, count: int) -> tuple[str, ...]:
+    """Preserve scenario coverage without leaking scenario type through case index."""
+    sequence: list[str] = []
+    remaining = count
+    while remaining:
+        cycle = list(_SCENARIOS[: min(remaining, len(_SCENARIOS))])
+        rng.shuffle(cycle)
+        if not sequence and cycle and cycle[0] in {"cross_period_refund", "same_amount_collision"}:
+            swap_index = next(
+                index
+                for index, scenario in enumerate(cycle)
+                if scenario not in {"cross_period_refund", "same_amount_collision"}
+            )
+            cycle[0], cycle[swap_index] = cycle[swap_index], cycle[0]
+        sequence.extend(cycle)
+        remaining -= len(cycle)
+    return tuple(sequence)
 
 
 def _previous_captured_payment(cases: list[TruthSettlementCase]) -> PaymentEvent:
@@ -267,11 +284,12 @@ def _previous_captured_payment(cases: list[TruthSettlementCase]) -> PaymentEvent
 def generate_world(seed: int, config: WorldConfig | None = None) -> HiddenWorld:
     cfg = config or WorldConfig()
     rng = Random(seed)
+    scenarios = _scenario_sequence(rng, cfg.settlement_count)
     cases: list[TruthSettlementCase] = []
     previous_settlement_amount: Money | None = None
 
     for case_index in range(cfg.settlement_count):
-        scenario = _scenario_for(case_index)
+        scenario = scenarios[case_index]
         case_time = cfg.base_time + timedelta(days=case_index)
         settlement_id = SettlementId(f"setl_{case_index:06d}")
         payment_count = (

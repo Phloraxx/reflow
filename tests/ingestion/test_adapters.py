@@ -32,12 +32,16 @@ def test_clean_known_sources_canonicalize() -> None:
         CorruptionKind.RUPEE_PAISE_TRAP,
         CorruptionKind.SIGN_TRAP,
         CorruptionKind.MALFORMED_DATE,
-        CorruptionKind.WRONG_RECON_AMOUNT,
     ],
 )
 def test_known_unit_sign_and_schema_corruptions_fail_closed(kind: CorruptionKind) -> None:
     with pytest.raises(AdapterError):
         adapt_observed_batch(_observed(kind))
+
+
+def test_wrong_recon_amount_remains_well_formed_evidence_for_proof_layer() -> None:
+    canonical = adapt_observed_batch(_observed(CorruptionKind.WRONG_RECON_AMOUNT))
+    assert canonical.recon_entries
 
 
 def test_wrong_refund_effect_fails_closed_even_when_still_negative() -> None:

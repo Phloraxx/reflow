@@ -44,12 +44,35 @@ def test_exact_duplicate_delivery_is_idempotent() -> None:
     assert len(journal) == 1
 
 
-def test_same_source_identity_with_changed_payload_fails_closed() -> None:
+def test_same_source_identity_with_changed_payload_fails_closed_and_retains_both() -> None:
     journal = InMemoryJournal()
-    journal.append(_envelope({"payment_id": "pay_1", "status": "failed"}))
+    first = _envelope({"payment_id": "pay_1", "status": "failed"})
+    conflict = _envelope(
+        {"payment_id": "pay_1", "status": "captured"},
+        received_offset=5,
+    )
+    journal.append(first)
+
     with pytest.raises(JournalConflictError):
-        journal.append(_envelope({"payment_id": "pay_1", "status": "captured"}))
-    assert len(journal) == 1
+        journal.append(conflict)
+
+    assert len(journal) == 2
+    assert {entry.id for entry in journal.entries()} == {first.id, conflict.id}
+    assert journal.get(SourceKind.RAZORPAY_EVENT, "evt_1") == first
+
+
+def test_replayed_conflicting_payload_remains_a_conflict_without_duplication() -> None:
+    journal = InMemoryJournal()
+    first = _envelope({"payment_id": "pay_1", "status": "failed"})
+    conflict = _envelope({"payment_id": "pay_1", "status": "captured"})
+    journal.append(first)
+
+    with pytest.raises(JournalConflictError):
+        journal.append(conflict)
+    with pytest.raises(JournalConflictError):
+        journal.append(conflict)
+
+    assert len(journal) == 2
 
 
 def test_same_raw_payload_remains_duplicate_when_ingestion_metadata_differs() -> None:

@@ -11,8 +11,8 @@ from reflow.money_graph import MoneyGraph, build_money_graph
 from reflow.settlement_proof import (
     CompositionProofError,
     CompositionStatus,
+    _prove_settlement_composition,
     prove_all_settlement_compositions,
-    prove_settlement_composition,
 )
 from reflow.simulator import CorruptionKind, CorruptionPlan, generate_world, observe_world
 
@@ -74,6 +74,16 @@ def test_missing_recon_row_produces_explicit_residual() -> None:
     residuals = [proof for proof in proofs if proof.status is CompositionStatus.RESIDUAL]
     assert len(residuals) == 1
     assert not residuals[0].residual.is_zero
+    assert residuals[0].reason_codes == ("SETTLEMENT_COMPOSITION_RESIDUAL",)
+
+
+def test_well_formed_wrong_recon_amount_reaches_proof_as_residual() -> None:
+    batch = _batch(36, CorruptionKind.WRONG_RECON_AMOUNT)
+    graph = build_money_graph(batch)
+    proofs = prove_all_settlement_compositions(batch, graph)
+    residuals = [proof for proof in proofs if proof.status is CompositionStatus.RESIDUAL]
+    assert len(residuals) == 1
+    assert residuals[0].residual.amount_paise == -111
     assert residuals[0].reason_codes == ("SETTLEMENT_COMPOSITION_RESIDUAL",)
 
 
@@ -198,11 +208,12 @@ def test_missing_provenance_makes_zero_residual_incomplete() -> None:
             )
         ),
     )
-    proof = prove_settlement_composition(
+    proof = _prove_settlement_composition(
         settlement,
         rows,
         damaged_graph,
         source_index=batch.source_index(),
+        cross_settlement_claims=frozenset(),
     )
     assert proof.status is CompositionStatus.INCOMPLETE
     assert proof.residual.is_zero
@@ -223,11 +234,12 @@ def test_provenance_edge_with_wrong_raw_evidence_id_is_not_authoritative() -> No
             damaged_edges.append(replace(edge, evidence_ids=(str(target.id),)))
         else:
             damaged_edges.append(edge)
-    proof = prove_settlement_composition(
+    proof = _prove_settlement_composition(
         settlement,
         rows,
         MoneyGraph(nodes=graph.nodes, edges=tuple(damaged_edges)),
         source_index=batch.source_index(),
+        cross_settlement_claims=frozenset(),
     )
     assert proof.status is CompositionStatus.INCOMPLETE
     assert proof.reason_codes == ("MISSING_GRAPH_PROVENANCE",)
@@ -243,11 +255,12 @@ def test_missing_settlement_raw_provenance_fails_closed() -> None:
     source_index = batch.source_index()
     source_index.pop((SourceKind.RAZORPAY_SETTLEMENT, str(settlement.id)))
     with pytest.raises(CompositionProofError, match="source provenance"):
-        prove_settlement_composition(
+        _prove_settlement_composition(
             settlement,
             rows,
             graph,
             source_index=source_index,
+            cross_settlement_claims=frozenset(),
         )
 
 
@@ -256,18 +269,20 @@ def test_recon_row_order_does_not_change_composition_proof() -> None:
     graph = build_money_graph(batch)
     settlement = batch.settlements[0]
     rows = [row for row in batch.recon_entries if row.settlement_id == settlement.id]
-    first = prove_settlement_composition(
+    first = _prove_settlement_composition(
         settlement,
         tuple(rows),
         graph,
         source_index=batch.source_index(),
+        cross_settlement_claims=frozenset(),
     )
     Random(5).shuffle(rows)
-    second = prove_settlement_composition(
+    second = _prove_settlement_composition(
         settlement,
         tuple(rows),
         graph,
         source_index=batch.source_index(),
+        cross_settlement_claims=frozenset(),
     )
     assert second == first
 
@@ -318,9 +333,8 @@ def test_bank_shape_does_not_affect_composition_proof() -> None:
         assert proof.status is CompositionStatus.PROVEN
 
 
-def test_recon_for_unknown_settlement_fails_closed() -> None:
+def test_journal_backed_batch_cannot_drop_settlement_and_provenance_together() -> None:
     batch = _batch(27)
-    graph = build_money_graph(batch)
     removed_id = batch.settlements[0].id
     source_links = tuple(
         link
@@ -330,18 +344,34 @@ def test_recon_for_unknown_settlement_fails_closed() -> None:
             and link.source_record_id == str(removed_id)
         )
     )
-    malformed = replace(
-        batch,
-        settlements=tuple(row for row in batch.settlements if row.id != removed_id),
-        source_links=source_links,
-    )
-    with pytest.raises(CompositionProofError, match="unknown settlement"):
-        prove_all_settlement_compositions(malformed, graph)
+
+    with pytest.raises(ValueError, match="compiled source binding"):
+        replace(
+            batch,
+            settlements=tuple(row for row in batch.settlements if row.id != removed_id),
+            source_links=source_links,
+        )
 
 
-def test_duplicate_settlement_identity_fails_closed() -> None:
+def test_journal_backed_batch_cannot_duplicate_settlement_identity() -> None:
     batch = _batch(28)
+    with pytest.raises(ValueError, match="duplicate source identities"):
+        replace(batch, settlements=(*batch.settlements, batch.settlements[0]))
+
+
+def test_single_composition_call_rejects_rows_for_another_settlement() -> None:
+    batch = _batch(35)
     graph = build_money_graph(batch)
-    malformed = replace(batch, settlements=(*batch.settlements, batch.settlements[0]))
-    with pytest.raises(CompositionProofError, match="duplicate settlement id"):
-        prove_all_settlement_compositions(malformed, graph)
+    settlement = batch.settlements[0]
+    foreign_row = next(
+        row for row in batch.recon_entries if row.settlement_id != settlement.id
+    )
+
+    with pytest.raises(CompositionProofError, match="another settlement"):
+        _prove_settlement_composition(
+            settlement,
+            (foreign_row,),
+            graph,
+            source_index=batch.source_index(),
+        cross_settlement_claims=frozenset(),
+        )

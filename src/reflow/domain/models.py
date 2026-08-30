@@ -15,14 +15,10 @@ from .types import (
     EntityId,
     EvidenceEdgeId,
     EvidenceStrength,
-    ExceptionCaseId,
-    ExceptionKind,
     OrderId,
     PaymentEventKind,
     PaymentId,
     PaymentStatus,
-    ProofId,
-    ProofStatus,
     ReconEntityKind,
     ReconEntryId,
     RefundId,
@@ -202,18 +198,12 @@ class PaymentCurrentState:
     status: PaymentStatus
     last_occurred_at: datetime
     captured_at: datetime | None = None
-    refunded_amount: Money = field(default_factory=Money.zero)
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _aware(self.last_occurred_at, "last_occurred_at")
         if self.captured_at is not None:
             _aware(self.captured_at, "captured_at")
-        if self.refunded_amount.currency != self.amount.currency:
-            raise ValueError("refund currency must match payment currency")
-        _non_negative(self.refunded_amount.amount_paise, "refunded_amount")
-        if self.refunded_amount.amount_paise > self.amount.amount_paise:
-            raise ValueError("refunded amount cannot exceed payment amount")
 
 
 @dataclass(frozen=True, slots=True)
@@ -344,72 +334,6 @@ class EvidenceEdge:
             raise ValueError("relationship cannot be empty")
         if not self.evidence_ids:
             raise ValueError("evidence edge must cite at least one evidence id")
-
-
-@dataclass(frozen=True, slots=True)
-class Residual:
-    amount: Money
-    reason_codes: tuple[str, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class ProofVersion:
-    version: int
-    generated_at: datetime
-    ruleset_version: str
-
-    def __post_init__(self) -> None:
-        _aware(self.generated_at, "generated_at")
-        if self.version < 1:
-            raise ValueError("proof version must be >= 1")
-        if not self.ruleset_version:
-            raise ValueError("ruleset_version cannot be empty")
-
-
-@dataclass(frozen=True, slots=True)
-class ReconciliationProof:
-    id: ProofId
-    settlement_id: SettlementId
-    version: ProofVersion
-    status: ProofStatus
-    expected_settlement: Money
-    observed_settlement: Money
-    observed_bank_credit: Money | None
-    residual: Residual
-    component_ids: tuple[ReconEntryId, ...]
-    evidence_edge_ids: tuple[EvidenceEdgeId, ...]
-
-    def __post_init__(self) -> None:
-        currency = self.expected_settlement.currency
-        if (
-            self.observed_settlement.currency != currency
-            or self.residual.amount.currency != currency
-        ):
-            raise ValueError("proof money must use one currency")
-        if (
-            self.observed_bank_credit is not None
-            and self.observed_bank_credit.currency != currency
-        ):
-            raise ValueError("bank proof currency must match settlement currency")
-        if self.status is ProofStatus.PROVEN_RECONCILED and not self.residual.amount.is_zero:
-            raise ValueError("a proven reconciliation cannot carry a non-zero residual")
-
-
-@dataclass(frozen=True, slots=True)
-class ExceptionCase:
-    id: ExceptionCaseId
-    settlement_id: SettlementId | None
-    kind: ExceptionKind
-    created_at: datetime
-    reason_codes: tuple[str, ...]
-    evidence_ids: tuple[str, ...]
-    residual: Residual | None = None
-    human_summary: str | None = None
-
-    def __post_init__(self) -> None:
-        _aware(self.created_at, "created_at")
-        if not self.reason_codes:
-            raise ValueError("exception must preserve at least one reason code")
 
 
 def sum_money(values: Sequence[Money], currency: Currency = Currency.INR) -> Money:

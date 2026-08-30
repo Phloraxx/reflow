@@ -6,6 +6,13 @@ from enum import StrEnum
 from . import domain, ingestion
 from .ingestion import CanonicalBatch
 
+__all__ = [
+    "BankReceiptProof",
+    "BankReceiptProofError",
+    "BankReceiptStatus",
+    "prove_all_bank_receipts",
+]
+
 
 class BankReceiptStatus(StrEnum):
     PROVEN = "bank_receipt_proven"
@@ -205,14 +212,14 @@ def _prove_from_candidates(
     )
 
 
-def prove_bank_receipt(
+def _prove_bank_receipt(
     settlement: domain.Settlement,
     bank_entries: tuple[domain.BankEntry, ...],
     *,
     source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
-    settlement_utr_reused: bool = False,
+    settlement_utr_reused: bool,
 ) -> BankReceiptProof:
-    """Prove one standard settlement against bank evidence using exact UTR identity."""
+    """Low-level test seam; callers must supply batch-global UTR reuse context."""
     unique_bank_entries = _deduplicate_bank_entries(bank_entries)
     exact_utr_entries = (
         ()
@@ -235,6 +242,7 @@ def prove_bank_receipt(
 
 
 def prove_all_bank_receipts(batch: CanonicalBatch) -> tuple[BankReceiptProof, ...]:
+    """Prove all standard settlements with batch-global UTR identity guarantees."""
     if not batch.source_links:
         raise BankReceiptProofError("bank proof requires journal-backed source provenance")
     source_index = batch.source_index()

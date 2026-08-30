@@ -13,10 +13,13 @@ from .adapters import (
     adapt_settlement_row,
 )
 from .pipeline import ingest_observed_batch, journal_observed_batch
+from .records import ObservedBatch, RawRecord
 
 __all__ = [
     "AdapterError",
     "CanonicalBatch",
+    "ObservedBatch",
+    "RawRecord",
     "SourceIdentity",
     "SourceLink",
     "adapt_bank_row",

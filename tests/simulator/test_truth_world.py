@@ -11,6 +11,13 @@ def test_different_seeds_change_world() -> None:
     assert generate_world(1) != generate_world(2)
 
 
+def test_scenario_positions_change_by_seed_without_losing_coverage() -> None:
+    first = tuple(case.scenario for case in generate_world(1).cases)
+    second = tuple(case.scenario for case in generate_world(2).cases)
+    assert first != second
+    assert sorted(first) == sorted(second)
+
+
 def test_default_world_covers_required_shapes() -> None:
     world = generate_world(42)
     scenarios = {case.scenario for case in world.cases}

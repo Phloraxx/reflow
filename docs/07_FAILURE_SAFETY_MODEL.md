@@ -40,17 +40,27 @@ This is not only a malicious-security threat model. Most realistic failures are 
 
 Untrusted source data is validated before entering domain logic.
 
-Controls:
+Implemented controls:
 
-- maximum payload/field sizes;
-- explicit schema versions;
-- signed integer bounds;
+- explicit normalized schema versions on raw envelopes;
+- signed int64 money bounds and integer-paise parsing;
 - allowed currency set;
-- ID length/type validation;
-- timestamp sanity bounds;
-- duplicate identity detection;
-- content hash;
-- malformed records retained as rejected evidence rather than silently skipped.
+- typed/non-blank/non-whitespace entity IDs;
+- timezone-aware canonical timestamps and payment receive-time causality;
+- duplicate source identity/payload conflict detection;
+- deterministic raw payload hash + source-envelope identity;
+- malformed records retained as rejected evidence rather than silently skipped;
+- canonicalization reads retained immutable journal payloads, not mutable caller rows;
+- canonical facts + exact source links carry a source-order-invariant compilation integrity digest.
+
+Still required at the production ingress boundary:
+
+- explicit payload/field byte-size quotas;
+- provider-specific timestamp range/skew policy;
+- webhook signature/API authentication and transport authenticity;
+- persistence/retention limits and abuse-rate controls.
+
+Compilation integrity is not a substitute for those production authenticity controls.
 
 ### Boundary B — event reduction
 
@@ -62,8 +72,9 @@ Controls:
 - duplicate payload detection;
 - deterministic precedence;
 - property test over event permutations;
-- late-capture regression fixture;
-- state version + reducer version recorded.
+- late-capture regression fixture (`failed` source time before later `captured`);
+- normalized `failed` evidence occurring after capture is contradictory;
+- delivery order may vary without changing valid source chronology.
 
 ### Boundary C — settlement arithmetic
 
@@ -72,7 +83,7 @@ No match is allowed to erase an arithmetic discrepancy.
 Controls:
 
 - integer paise only;
-- exact debit/credit sum;
+- exact normalized settlement-effect sum; the production Razorpay recon adapter must explicitly map authoritative debit/credit fields;
 - exact currency equality;
 - unique component accounting;
 - explicit residual in every proof;
@@ -82,7 +93,7 @@ Controls:
 
 Identity evidence and amount evidence are checked independently.
 
-An exact UTR with wrong money is not “close enough.” It is a strong identity clue plus a financial mismatch.
+An exact UTR with wrong money is not “close enough.” It is strong identity evidence plus a financial residual. Gate 8 reports `BANK_AMOUNT_MISMATCH` and does not reconcile it.
 
 Controls:
 
@@ -93,11 +104,11 @@ Controls:
 - ambiguity detection;
 - fuzzy text cannot independently authorize.
 
-### Boundary E — AI investigation
+### Boundary E — AI investigation (planned; AI is not implemented yet)
 
-The model cannot access raw arbitrary SQL or write tools.
+The model will not access raw arbitrary SQL or write tools.
 
-Controls:
+Planned controls:
 
 - finite read-only tool registry;
 - typed arguments;

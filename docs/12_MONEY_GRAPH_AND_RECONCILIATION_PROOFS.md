@@ -42,14 +42,14 @@ ReFlow should use a small canonical vocabulary.
 
 ### ReFlow objects
 
+Implemented through Gate 8:
+
 - `SourceEnvelope`
 - `EvidenceEdge`
-- `SettlementProof`
+- `SettlementCompositionProof`
 - `BankReceiptProof`
-- `ReconciliationProof`
-- `Residual`
-- `ExceptionCase`
-- `ProofVersion`
+
+Gate 9 will define the combined immutable reconciliation-proof/version/exception contracts from those audited fragments. Earlier placeholder `ReconciliationProof`, `ProofVersion`, `Residual` and `ExceptionCase` domain classes were intentionally removed during the pre-Gate-9 audit so speculative types cannot become accidental architecture.
 
 ---
 
@@ -244,13 +244,13 @@ For a supported split case:
 
 with source-specific evidence binding those bank rows to the settlement/request.
 
-The first Buildathon implementation may constrain this feature to synthetic fixtures with explicit bank reference structure, but the domain model should not assume forever that `1 settlement = 1 bank row`.
+For the currently supported **standard Razorpay settlement** contract, Gate 8 requires one unambiguous bank transaction for the settlement UTR. Genuine multi-credit Instant Settlements are a different provider topology (`setlod` parent + `setlodp` payout children) and must be modeled explicitly rather than inferred by grouping arbitrary bank rows.
 
 ---
 
 ## 8. Full reconciliation proof
 
-A full `ReconciliationProof` requires two independent proofs:
+The planned Gate 9 full reconciliation proof requires two independent **batch-safe** proofs:
 
 ```text
 SettlementCompositionProof
@@ -336,7 +336,7 @@ Examples:
 
 - settlement composition residual;
 - bank receipt residual;
-- split-credit residual;
+- Instant Settlement payout residual (future provider-specific proof);
 - unmatched merchant-order residual.
 
 A residual of zero is necessary for some proof types but not sufficient if identity evidence is ambiguous.
@@ -390,13 +390,17 @@ The solver should have a deterministic timeout/fallback path.
 Proofs are immutable versions.
 
 ```text
-ProofVersion {
+Conceptual Gate 9 version record (the concrete domain type is intentionally deferred until Gate 9):
+
+ProofVersionConcept {
   proof_id
   version
   computed_at
   knowledge_cutoff
+  canonical_compilation_sha256
   input_evidence_hashes[]
   rule_versions[]
+  prior_version_id?
   output_state
 }
 ```
@@ -461,9 +465,10 @@ Examples of invariants to property-test:
 
 ### Bank proof
 
-- a proven bank entry cannot be silently reused by another unrelated settlement unless an explicitly modeled grouped/split relationship permits it;
-- exact UTR with wrong amount is contradiction, not success;
-- same amount with multiple admissible rows is ambiguity, not success.
+- a proven standard-settlement bank entry cannot be silently reused by another settlement;
+- exact UTR with wrong amount is a non-reconciled residual (`BANK_AMOUNT_MISMATCH`), not success;
+- same amount/time/narration without authoritative identity remains non-identity evidence;
+- multi-credit Instant Settlement support requires explicit payout identities rather than a generic split relationship.
 
 ---
 

@@ -6,8 +6,8 @@ import pytest
 from reflow.bank_proof import (
     BankReceiptProofError,
     BankReceiptStatus,
+    _prove_bank_receipt,
     prove_all_bank_receipts,
-    prove_bank_receipt,
 )
 from reflow.domain import Money, SourceKind
 from reflow.ingestion import ingest_observed_batch
@@ -299,10 +299,17 @@ def test_conflicting_duplicate_bank_identity_fails_closed() -> None:
         original,
         amount=Money(original.amount.amount_paise + 1, original.amount.currency),
     )
-    malformed = replace(batch, bank_entries=(*batch.bank_entries, conflicting))
+    settlement = next(
+        row for row in batch.settlements if row.utr is not None and row.utr == original.utr
+    )
 
     with pytest.raises(BankReceiptProofError, match="conflicting canonical payloads"):
-        prove_all_bank_receipts(malformed)
+        _prove_bank_receipt(
+            settlement,
+            (*batch.bank_entries, conflicting),
+            source_index=batch.source_index(),
+            settlement_utr_reused=False,
+        )
 
 
 def test_missing_bank_source_provenance_fails_closed() -> None:
@@ -316,10 +323,11 @@ def test_missing_bank_source_provenance_fails_closed() -> None:
         source_index.pop((SourceKind.BANK, str(row.id)))
 
     with pytest.raises(BankReceiptProofError, match="missing journal-backed source provenance"):
-        prove_bank_receipt(
+        _prove_bank_receipt(
             settlement,
             batch.bank_entries,
             source_index=source_index,
+            settlement_utr_reused=False,
         )
 
 

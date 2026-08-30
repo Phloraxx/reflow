@@ -97,8 +97,8 @@ The deterministic output for a settlement/bank-credit scope, including:
 - confidence class derived from rules, not an LLM token probability;
 - whether auto-resolution is permitted.
 
-### ExceptionCase
-First-class finance-control object containing unresolved evidence, impact amount and investigation state.
+### Exception case (Gate 9+ concept)
+A future first-class finance-control object containing unresolved evidence, impact amount and investigation state. Its concrete domain type is intentionally deferred until Gate 9 so it reflects the audited composition/bank proof contracts rather than old planning scaffolding.
 
 ### InvestigationRun
 A bounded AI run: question, tools offered, tool calls, observations, proposed root cause, proposed next step, validation result, model/provider metadata, latency and cost.
@@ -144,7 +144,7 @@ The precise implementation uses the recon row's documented `credit` and `debit` 
 
 ### Uniqueness
 
-A source entity cannot contribute twice merely because its webhook was delivered twice. A bank entry cannot prove two settlements unless the synthetic scenario explicitly models a valid aggregate bank transfer and the policy permits it.
+A source entity cannot contribute twice merely because its webhook was delivered twice. Under the currently supported standard-settlement contract, one accepted bank transaction cannot prove two settlements. Multi-credit Instant Settlement behavior requires explicit provider payout identities and is not inferred from generic aggregate/split bank rows.
 
 ### Temporal validity
 
