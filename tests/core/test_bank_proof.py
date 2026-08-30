@@ -6,8 +6,8 @@ import pytest
 from reflow.bank_proof import (
     BankReceiptProofError,
     BankReceiptStatus,
-    prove_all_bank_receipts,
     _prove_bank_receipt,
+    prove_all_bank_receipts,
 )
 from reflow.domain import Money, SourceKind
 from reflow.ingestion import ingest_observed_batch
