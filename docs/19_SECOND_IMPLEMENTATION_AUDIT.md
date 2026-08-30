@@ -221,6 +221,8 @@ A repository search found no production/reconciliation import of `reflow.simulat
 
 The current normalized evaluation transport (`ObservedBatch` / `RawRecord`) still lives under the simulator package and is imported by the fixture adapters. This is **not hidden-truth leakage**, but it is intentionally documented as a pre-production integration limitation. Real Razorpay/bank ingestion should later use integration-specific transport models.
 
+> **Superseded on 2026-08-30 by the pre-Gate-9 audit:** the neutral transport contract was moved to `reflow.ingestion.records`; ingestion no longer depends on the simulator. The paragraph above is retained as historical audit state.
+
 ---
 
 # Gate 7 invariants after the second pass

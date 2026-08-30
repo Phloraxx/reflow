@@ -44,15 +44,15 @@ flowchart LR
     Q[Evaluation harness]
   end
 
-  M --> I
-  W --> I
-  R --> I
-  S --> I
-  B --> I
-  I --> J
-  J --> P
+  M --> J
+  W --> J
+  R --> J
+  S --> J
+  B --> J
+  J --> I
+  I --> P
+  I --> G
   P --> G
-  J --> G
   G --> E
   E --> K
   K --> C
@@ -66,6 +66,32 @@ flowchart LR
   J --> Q
   D --> Q
 ```
+
+## Audited implementation boundary before Gate 9
+
+The implementation remains intentionally compact under `src/reflow/`; the earlier monorepo/service layout below is a planning direction, not a claim that those services exist today. The current trusted path is:
+
+```text
+normalized source records
+  -> immutable SourceEnvelope journal
+  -> canonicalize FROM retained journal payloads
+  -> source-order-invariant canonical compilation binding
+  -> temporal payment reducer / Money Graph
+  -> batch-wide Settlement Composition Proof
+  -> batch-wide Bank Receipt Proof
+```
+
+Ownership rules:
+
+- `reflow.ingestion.records` owns the neutral pre-canonical transport contract; the simulator depends on it, never the reverse;
+- the journal owns retained raw evidence and preserves conflicting payload versions;
+- adapters own deterministic source-to-domain semantics;
+- the payment reducer owns payment-event chronology only, not refund truth;
+- Gate 7 owns batch-wide economic-identity/settlement composition checks;
+- Gate 8 owns batch-wide standard-settlement UTR/bank-receipt checks;
+- Gate 9 must combine the **already batch-safe outputs** and must not reimplement narrower matching logic.
+
+The private per-settlement proof functions exist only as low-level test seams. They are not supported orchestration APIs.
 
 ## Recommended implementation stack
 

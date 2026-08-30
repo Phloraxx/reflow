@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow has implemented the deterministic foundation through **Gate 8** on the current Gate 8 branch:
+ReFlow has implemented the deterministic foundation through **Gate 8**. A pre-Gate-9 independent audit is hardening that merged foundation before full proof/versioning begins:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -48,7 +48,7 @@ The current known-fixture adapters consume normalized test shapes. In particular
 
 They are **not** claimed to be final production Razorpay API/webhook adapters. Razorpay's actual Settlement Recon API exposes authoritative `debit`, `credit`, `amount`, `fee` and `tax` fields. The later real adapter must normalize those semantics explicitly and fixture-test them against actual Test Mode/API evidence rather than reuse synthetic arithmetic assumptions.
 
-The current `ObservedBatch` / `RawRecord` container also lives under the simulator package because it is the evaluation fixture transport. This does not expose hidden truth to the engine, but production ingestion should eventually use integration-specific DTOs rather than present the simulator container as a public production API.
+The neutral `ObservedBatch` / `RawRecord` transport contract now lives under `reflow.ingestion.records`; the simulator depends on that contract rather than ingestion depending on the simulator. Real provider integrations still require source-specific DTO/parsing layers before these normalized records.
 
 ### 3. Payment webhook and refund evidence remain separate
 
@@ -60,7 +60,9 @@ The later production adapter must preserve that distinction and must not infer a
 
 ### 4. Raw evidence provenance is journal-backed, but persistence is in-memory
 
-Successful journal-first ingestion binds canonical source identities to immutable `SourceEnvelopeId`s. Money Graph edges, Settlement Composition Proofs and Bank Receipt Proofs cite those raw envelopes, and each envelope validates its payload digest and deterministic identity.
+Successful journal-first ingestion binds canonical source identities to immutable `SourceEnvelopeId`s. Canonicalization reads the journal’s retained immutable primary payloads; canonical facts and exact `SourceLink`s are then bound by a source-order-invariant compilation digest. Money Graph edges, Settlement Composition Proofs and Bank Receipt Proofs cite those raw envelopes, and each envelope validates its payload digest and deterministic identity.
+
+The compilation digest is an integrity binding, not a digital signature or proof that an external source was authentic. Production webhook/API authenticity remains a separate integration boundary.
 
 The journal is still an in-memory reference implementation. Crash/restart persistence, database constraints, migrations and retention policy remain later work.
 

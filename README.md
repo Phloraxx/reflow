@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: deterministic foundation through Gate 8; Full Reconciliation Proof + versioning is next.**
+> **Current phase: deterministic foundation through Gate 8; independent pre-Gate-9 audit in progress. Gate 9 stays blocked until the audit checkpoint is green and merged.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
@@ -59,7 +59,7 @@ flowchart LR
   U[Unknown Source] -. later .-> AS[AI Adapter Synthesizer]
 ```
 
-Raw evidence is journaled **before** canonicalization. Successful canonical rows retain immutable links back to the exact raw `SourceEnvelope`s that produced them. Money Graph evidence and proof fragments cite raw envelope IDs rather than stopping at canonical row IDs.
+Raw evidence is journaled **before** canonicalization. The compiler reads the journal’s retained immutable payloads, not mutable caller rows, then binds canonical facts plus exact `SourceLink`s with a source-order-invariant compilation SHA-256. Money Graph evidence and proof fragments cite raw envelope IDs rather than stopping at canonical row IDs.
 
 ---
 
@@ -200,6 +200,7 @@ See:
 - [`docs/19_SECOND_IMPLEMENTATION_AUDIT.md`](docs/19_SECOND_IMPLEMENTATION_AUDIT.md) — independent second audit;
 - [`docs/20_GATE_7_CHECKPOINT.md`](docs/20_GATE_7_CHECKPOINT.md) — Gate 7 checkpoint;
 - [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md) — Gate 8 checkpoint;
+- [`docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — current line-by-line logic and architecture audit;
 - [`LIMITATIONS.md`](LIMITATIONS.md) — current non-claims and unresolved scope.
 
 ---

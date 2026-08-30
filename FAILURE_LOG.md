@@ -574,7 +574,7 @@ The current normalized event fixtures are not yet the final raw Razorpay webhook
 
 ## F-0015 — Synthetic split-bank truth conflated standard and Instant Settlements
 
-**Date:** 2026-08-30  
+**Date:** 2026-08-30
 **Area:** simulator / bank proof / provider semantics  
 **Severity:** high
 
@@ -623,7 +623,7 @@ Instant Settlement reconciliation is not implemented. It requires a separate pro
 
 ## F-0016 — Reused settlement UTR still attributed the same bank transaction twice
 
-**Date:** 2026-08-30  
+**Date:** 2026-08-30
 **Area:** bank proof / identity attribution  
 **Severity:** safety-critical
 
@@ -663,7 +663,7 @@ Gate 9 must continue treating accepted attribution fields as proof-state-depende
 
 ## F-0017 — Same-amount diagnostics could make Gate 8 proof payloads approach quadratic growth
 
-**Date:** 2026-08-30  
+**Date:** 2026-08-30
 **Area:** bank proof / scale  
 **Severity:** high
 
@@ -703,7 +703,7 @@ Final throughput, memory and maximum-volume claims still require the dedicated b
 
 ## F-0018 — Valid low-cardinality world configuration could create a non-positive cross-period settlement
 
-**Date:** 2026-08-30  
+**Date:** 2026-08-30
 **Area:** simulator / evaluation  
 **Severity:** high
 
@@ -741,6 +741,206 @@ The simulator currently models positive standard settlement entities. If zero/ne
 
 ---
 
+## F-0019 — Conflicting raw source version was detected but not retained
+
+**Date:** 2026-08-30
+**Area:** source journal / evidence integrity
+**Severity:** high
+
+### Symptom
+The journal raised on a stable source identity arriving with a different payload, but the conflicting second payload was not retained.
+
+### Root cause
+Conflict detection and append-only evidence retention were treated as the same operation; the exception happened before the conflicting evidence entered the retained record set.
+
+### Fix
+The journal now preserves every distinct immutable payload version before failing closed. The first version remains the primary lookup; exact replay of the same conflicting version does not create unbounded duplicate records.
+
+### Regression protection
+`tests/core/test_journal.py` and `tests/ingestion/test_pipeline.py` verify both retention and repeated-conflict idempotency.
+
+---
+
+## F-0020 — Payment reducer conflated delivery reordering with impossible source chronology
+
+**Date:** 2026-08-30
+**Area:** payment state reduction
+**Severity:** high
+
+### Symptom
+A payment containing `CAPTURED` at an earlier semantic event time and `FAILED` at a later semantic event time still reduced to captured simply because capture evidence existed.
+
+### Root cause
+The reducer was intentionally delivery-order invariant but did not distinguish transport order from normalized financial event chronology.
+
+### Fix
+`failed -> captured` remains valid regardless of delivery order. A normalized failed event whose `occurred_at` is later than capture is now contradictory and fails closed.
+
+### Regression protection
+`tests/core/test_payment_state.py::test_failed_evidence_after_capture_is_rejected_independent_of_delivery_order`.
+
+---
+
+## F-0021 — Raw source links did not bind canonical financial values
+
+**Date:** 2026-08-30
+**Area:** ingestion / provenance
+**Severity:** safety-critical
+
+### Symptom
+A journal-backed canonical object could theoretically be replaced with altered financial values while continuing to cite otherwise valid raw `SourceEnvelopeId`s.
+
+### Root cause
+Provenance proved that a raw envelope existed, but not that the complete canonical batch still matched the exact canonical facts and `SourceLink`s that had been compiled together.
+
+### Fix
+Journal-backed `CanonicalBatch` objects now require a deterministic compilation SHA-256 over canonical financial facts plus exact source links. Any post-compilation fact/link change fails before Money Graph or proof construction.
+
+### Regression protection
+`tests/ingestion/test_pipeline.py::test_journal_backed_canonical_values_cannot_change_under_old_source_binding` plus graph/proof tamper regressions.
+
+---
+
+## F-0022 — Exact source replay was canonicalized repeatedly downstream
+
+**Date:** 2026-08-30
+**Area:** ingestion / idempotency / complexity
+**Severity:** medium
+
+### Symptom
+The raw journal correctly recognized exact replay, but the ingestion path still passed duplicate raw rows into canonicalization. Reducer/graph/proof layers therefore repeated defensive deduplication work.
+
+### Root cause
+Replay detection stopped at the journal API instead of becoming the canonicalization boundary.
+
+### Fix
+After journal validation, canonicalization now uses one retained primary raw payload per stable source identity. Distinct source IDs that represent duplicate economic evidence remain separate and are still caught by Gate 7/8.
+
+### Regression protection
+`tests/ingestion/test_pipeline.py::test_exact_source_replay_is_canonicalized_once_after_journaling` and existing replay/idempotency proof tests.
+
+---
+
+## F-0023 — Synthetic scenario class leaked through fixed settlement position
+
+**Date:** 2026-08-30
+**Area:** simulator / benchmark fairness
+**Severity:** high
+
+### Symptom
+Scenario type was a fixed function of settlement index, so the same positional IDs implied the same anomaly family across seeds.
+
+### Root cause
+Coverage scheduling and fixture identity were coupled.
+
+### Fix
+Scenario coverage remains deterministic but scenario positions are shuffled by world seed. Required dependency cases are prevented from occupying an invalid first position.
+
+### Regression protection
+`tests/simulator/test_truth_world.py::test_scenario_positions_change_by_seed_without_losing_coverage`.
+
+---
+
+## F-0024 — “Wrong recon amount” corruption failed at the adapter instead of Gate 7
+
+**Date:** 2026-08-30
+**Area:** simulator / evaluation semantics
+**Severity:** medium
+
+### Symptom
+`WRONG_RECON_AMOUNT` changed only `settlement_effect_paise`, breaking the normalized row's own arithmetic. The adapter rejected it, so the settlement proof never saw a plausible but financially wrong record.
+
+### Root cause
+Schema-integrity corruption and financial-mismatch corruption were conflated.
+
+### Fix
+The corruption now changes a payment row's gross and settlement effect together by the same paise delta, preserving row arithmetic while making the settlement total wrong. Gate 7 must therefore emit an explicit composition residual.
+
+### Regression protection
+`tests/core/test_settlement_proof.py::test_well_formed_wrong_recon_amount_reaches_proof_as_residual`.
+
+---
+
+## F-0025 — Narrow proof helper seams could omit batch-global safety context
+
+**Date:** 2026-08-30
+**Area:** Gate 7 / Gate 8 API architecture
+**Severity:** high
+
+### Symptom
+Single-settlement helper functions could be called without the global economic-ownership or settlement-UTR-reuse information computed by the safe batch APIs.
+
+### Root cause
+Low-level test seams looked like supported orchestration APIs and supplied permissive defaults.
+
+### Fix
+The per-settlement helpers are private and require explicit global context. Public exports expose only `prove_all_settlement_compositions` and `prove_all_bank_receipts`. Gate 9 is required to consume those batch-safe outputs.
+
+---
+
+## F-0026 — Production-facing ingestion depended structurally on the simulator package
+
+**Date:** 2026-08-30
+**Area:** architecture / package boundaries
+**Severity:** medium
+
+### Symptom
+`reflow.ingestion` imported `ObservedBatch` / `RawRecord` from `reflow.simulator.observed` even though hidden truth itself was not imported.
+
+### Root cause
+A neutral pre-canonical transport type was originally created inside the simulator for convenience and later reused by ingestion.
+
+### Fix
+The neutral transport contract now lives in `reflow.ingestion.records`. The simulator imports that contract; ingestion no longer depends on `reflow.simulator`.
+
+### Regression protection
+Repository dependency scans in the pre-Gate-9 audit require zero simulator imports under `src/reflow/ingestion`.
+
+---
+
+## F-0027 — Canonical compilation identity depended on source row order
+
+**Date:** 2026-08-30
+**Area:** provenance / future proof versioning
+**Severity:** high
+
+### Symptom
+Two batches containing identical source facts in different row orders could produce different canonical compilation SHA-256 values.
+
+### Root cause
+The digest streamed canonical tuples in incoming order rather than stable source identity order.
+
+### Fix
+Each canonical source family and `SourceLink` set is sorted by stable identity before feeding the compilation digest. Delivery permutation no longer creates a different compilation identity.
+
+### Regression protection
+`tests/ingestion/test_pipeline.py::test_compilation_digest_is_invariant_to_source_row_order`.
+
+---
+
+## F-0028 — Canonicalization could read caller rows instead of retained journal evidence
+
+**Date:** 2026-08-30
+**Area:** ingestion / end-to-end provenance
+**Severity:** safety-critical
+
+### Symptom
+The journal-first path stored immutable source envelopes, but after journaling it canonicalized the original in-memory caller batch. The later compilation digest bound canonical facts to source links, yet the compilation step itself was not forced to read the retained envelope payloads.
+
+### Root cause
+Journaling and canonicalization were sequenced correctly but still shared the caller's source object rather than making the journal the literal read boundary.
+
+### Fix
+After journaling, ingestion reconstructs the canonical input from the journal's retained immutable primary payload for every stable source identity. The source-binding method is private, and an end-to-end test recompiles every canonical fact directly from its retained envelope.
+
+### Regression protection
+`tests/ingestion/test_pipeline.py::test_each_canonical_fact_recompiles_from_its_retained_raw_envelope` plus exact-replay and compilation-integrity tests.
+
+### Remaining limitation
+The in-memory journal is an integrity reference implementation, not authenticated production storage. Provider webhook signatures/API authentication, persistence and ingress quotas remain future integration requirements.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
@@ -762,3 +962,5 @@ These are test targets, not claimed failures:
 - high-memory batch behaviour;
 - crash/restart idempotency;
 - production webhook signature/authenticity validation.
+
+---
