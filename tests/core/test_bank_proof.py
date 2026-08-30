@@ -299,10 +299,16 @@ def test_conflicting_duplicate_bank_identity_fails_closed() -> None:
         original,
         amount=Money(original.amount.amount_paise + 1, original.amount.currency),
     )
-    malformed = replace(batch, bank_entries=(*batch.bank_entries, conflicting))
+    settlement = next(
+        row for row in batch.settlements if row.utr is not None and row.utr == original.utr
+    )
 
     with pytest.raises(BankReceiptProofError, match="conflicting canonical payloads"):
-        prove_all_bank_receipts(malformed)
+        prove_bank_receipt(
+            settlement,
+            (*batch.bank_entries, conflicting),
+            source_index=batch.source_index(),
+        )
 
 
 def test_missing_bank_source_provenance_fails_closed() -> None:
