@@ -85,7 +85,6 @@ class SourceKind(StrEnum):
     RAZORPAY_RECON = "razorpay_recon"
     RAZORPAY_SETTLEMENT = "razorpay_settlement"
     BANK = "bank"
-    SYNTHETIC = "synthetic"
 
 
 class PaymentEventKind(StrEnum):
@@ -100,7 +99,6 @@ class PaymentStatus(StrEnum):
     AUTHORIZED = "authorized"
     FAILED = "failed"
     CAPTURED = "captured"
-    REFUNDED = "refunded"
 
 
 class ReconEntityKind(StrEnum):
