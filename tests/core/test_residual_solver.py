@@ -102,10 +102,14 @@ def test_amount_only_bank_candidate_is_hypothesis_not_proof() -> None:
     candidate["narration"] = "same amount but not authoritative identity"
     changed = replace(
         observed,
-        bank_rows=tuple(
-            row for row in observed.bank_rows if row["bank_entry_id"] != target_bank_id
-        )
-        + (candidate,),
+        bank_rows=(
+            *(
+                row
+                for row in observed.bank_rows
+                if row["bank_entry_id"] != target_bank_id
+            ),
+            candidate,
+        ),
     )
     batch, proofs = _prove(changed)
     proof = _proof_for(proofs, case.settlement.id)
