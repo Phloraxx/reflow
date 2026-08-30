@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from typing import Any
 
 from reflow.domain import (
     AdjustmentId,
@@ -56,6 +58,26 @@ def _canonical_json_default(value: object) -> object:
     raise TypeError(f"unsupported canonical digest value {type(value).__name__}")
 
 
+def _feed_digest_rows(
+    digest: Any,
+    label: str,
+    rows: Iterable[object],
+) -> None:
+    digest.update(label.encode())
+    digest.update(b"\0")
+    for row in rows:
+        encoded = json.dumps(
+            asdict(row),  # type: ignore[arg-type]
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+            default=_canonical_json_default,
+        ).encode()
+        digest.update(len(encoded).to_bytes(8, "big"))
+        digest.update(encoded)
+
+
 def _canonical_compilation_sha256(
     *,
     orders: tuple[MerchantOrder, ...],
@@ -65,24 +87,16 @@ def _canonical_compilation_sha256(
     bank_entries: tuple[BankEntry, ...],
     source_links: tuple[SourceLink, ...],
 ) -> str:
-    payload: dict[str, object] = {
-        "contract_version": _CANONICAL_CONTRACT_VERSION,
-        "orders": [asdict(row) for row in orders],
-        "payment_events": [asdict(row) for row in payment_events],
-        "recon_entries": [asdict(row) for row in recon_entries],
-        "settlements": [asdict(row) for row in settlements],
-        "bank_entries": [asdict(row) for row in bank_entries],
-        "source_links": [asdict(link) for link in source_links],
-    }
-    encoded = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-        default=_canonical_json_default,
-    ).encode()
-    return hashlib.sha256(encoded).hexdigest()
+    digest = hashlib.sha256()
+    digest.update(_CANONICAL_CONTRACT_VERSION.encode())
+    digest.update(b"\0")
+    _feed_digest_rows(digest, "orders", orders)
+    _feed_digest_rows(digest, "payment_events", payment_events)
+    _feed_digest_rows(digest, "recon_entries", recon_entries)
+    _feed_digest_rows(digest, "settlements", settlements)
+    _feed_digest_rows(digest, "bank_entries", bank_entries)
+    _feed_digest_rows(digest, "source_links", source_links)
+    return digest.hexdigest()
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +137,16 @@ class CanonicalBatch:
             (SourceKind.RAZORPAY_SETTLEMENT, str(row.id)) for row in self.settlements
         )
         expected.update((SourceKind.BANK, str(row.id)) for row in self.bank_entries)
+
+        canonical_count = (
+            len(self.orders)
+            + len(self.payment_events)
+            + len(self.recon_entries)
+            + len(self.settlements)
+            + len(self.bank_entries)
+        )
+        if canonical_count != len(expected):
+            raise ValueError("journal-backed canonical batch contains duplicate source identities")
 
         actual = set(indexed)
         missing = expected - actual
