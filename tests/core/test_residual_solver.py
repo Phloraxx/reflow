@@ -20,6 +20,7 @@ from reflow.residual_solver import (
     CandidateDisposition,
     ResidualCandidate,
     ResidualCandidateKind,
+    ResidualExplanationState,
     ResidualScope,
     ResidualSolverError,
     ResidualSolverLimits,
@@ -108,13 +109,22 @@ def test_amount_only_bank_candidate_is_hypothesis_not_proof() -> None:
     )
     batch, proofs = _prove(changed)
     proof = _proof_for(proofs, case.settlement.id)
-    target = next(target for target in residual_targets(proof) if target.scope is ResidualScope.BANK)
+    target = next(
+        target for target in residual_targets(proof) if target.scope is ResidualScope.BANK
+    )
     candidates, truncated = enumerate_residual_candidates(proof, batch, target)
     result = solve_residual(target, candidates, candidate_space_truncated=truncated)
 
-    assert len(result.explanations) == 1
-    explanation = result.explanations[0]
+    target_candidate = next(
+        candidate
+        for candidate in result.candidates_considered
+        if candidate.source_entity_id == "bank_amount_only_candidate"
+    )
+    explanation = next(
+        item for item in result.explanations if target_candidate.id in item.candidate_ids
+    )
     assert explanation.remaining_residual.is_zero
+    assert explanation.state is ResidualExplanationState.HYPOTHESIS
     assert "NOT_FINANCIAL_PROOF" in explanation.reason_codes
     assert "AMOUNT_ONLY_NOT_IDENTITY" in explanation.reason_codes
     assert not explanation.uses_blocked_evidence
@@ -137,7 +147,11 @@ def test_blocked_late_recon_row_can_only_form_blocked_hypothesis() -> None:
     candidates, truncated = enumerate_residual_candidates(proof, batch, target)
     result = solve_residual(target, candidates, candidate_space_truncated=truncated)
 
-    exact = next(explanation for explanation in result.explanations if explanation.remaining_residual.is_zero)
+    exact = next(
+        explanation
+        for explanation in result.explanations
+        if explanation.remaining_residual.is_zero
+    )
     assert exact.uses_blocked_evidence
     assert "BLOCKED_EVIDENCE_USED" in exact.reason_codes
     assert "NOT_FINANCIAL_PROOF" in exact.reason_codes

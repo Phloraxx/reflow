@@ -13,6 +13,7 @@ __all__ = [
     "ResidualCandidate",
     "ResidualCandidateKind",
     "ResidualExplanation",
+    "ResidualExplanationState",
     "ResidualScope",
     "ResidualSolveResult",
     "ResidualSolverError",
@@ -37,6 +38,10 @@ class ResidualCandidateKind(StrEnum):
 class CandidateDisposition(StrEnum):
     ADMISSIBLE_HYPOTHESIS = "admissible_hypothesis"
     BLOCKED_EVIDENCE = "blocked_evidence"
+
+
+class ResidualExplanationState(StrEnum):
+    HYPOTHESIS = "hypothesis"
 
 
 class ResidualSolverError(ValueError):
@@ -102,6 +107,7 @@ class ResidualExplanation:
     source_envelope_ids: tuple[domain.SourceEnvelopeId, ...]
     uses_blocked_evidence: bool
     reason_codes: tuple[str, ...]
+    state: ResidualExplanationState = ResidualExplanationState.HYPOTHESIS
 
     def __post_init__(self) -> None:
         if not self.candidate_ids:
@@ -219,7 +225,10 @@ def enumerate_residual_candidates(
             for entry in batch.bank_entries:
                 if entry.id in excluded or entry.amount.currency != target.amount.currency:
                     continue
-                if entry.amount.amount_paise <= 0 or entry.amount.amount_paise > target.amount.amount_paise:
+                if (
+                    entry.amount.amount_paise <= 0
+                    or entry.amount.amount_paise > target.amount.amount_paise
+                ):
                     continue
                 source_ids = (
                     _source_id(batch, domain.SourceKind.BANK, str(entry.id)),
@@ -347,7 +356,9 @@ def solve_residual(
         if candidate.amount.currency != target.amount.currency:
             raise ResidualSolverError("candidate currency differs from residual target")
 
-    ordered = tuple(sorted(candidates, key=lambda candidate: _candidate_sort_key(target, candidate)))
+    ordered = tuple(
+        sorted(candidates, key=lambda candidate: _candidate_sort_key(target, candidate))
+    )
     if len(ordered) > cfg.max_candidates:
         candidate_space_truncated = True
         ordered = ordered[: cfg.max_candidates]
