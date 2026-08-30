@@ -31,6 +31,19 @@ def test_clean_ingestion_journals_every_raw_record_before_returning_canonical() 
     assert {link.envelope_id for link in canonical.source_links} == journal_ids
 
 
+def test_exact_source_replay_is_canonicalized_once_after_journaling() -> None:
+    observed = _observed()
+    replay = dict(observed.razorpay_events[0])
+    replayed = replace(observed, razorpay_events=(*observed.razorpay_events, replay))
+    journal = InMemoryJournal()
+
+    canonical = ingest_observed_batch(replayed, journal, received_at=RECEIVED)
+
+    assert len(journal) == observed.record_count
+    assert len(canonical.source_links) == observed.record_count
+    assert len(canonical.payment_events) == len(observed.razorpay_events)
+
+
 def test_malformed_source_is_preserved_in_journal_before_adapter_rejects_batch() -> None:
     observed = _observed(CorruptionKind.MALFORMED_DATE)
     journal = InMemoryJournal()
