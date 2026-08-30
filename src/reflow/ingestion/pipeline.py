@@ -5,7 +5,7 @@ from datetime import datetime
 
 from reflow.domain import SourceKind
 from reflow.journal import InMemoryJournal, make_source_envelope, payload_sha256
-from reflow.simulator.observed import ObservedBatch, RawRecord
+from .records import ObservedBatch, RawRecord
 
 from .adapters import CanonicalBatch, SourceIdentity, SourceLink, adapt_observed_batch
 
@@ -77,28 +77,67 @@ def _journal_rows(
     )
 
 
-def _unique_rows(rows: tuple[RawRecord, ...], record_id_key: str) -> tuple[RawRecord, ...]:
-    """Collapse exact source replays after the journal has already validated conflicts."""
+def _rows_from_journal(
+    journal: InMemoryJournal,
+    rows: Iterable[RawRecord],
+    *,
+    source_kind: SourceKind,
+    record_id_key: str,
+) -> tuple[RawRecord, ...]:
+    """Return one immutable primary payload per source identity, preserving input order."""
     seen: set[str] = set()
-    unique: list[RawRecord] = []
+    retained: list[RawRecord] = []
     for row in rows:
         source_record_id = _raw_record_id(row, record_id_key)
         if source_record_id in seen:
             continue
         seen.add(source_record_id)
-        unique.append(row)
-    return tuple(unique)
+        envelope = journal.get(source_kind, source_record_id)
+        if envelope is None:
+            raise AssertionError(
+                "journal-first ingestion lost a retained source identity: "
+                f"{source_kind.value}/{source_record_id}"
+            )
+        retained.append(envelope.payload)
+    return tuple(retained)
 
 
-def _canonical_input(batch: ObservedBatch) -> ObservedBatch:
+def _canonical_input_from_journal(
+    batch: ObservedBatch,
+    journal: InMemoryJournal,
+) -> ObservedBatch:
     return ObservedBatch(
-        merchant_rows=_unique_rows(batch.merchant_rows, "order_id"),
-        razorpay_events=_unique_rows(batch.razorpay_events, "event_id"),
-        recon_rows=_unique_rows(batch.recon_rows, "recon_id"),
-        settlement_rows=_unique_rows(batch.settlement_rows, "settlement_id"),
-        bank_rows=_unique_rows(batch.bank_rows, "bank_entry_id"),
+        merchant_rows=_rows_from_journal(
+            journal,
+            batch.merchant_rows,
+            source_kind=SourceKind.MERCHANT,
+            record_id_key="order_id",
+        ),
+        razorpay_events=_rows_from_journal(
+            journal,
+            batch.razorpay_events,
+            source_kind=SourceKind.RAZORPAY_EVENT,
+            record_id_key="event_id",
+        ),
+        recon_rows=_rows_from_journal(
+            journal,
+            batch.recon_rows,
+            source_kind=SourceKind.RAZORPAY_RECON,
+            record_id_key="recon_id",
+        ),
+        settlement_rows=_rows_from_journal(
+            journal,
+            batch.settlement_rows,
+            source_kind=SourceKind.RAZORPAY_SETTLEMENT,
+            record_id_key="settlement_id",
+        ),
+        bank_rows=_rows_from_journal(
+            journal,
+            batch.bank_rows,
+            source_kind=SourceKind.BANK,
+            record_id_key="bank_entry_id",
+        ),
     )
-
 
 def journal_observed_batch(
     batch: ObservedBatch,
@@ -177,5 +216,5 @@ def ingest_observed_batch(
 ) -> CanonicalBatch:
     """Journal raw evidence, collapse exact replays, then compile canonical objects once."""
     source_links = journal_observed_batch(batch, journal, received_at=received_at)
-    canonical = adapt_observed_batch(_canonical_input(batch))
-    return canonical.bind_source_links(source_links)
+    canonical = adapt_observed_batch(_canonical_input_from_journal(batch, journal))
+    return canonical._bind_source_links(source_links)

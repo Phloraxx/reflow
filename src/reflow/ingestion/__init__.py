@@ -13,6 +13,7 @@ from .adapters import (
     adapt_settlement_row,
 )
 from .pipeline import ingest_observed_batch, journal_observed_batch
+from .records import ObservedBatch, RawRecord
 
 __all__ = [
     "AdapterError",
@@ -27,4 +28,6 @@ __all__ = [
     "adapt_settlement_row",
     "ingest_observed_batch",
     "journal_observed_batch",
+    "ObservedBatch",
+    "RawRecord",
 ]

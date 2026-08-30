@@ -5,7 +5,9 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from random import Random
 
-from .observed import CorruptionRecord, ObservationBundle, ObservedBatch, RawRecord
+from reflow.ingestion.records import ObservedBatch, RawRecord
+
+from .observed import CorruptionRecord, ObservationBundle
 from .truth import HiddenWorld
 
 
@@ -146,7 +148,7 @@ def _serialize(world: HiddenWorld) -> ObservedBatch:
     )
 
 
-def _copy_rows(rows: tuple[RawRecord, ...]) -> list[RawRecord]:
+def _copy_rows(rows: tuple[RawRecord, ...]) -> list[dict[str, object]]:
     return [dict(row) for row in rows]
 
 

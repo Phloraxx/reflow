@@ -29,7 +29,7 @@ from reflow.domain import (
     TransferId,
 )
 from reflow.domain.types import EntityId
-from reflow.simulator.observed import ObservedBatch, RawRecord
+from .records import ObservedBatch, RawRecord
 
 
 class AdapterError(ValueError):
@@ -90,12 +90,34 @@ def _canonical_compilation_sha256(
     digest = hashlib.sha256()
     digest.update(_CANONICAL_CONTRACT_VERSION.encode())
     digest.update(b"\0")
-    _feed_digest_rows(digest, "orders", orders)
-    _feed_digest_rows(digest, "payment_events", payment_events)
-    _feed_digest_rows(digest, "recon_entries", recon_entries)
-    _feed_digest_rows(digest, "settlements", settlements)
-    _feed_digest_rows(digest, "bank_entries", bank_entries)
-    _feed_digest_rows(digest, "source_links", source_links)
+    # Compilation identity is about retained source facts, not source delivery order.
+    _feed_digest_rows(digest, "orders", sorted(orders, key=lambda row: str(row.id)))
+    _feed_digest_rows(
+        digest,
+        "payment_events",
+        sorted(payment_events, key=lambda row: row.source_event_id),
+    )
+    _feed_digest_rows(
+        digest, "recon_entries", sorted(recon_entries, key=lambda row: str(row.id))
+    )
+    _feed_digest_rows(
+        digest, "settlements", sorted(settlements, key=lambda row: str(row.id))
+    )
+    _feed_digest_rows(
+        digest, "bank_entries", sorted(bank_entries, key=lambda row: str(row.id))
+    )
+    _feed_digest_rows(
+        digest,
+        "source_links",
+        sorted(
+            source_links,
+            key=lambda row: (
+                row.source_kind.value,
+                row.source_record_id,
+                str(row.envelope_id),
+            ),
+        ),
+    )
     return digest.hexdigest()
 
 
@@ -191,7 +213,7 @@ class CanonicalBatch:
     def source_index(self) -> dict[SourceIdentity, SourceEnvelopeId]:
         return {link.identity: link.envelope_id for link in self.source_links}
 
-    def bind_source_links(self, source_links: tuple[SourceLink, ...]) -> CanonicalBatch:
+    def _bind_source_links(self, source_links: tuple[SourceLink, ...]) -> CanonicalBatch:
         if self.source_links or self.compilation_sha256 is not None:
             raise ValueError("canonical batch is already bound to source provenance")
         digest = _canonical_compilation_sha256(
