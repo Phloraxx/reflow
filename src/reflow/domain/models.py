@@ -202,18 +202,12 @@ class PaymentCurrentState:
     status: PaymentStatus
     last_occurred_at: datetime
     captured_at: datetime | None = None
-    refunded_amount: Money = field(default_factory=Money.zero)
     warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _aware(self.last_occurred_at, "last_occurred_at")
         if self.captured_at is not None:
             _aware(self.captured_at, "captured_at")
-        if self.refunded_amount.currency != self.amount.currency:
-            raise ValueError("refund currency must match payment currency")
-        _non_negative(self.refunded_amount.amount_paise, "refunded_amount")
-        if self.refunded_amount.amount_paise > self.amount.amount_paise:
-            raise ValueError("refunded amount cannot exceed payment amount")
 
 
 @dataclass(frozen=True, slots=True)
