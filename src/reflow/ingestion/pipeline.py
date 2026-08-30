@@ -77,6 +77,29 @@ def _journal_rows(
     )
 
 
+def _unique_rows(rows: tuple[RawRecord, ...], record_id_key: str) -> tuple[RawRecord, ...]:
+    """Collapse exact source replays after the journal has already validated conflicts."""
+    seen: set[str] = set()
+    unique: list[RawRecord] = []
+    for row in rows:
+        source_record_id = _raw_record_id(row, record_id_key)
+        if source_record_id in seen:
+            continue
+        seen.add(source_record_id)
+        unique.append(row)
+    return tuple(unique)
+
+
+def _canonical_input(batch: ObservedBatch) -> ObservedBatch:
+    return ObservedBatch(
+        merchant_rows=_unique_rows(batch.merchant_rows, "order_id"),
+        razorpay_events=_unique_rows(batch.razorpay_events, "event_id"),
+        recon_rows=_unique_rows(batch.recon_rows, "recon_id"),
+        settlement_rows=_unique_rows(batch.settlement_rows, "settlement_id"),
+        bank_rows=_unique_rows(batch.bank_rows, "bank_entry_id"),
+    )
+
+
 def journal_observed_batch(
     batch: ObservedBatch,
     journal: InMemoryJournal,
@@ -152,7 +175,7 @@ def ingest_observed_batch(
     *,
     received_at: datetime,
 ) -> CanonicalBatch:
-    """Journal the immutable raw batch first, then compile and bind canonical objects."""
+    """Journal raw evidence, collapse exact replays, then compile canonical objects once."""
     source_links = journal_observed_batch(batch, journal, received_at=received_at)
-    canonical = adapt_observed_batch(batch)
+    canonical = adapt_observed_batch(_canonical_input(batch))
     return canonical.bind_source_links(source_links)
