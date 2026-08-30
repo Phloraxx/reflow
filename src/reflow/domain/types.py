@@ -69,14 +69,6 @@ class EvidenceEdgeId(EntityId):
     prefix = "edge_"
 
 
-class ExceptionCaseId(EntityId):
-    prefix = "exc_"
-
-
-class ProofId(EntityId):
-    prefix = "proof_"
-
-
 class Currency(StrEnum):
     INR = "INR"
 
@@ -121,22 +113,3 @@ class EdgeState(StrEnum):
     CANDIDATE = "candidate"
     PROVEN = "proven"
     REJECTED = "rejected"
-
-
-class ProofStatus(StrEnum):
-    PROVEN_RECONCILED = "proven_reconciled"
-    WAITING_FOR_BANK = "waiting_for_bank"
-    RESIDUAL = "residual"
-    CONTRADICTED = "contradicted"
-    AMBIGUOUS = "ambiguous"
-
-
-class ExceptionKind(StrEnum):
-    MISSING_EVIDENCE = "missing_evidence"
-    AMOUNT_MISMATCH = "amount_mismatch"
-    IDENTITY_CONFLICT = "identity_conflict"
-    AMBIGUOUS_MATCH = "ambiguous_match"
-    MALFORMED_SOURCE = "malformed_source"
-    SCHEMA_DRIFT = "schema_drift"
-    OUT_OF_RANGE = "out_of_range"
-    DUPLICATE_ECONOMIC_ROW = "duplicate_economic_row"
