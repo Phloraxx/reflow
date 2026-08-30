@@ -18,6 +18,8 @@ from .records import ObservedBatch, RawRecord
 __all__ = [
     "AdapterError",
     "CanonicalBatch",
+    "ObservedBatch",
+    "RawRecord",
     "SourceIdentity",
     "SourceLink",
     "adapt_bank_row",
@@ -28,6 +30,4 @@ __all__ = [
     "adapt_settlement_row",
     "ingest_observed_batch",
     "journal_observed_batch",
-    "ObservedBatch",
-    "RawRecord",
 ]

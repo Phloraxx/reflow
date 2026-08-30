@@ -5,9 +5,9 @@ from datetime import datetime
 
 from reflow.domain import SourceKind
 from reflow.journal import InMemoryJournal, make_source_envelope, payload_sha256
-from .records import ObservedBatch, RawRecord
 
 from .adapters import CanonicalBatch, SourceIdentity, SourceLink, adapt_observed_batch
+from .records import ObservedBatch, RawRecord
 
 
 def _aware(value: datetime) -> None:

@@ -29,6 +29,7 @@ from reflow.domain import (
     TransferId,
 )
 from reflow.domain.types import EntityId
+
 from .records import ObservedBatch, RawRecord
 
 
