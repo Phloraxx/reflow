@@ -299,21 +299,25 @@ Exact UTR + wrong amount is `BANK_RECEIPT_RESIDUAL` / `BANK_AMOUNT_MISMATCH`: id
 
 ---
 
-## Phase 9 — Full Reconciliation Proof + versioning
+## Phase 9 — Full Reconciliation Proof + versioning — IMPLEMENTED
 
-Combine the **batch-safe** Gate 7 composition proof and Gate 8 bank receipt proof. Gate 9 must consume those complete proof sets; it must not call narrower per-settlement test seams that lack global ownership/UTR context.
+Gate 9 consumes the complete **batch-safe** Gate 7 composition and Gate 8 bank-proof sets. It does not search recon rows, bank rows, fuzzy candidates or UTRs itself.
 
-Define the Gate 9 proof contract only now, from audited inputs. Implement:
+Implemented contract:
 
-- proof version input hash;
-- knowledge cutoff;
-- prior proof reference;
+- deterministic typed `proofv_...` identity;
+- settlement-scoped authoritative input SHA-256;
+- reproducible batch compilation SHA-256;
+- knowledge cutoff and generated-at validation;
+- prior proof reference and immutable history;
 - reopened state;
-- proof diff.
+- deterministic proof diff;
+- atomic batch validation/staging before ledger mutation;
+- self-verification of embedded fragment source union and Gate 7/8/9 ruleset metadata.
 
 ### Gate 9
 
-A late bank row or late payment event changes only affected proof fragments and preserves old versions.
+Late bank or recon evidence versions only affected settlement truth and preserves old versions. Unrelated evidence and delivery permutation do not manufacture versions. A previously proven settlement can reopen when later authoritative contradictory evidence appears.
 
 ---
 

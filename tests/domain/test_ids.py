@@ -1,6 +1,6 @@
 import pytest
 
-from reflow.domain.types import OrderId, PaymentId, RefundId
+from reflow.domain.types import OrderId, PaymentId, ProofVersionId, RefundId
 
 
 def test_entity_ids_are_not_interchangeable() -> None:
@@ -32,3 +32,10 @@ def test_surrounding_identifier_whitespace_is_rejected() -> None:
 
 def test_valid_order_id() -> None:
     assert str(OrderId("order_abc")) == "order_abc"
+
+
+def test_proof_version_id_requires_its_own_prefix() -> None:
+    proof_id = ProofVersionId("proofv_abc")
+    assert str(proof_id) == "proofv_abc"
+    with pytest.raises(ValueError):
+        ProofVersionId("proof_abc")

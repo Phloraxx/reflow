@@ -7,7 +7,10 @@ from . import domain, ingestion
 from .ingestion import CanonicalBatch
 from .money_graph import MoneyGraph
 
+COMPOSITION_RULESET_VERSION = "gate7-composition-v1"
+
 __all__ = [
+    "COMPOSITION_RULESET_VERSION",
     "CompositionProofError",
     "CompositionStatus",
     "SettlementCompositionProof",
@@ -229,6 +232,9 @@ def _prove_settlement_composition(
     *,
     source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
     cross_settlement_claims: frozenset[EconomicClaim],
+    cross_settlement_evidence: dict[
+        EconomicClaim, tuple[domain.SettlementReconEntry, ...]
+    ] | None = None,
 ) -> SettlementCompositionProof:
     if any(entry.settlement_id != settlement.id for entry in entries):
         raise CompositionProofError("composition call contains rows for another settlement")
@@ -250,17 +256,26 @@ def _prove_settlement_composition(
             key=str,
         )
     )
+    own_cross_settlement_ids = {
+        entry.id for entry in entries if _economic_claim(entry) in cross_settlement_claims
+    }
+    conflict_evidence_by_id: dict[
+        domain.ReconEntryId, domain.SettlementReconEntry
+    ] = {}
+    if cross_settlement_evidence is not None:
+        for entry in entries:
+            for conflict_entry in cross_settlement_evidence.get(
+                _economic_claim(entry), ()
+            ):
+                conflict_evidence_by_id[conflict_entry.id] = conflict_entry
+    else:
+        for entry in entries:
+            if entry.id in own_cross_settlement_ids:
+                conflict_evidence_by_id[entry.id] = entry
     cross_settlement_conflict_ids = tuple(
-        sorted(
-            (
-                entry.id
-                for entry in entries
-                if _economic_claim(entry) in cross_settlement_claims
-            ),
-            key=str,
-        )
+        sorted(conflict_evidence_by_id, key=str)
     )
-    blocked_ids = set(late_component_ids) | set(cross_settlement_conflict_ids)
+    blocked_ids = set(late_component_ids) | own_cross_settlement_ids
     arithmetic_entries = tuple(
         entry for entry in unique_entries if entry.id not in blocked_ids
     )
@@ -286,7 +301,9 @@ def _prove_settlement_composition(
     if cross_settlement_conflict_ids:
         reason_codes.add("ECONOMIC_ENTITY_IN_MULTIPLE_SETTLEMENTS")
 
-    for entry in entries:
+    proof_evidence_rows = {entry.id: entry for entry in entries}
+    proof_evidence_rows.update(conflict_evidence_by_id)
+    for entry in proof_evidence_rows.values():
         source_envelope_id = _require_source_envelope(
             source_index,
             domain.SourceKind.RAZORPAY_RECON,
@@ -349,18 +366,21 @@ def prove_all_settlement_compositions(
     rows_by_settlement: dict[
         domain.SettlementId, list[domain.SettlementReconEntry]
     ] = {settlement_id: [] for settlement_id in settlements}
-    claim_settlements: dict[EconomicClaim, set[domain.SettlementId]] = {}
+    claim_entries: dict[EconomicClaim, list[domain.SettlementReconEntry]] = {}
     for entry in batch.recon_entries:
         if entry.settlement_id not in settlements:
             raise CompositionProofError(
                 f"recon entry {entry.id} references unknown settlement {entry.settlement_id}"
             )
         rows_by_settlement[entry.settlement_id].append(entry)
-        claim_settlements.setdefault(_economic_claim(entry), set()).add(entry.settlement_id)
+        claim_entries.setdefault(_economic_claim(entry), []).append(entry)
 
-    cross_settlement_claims = frozenset(
-        claim for claim, settlement_ids in claim_settlements.items() if len(settlement_ids) > 1
-    )
+    cross_settlement_evidence = {
+        claim: tuple(sorted(rows, key=lambda row: str(row.id)))
+        for claim, rows in claim_entries.items()
+        if len({row.settlement_id for row in rows}) > 1
+    }
+    cross_settlement_claims = frozenset(cross_settlement_evidence)
 
     return tuple(
         _prove_settlement_composition(
@@ -369,6 +389,7 @@ def prove_all_settlement_compositions(
             graph,
             source_index=source_index,
             cross_settlement_claims=cross_settlement_claims,
+            cross_settlement_evidence=cross_settlement_evidence,
         )
         for settlement_id in sorted(settlements, key=str)
     )

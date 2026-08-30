@@ -69,6 +69,10 @@ class EvidenceEdgeId(EntityId):
     prefix = "edge_"
 
 
+class ProofVersionId(EntityId):
+    prefix = "proofv_"
+
+
 class Currency(StrEnum):
     INR = "INR"
 

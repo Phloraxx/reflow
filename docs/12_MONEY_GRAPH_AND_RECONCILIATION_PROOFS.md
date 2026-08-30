@@ -42,14 +42,16 @@ ReFlow should use a small canonical vocabulary.
 
 ### ReFlow objects
 
-Implemented through Gate 8:
+Implemented through Gate 9:
 
 - `SourceEnvelope`
 - `EvidenceEdge`
 - `SettlementCompositionProof`
 - `BankReceiptProof`
+- `ReconciliationProofVersion`
+- `ProofVersionDiff`
 
-Gate 9 will define the combined immutable reconciliation-proof/version/exception contracts from those audited fragments. Earlier placeholder `ReconciliationProof`, `ProofVersion`, `Residual` and `ExceptionCase` domain classes were intentionally removed during the pre-Gate-9 audit so speculative types cannot become accidental architecture.
+Gate 9 now defines the combined immutable reconciliation-proof/version contract from those audited fragments. Earlier placeholder `ReconciliationProof`, `ProofVersion`, `Residual` and `ExceptionCase` domain classes were intentionally removed during the pre-Gate-9 audit; the implemented contract was then introduced only after Gate 7 and Gate 8 were audited. Residual explanation/exception workflow remains Phase 10+ work.
 
 ---
 
@@ -387,30 +389,38 @@ The solver should have a deterministic timeout/fallback path.
 
 ## 12. Temporal proof versions
 
-Proofs are immutable versions.
+Gate 9 implements immutable `ReconciliationProofVersion` records. A version binds the complete Gate 7 and Gate 8 proof fragments for one settlement without performing any new matching.
 
 ```text
-Conceptual Gate 9 version record (the concrete domain type is intentionally deferred until Gate 9):
-
-ProofVersionConcept {
-  proof_id
+ReconciliationProofVersion {
+  proofv_id
+  settlement_id
   version
-  computed_at
+  status
+  composition_proof
+  bank_proof
+  source_envelope_ids[]
+  scoped_input_sha256
+  batch_compilation_sha256
+  composition_ruleset_version
+  bank_ruleset_version
+  combiner_ruleset_version
   knowledge_cutoff
-  canonical_compilation_sha256
-  input_evidence_hashes[]
-  rule_versions[]
+  generated_at
   prior_version_id?
-  output_state
+  reopened
+  reason_codes[]
 }
 ```
 
-If late evidence arrives, ReFlow computes a new version.
+`scoped_input_sha256` decides whether that settlement's authoritative financial truth changed. `batch_compilation_sha256` records the exact reproducible canonical batch context but does not, by itself, force a new version. Both source delivery order and non-authoritative same-amount diagnostics are excluded from version identity.
+
+If late authoritative evidence arrives, ReFlow computes a new version.
 
 Example:
 
 ```text
-v1 10:00 WAITING_FOR_BANK
+v1 10:00 PENDING_BANK_CREDIT
 v2 11:12 PROVEN_RECONCILED
 ```
 
