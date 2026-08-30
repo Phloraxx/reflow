@@ -109,3 +109,13 @@ def test_amount_change_across_events_is_rejected() -> None:
                 _event("evt_2", PaymentEventKind.CAPTURED, 2, amount=10_001),
             )
         )
+
+
+def test_one_payment_cannot_claim_multiple_order_ids() -> None:
+    first = _event("evt_1", PaymentEventKind.CREATED, 1)
+    second = replace(
+        _event("evt_2", PaymentEventKind.CAPTURED, 2),
+        order_id=OrderId("order_2"),
+    )
+    with pytest.raises(PaymentStateError, match="multiple order ids"):
+        reduce_payment_events((first, second))
