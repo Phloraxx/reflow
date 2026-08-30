@@ -15,9 +15,22 @@ from reflow.reconciliation_proof import (
     diff_proof_versions,
 )
 from reflow.settlement_proof import prove_all_settlement_compositions
-from reflow.simulator import BankExpectation, generate_world, observe_world
+from reflow.simulator import (
+    BankExpectation,
+    CorruptionPlan,
+    generate_world,
+    observe_world,
+)
 
 T0 = datetime(2026, 8, 30, 7, 0, tzinfo=UTC)
+
+
+def _clean_observed(world, seed: int) -> ObservedBatch:
+    return observe_world(
+        world,
+        seed=seed,
+        plan=CorruptionPlan(kinds=()),
+    ).observed
 
 
 def _prove(batch):
@@ -41,7 +54,7 @@ def _matched_target(seed: int = 901):
         for case in world.cases
         if case.bank_expectation is BankExpectation.MATCHED and case.bank_entries
     )
-    observed = observe_world(world, seed=seed + 1).observed
+    observed = _clean_observed(world, seed + 1)
     return world, case, observed
 
 
@@ -70,7 +83,7 @@ def _append_unrelated_bank_row(
 
 
 def test_first_batch_creates_one_immutable_version_per_settlement() -> None:
-    observed = observe_world(generate_world(44), seed=45).observed
+    observed = _clean_observed(generate_world(44), 45)
     journal = InMemoryJournal()
     batch, composition, bank = _ingest(observed, journal, T0)
     ledger = InMemoryProofLedger()
@@ -94,7 +107,7 @@ def test_first_batch_creates_one_immutable_version_per_settlement() -> None:
 
 
 def test_same_financial_evidence_does_not_create_time_only_versions() -> None:
-    observed = observe_world(generate_world(51), seed=52).observed
+    observed = _clean_observed(generate_world(51), 52)
     journal = InMemoryJournal()
     batch, composition, bank = _ingest(observed, journal, T0)
     ledger = InMemoryProofLedger()
@@ -261,7 +274,7 @@ def test_new_bank_contradiction_reopens_previously_proven_settlement() -> None:
 
 
 def test_proof_cannot_cite_evidence_received_after_knowledge_cutoff() -> None:
-    observed = observe_world(generate_world(101), seed=102).observed
+    observed = _clean_observed(generate_world(101), 102)
     journal = InMemoryJournal()
     received = T0 + timedelta(hours=1)
     batch, composition, bank = _ingest(observed, journal, received)
@@ -307,7 +320,7 @@ def test_authoritative_evidence_cannot_disappear_from_later_version() -> None:
 
 
 def test_gate9_requires_complete_batch_safe_fragment_sets() -> None:
-    observed = observe_world(generate_world(121), seed=122).observed
+    observed = _clean_observed(generate_world(121), 122)
     journal = InMemoryJournal()
     batch, composition, bank = _ingest(observed, journal, T0)
 
@@ -323,7 +336,7 @@ def test_gate9_requires_complete_batch_safe_fragment_sets() -> None:
 
 
 def test_proof_diff_rejects_different_settlement_series() -> None:
-    observed = observe_world(generate_world(131), seed=132).observed
+    observed = _clean_observed(generate_world(131), 132)
     journal = InMemoryJournal()
     batch, composition, bank = _ingest(observed, journal, T0)
     ledger = InMemoryProofLedger()
@@ -341,7 +354,7 @@ def test_proof_diff_rejects_different_settlement_series() -> None:
         diff_proof_versions(first, second)
 
 def test_batch_failure_is_atomic_and_does_not_partially_append_versions() -> None:
-    observed = observe_world(generate_world(141), seed=142).observed
+    observed = _clean_observed(generate_world(141), 142)
     journal = InMemoryJournal()
     batch, composition, bank = _ingest(observed, journal, T0)
     ledger = InMemoryProofLedger()
