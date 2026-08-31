@@ -7,6 +7,7 @@ from .contracts import (
     ActivationState,
     AdapterApprovalEvidence,
     AdapterSpec,
+    ApprovalEvidenceKind,
     DriftState,
 )
 from .profile import StructuralProfile
@@ -46,8 +47,11 @@ class ApprovedAdapterVersion:
         report: SampleValidationReport,
         approval_evidence: AdapterApprovalEvidence,
     ) -> ApprovedAdapterVersion:
-        if report.state is not ActivationState.APPROVED:
-            raise ValueError("only an approved sample validation can activate an adapter")
+        if approval_evidence.kind is ApprovalEvidenceKind.OPERATOR_REVIEW:
+            if report.state not in {ActivationState.APPROVED, ActivationState.NEEDS_REVIEW}:
+                raise ValueError("operator review cannot authorize a rejected adapter")
+        elif report.state is not ActivationState.APPROVED:
+            raise ValueError("migration activation requires approved deterministic validation")
         source_columns = tuple(
             sorted(
                 mapping.source_column

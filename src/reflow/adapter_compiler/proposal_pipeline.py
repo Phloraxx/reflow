@@ -7,7 +7,13 @@ from reflow.domain import SourceEnvelopeId, SourceKind
 from reflow.ingestion import RawRecord
 from reflow.journal import InMemoryJournal, make_source_envelope
 
-from .contracts import CanonicalRecordKind, FinancialControlTotal
+from .contracts import (
+    AdapterApprovalEvidence,
+    ApprovalEvidenceKind,
+    CanonicalRecordKind,
+    FinancialControlTotal,
+)
+from .lifecycle import ApprovedAdapterVersion
 from .provider import (
     AdapterProposalProvider,
     ProposalEvaluation,
@@ -87,4 +93,23 @@ def propose_and_validate_journaled(
     return JournaledProposalEvaluation(
         source_envelope_ids=tuple(envelope_ids),
         proposal=proposal,
+    )
+
+
+def approve_reviewed_proposal(
+    evaluation: JournaledProposalEvaluation,
+    *,
+    reference: str,
+) -> ApprovedAdapterVersion:
+    proposal = evaluation.proposal
+    if proposal.compiled is None or proposal.sample_report is None:
+        raise ValueError("rejected proposal cannot be operator-approved")
+    return ApprovedAdapterVersion.from_compiled(
+        proposal.compiled,
+        proposal.context.profile,
+        proposal.sample_report,
+        AdapterApprovalEvidence(
+            kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+            reference=reference,
+        ),
     )

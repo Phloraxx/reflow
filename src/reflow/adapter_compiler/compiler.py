@@ -306,7 +306,7 @@ class SampleValidationReport:
         return self.row_count
 
 
-def _canonical_identity(record: CanonicalRecord) -> str:
+def canonical_record_identity(record: CanonicalRecord) -> str:
     if isinstance(record, domain.PaymentEvent):
         return record.source_event_id
     return str(record.id)
@@ -322,7 +322,7 @@ def validate_sample(
             parsed.append(adapter.canonicalize(row))
         except (AdapterError, TypeError, ValueError) as exc:
             errors.append(f"row {index}: {type(exc).__name__}: {exc}")
-    identities = [_canonical_identity(record) for record in parsed]
+    identities = [canonical_record_identity(record) for record in parsed]
     duplicate_count = len(identities) - len(set(identities))
     if not rows or errors or duplicate_count:
         state = ActivationState.REJECTED

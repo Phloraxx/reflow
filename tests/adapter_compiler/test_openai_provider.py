@@ -287,3 +287,45 @@ def test_integer_looking_money_without_independent_control_stays_review_only() -
     assert not result.approved
     assert result.sample_report is not None
     assert result.sample_report.state is ActivationState.NEEDS_REVIEW
+
+
+def test_openai_provider_redacts_obvious_sensitive_sample_values() -> None:
+    captured: dict[str, object] = {}
+    rows = (
+        {
+            **_rows()[0],
+            "Memo": (
+                "contact sourav@example.com / sourav@okbank / 9876543210 / "
+                "sk-test_secret123456789"
+            ),
+        },
+    )
+
+    def transport(url, headers, payload, timeout):
+        captured["payload"] = payload
+        return _response(_spec_payload())
+
+    provider = OpenAIAdapterProposalProvider(
+        api_key="test-key",
+        model="test-model",
+        transport=transport,
+    )
+    _propose_and_validate_rows(
+        provider,
+        rows,
+        adapter_id="bank_ai_proposal",
+        version=1,
+        source_kind=SourceKind.BANK,
+        record_kind=CanonicalRecordKind.BANK_ENTRY,
+    )
+    request = captured["payload"]
+    assert isinstance(request, Mapping)
+    prompt = request["input"]
+    assert isinstance(prompt, str)
+    assert "sourav@example.com" not in prompt
+    assert "sourav@okbank" not in prompt
+    assert "9876543210" not in prompt
+    assert "sk-test_secret123456789" not in prompt
+    assert "<ADDRESS_LIKE>" in prompt
+    assert "<LONG_NUMBER>" in prompt
+    assert "<SECRET_LIKE>" in prompt

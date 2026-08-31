@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -20,6 +21,37 @@ class OpenAIProposalError(RuntimeError):
 JsonTransport = Callable[
     [str, Mapping[str, str], Mapping[str, object], float], Mapping[str, object]
 ]
+
+_ADDRESS_LIKE_RE = re.compile(r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\b")
+_SECRET_LIKE_RE = re.compile(
+    r"(?i)\b(?:sk|rzp_(?:live|test)|ghp|github_pat|npk)[-_][a-z0-9_-]{8,}\b"
+)
+_LONG_NUMBER_RE = re.compile(r"(?<!\d)\d{8,19}(?!\d)")
+_MAX_SAMPLE_STRING = 160
+
+
+def _redact_sample_value(value: object) -> object:
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return "<LONG_NUMBER>" if len(str(abs(value))) >= 8 else value
+    if isinstance(value, float):
+        return value
+    if not isinstance(value, str):
+        return f"<COMPLEX_VALUE:{type(value).__name__}>"
+    redacted = _SECRET_LIKE_RE.sub("<SECRET_LIKE>", value)
+    redacted = _ADDRESS_LIKE_RE.sub("<ADDRESS_LIKE>", redacted)
+    redacted = _LONG_NUMBER_RE.sub("<LONG_NUMBER>", redacted)
+    if len(redacted) > _MAX_SAMPLE_STRING:
+        redacted = redacted[: _MAX_SAMPLE_STRING - 3] + "..."
+    return redacted
+
+
+def _safe_sample_rows(context: ProposalContext) -> list[dict[str, object]]:
+    return [
+        {key: _redact_sample_value(value) for key, value in row.items()}
+        for row in context.profile.sample_rows
+    ]
 
 
 def _default_transport(
@@ -88,7 +120,7 @@ def _proposal_input(context: ProposalContext) -> str:
         "allowed_transforms": [item.value for item in context.allowed_transforms],
         "row_count": context.profile.row_count,
         "columns": columns,
-        "sample_rows": list(context.profile.sample_rows),
+        "sample_rows": _safe_sample_rows(context),
     }
     return json.dumps(data, sort_keys=True, ensure_ascii=False, default=str)
 
