@@ -323,7 +323,7 @@ Late bank or recon evidence versions only affected settlement truth and preserve
 
 ## Phase 10 — Residual Solver
 
-**Implemented on the Gate 10 checkpoint branch.**
+**Implemented, checkpointed and merged.**
 
 Gate 10 derives residual targets from immutable Gate 9 proof versions and produces deterministic arithmetic hypotheses only. It cannot mutate or upgrade Gate 7/8/9 financial truth.
 
@@ -393,7 +393,7 @@ Development seed results are regression evidence only. The final held-out seed s
 
 ## Phase 12 — Source Adapter Compiler
 
-**Implemented; final checkpoint/merge validation in progress.** This is the first model-capable path, but the model proposes schema semantics only.
+**Implemented, checkpointed and merged.** This is the first model-capable path, but the model proposes schema semantics only.
 
 ### Implemented contract
 
@@ -421,6 +421,8 @@ The migration benchmark exercises the real automatic-activation path. The checke
 These are development safety regressions, not a live-model accuracy claim. Live provider/model/version results must be recorded separately when actually run.
 
 ---
+
+> **Post-Gate-12 sequencing superseded.** The strategic review in [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) moves a deterministic Reconciliation Control Plane and Exception Case lifecycle ahead of the investigation agent. The phase text below is retained as historical planning context; follow doc 27 for current execution order.
 
 ## Phase 13 — Exception Investigation Agent
 
