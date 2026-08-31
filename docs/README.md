@@ -6,20 +6,21 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — **authoritative post-Gate-12 current state, research review, architecture corrections and revised execution order.**
-2. [`26_GATE_12_CHECKPOINT.md`](26_GATE_12_CHECKPOINT.md) — merged AI-assisted source-compiler, approval, migration and runtime-lineage checkpoint.
-3. [`25_GATE_11_CHECKPOINT.md`](25_GATE_11_CHECKPOINT.md) — baseline evaluation/scorer/artifact contract and benchmark-safety checkpoint.
-4. [`24_GATE_10_CHECKPOINT.md`](24_GATE_10_CHECKPOINT.md) — bounded residual-hypothesis contract, scale shape and safety checkpoint.
-5. [`23_GATE_9_CHECKPOINT.md`](23_GATE_9_CHECKPOINT.md) — immutable versioned full-proof contract and Gate 9 checkpoint.
-6. [`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — pre-Gate-9 foundation audit and admission criteria.
-7. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — comprehensive pre-review roadmap; doc 27 supersedes its post-Gate-12 sequence.
-8. [`15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — exactly what Razorpay asks for and how ReFlow will prove it.
-9. [`11_NOVEL_PRODUCT_THESIS.md`](11_NOVEL_PRODUCT_THESIS.md) — why ReFlow is a financial truth compiler rather than an “AI makes financial decisions” demo.
-10. [`12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md) — core deterministic financial model.
-11. [`13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](13_MESSY_DATA_AND_CONNECTOR_COMPILER.md) — safe AI use for unfamiliar financial sources and schema drift.
-12. [`14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](14_SCALE_PERFORMANCE_AND_RESILIENCE.md) — same correctness model from tiny CSV batches to high-volume event processing.
-13. [`18_CREATIVE_FEATURE_CATALOG.md`](18_CREATIVE_FEATURE_CATALOG.md) — ranked differentiators and scope controls.
-14. [`17_RESEARCH_SOURCEBOOK.md`](17_RESEARCH_SOURCEBOOK.md) — primary sources and the design implications taken from them.
+1. [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — **implemented deterministic reconciliation control plane: scope, delivery/completeness, policy, run identity, no-orphan coverage, balance control and close readiness.**
+2. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative post-Gate-12 architecture review and revised Gates 13–19.
+3. [`26_GATE_12_CHECKPOINT.md`](26_GATE_12_CHECKPOINT.md) — AI-assisted source-compiler, approval, migration and runtime-lineage checkpoint.
+4. [`25_GATE_11_CHECKPOINT.md`](25_GATE_11_CHECKPOINT.md) — baseline evaluation/scorer/artifact contract and benchmark-safety checkpoint.
+5. [`24_GATE_10_CHECKPOINT.md`](24_GATE_10_CHECKPOINT.md) — bounded residual-hypothesis contract, scale shape and safety checkpoint.
+6. [`23_GATE_9_CHECKPOINT.md`](23_GATE_9_CHECKPOINT.md) — immutable versioned full-proof contract and Gate 9 checkpoint.
+7. [`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — pre-Gate-9 foundation audit and admission criteria.
+8. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — comprehensive pre-review roadmap; docs 27–28 supersede its post-Gate-12 sequence/status.
+9. [`15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — exactly what Razorpay asks for and how ReFlow will prove it.
+10. [`11_NOVEL_PRODUCT_THESIS.md`](11_NOVEL_PRODUCT_THESIS.md) — why deterministic financial truth remains the authority.
+11. [`12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md) — core deterministic financial model.
+12. [`13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](13_MESSY_DATA_AND_CONNECTOR_COMPILER.md) — safe AI use for unfamiliar financial sources and schema drift.
+13. [`14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](14_SCALE_PERFORMANCE_AND_RESILIENCE.md) — scale/performance plan.
+14. [`18_CREATIVE_FEATURE_CATALOG.md`](18_CREATIVE_FEATURE_CATALOG.md) — ranked differentiators and scope controls.
+15. [`17_RESEARCH_SOURCEBOOK.md`](17_RESEARCH_SOURCEBOOK.md) — primary sources and design implications.
 
 ---
 
@@ -52,6 +53,7 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`24_GATE_10_CHECKPOINT.md`](24_GATE_10_CHECKPOINT.md) — Gate 10 bounded residual hypotheses, scale shape, failure findings and checkpoint evidence.
 - [`25_GATE_11_CHECKPOINT.md`](25_GATE_11_CHECKPOINT.md) — Gate 11 baselines, semantic scorer, verifiable artifacts, failure findings and checkpoint evidence.
 - [`26_GATE_12_CHECKPOINT.md`](26_GATE_12_CHECKPOINT.md) — Gate 12 journal-first source compiler, approval lifecycle, adapter benchmarks and end-to-end runtime lineage.
+- [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — Gate 13 scope/run/source-completeness, evidence-coverage, balance-control and close-readiness checkpoint.
 
 ## Execution and submission
 
@@ -66,13 +68,14 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for post-Gate-12 architecture/sequence
-3. latest implemented checkpoint (`26_GATE_12_CHECKPOINT.md`)
-4. `16_MASTER_BUILD_PLAN.md`
-5. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
-6. `11`–`14` and `18`
-7. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
-8. `04`–`09` as earlier planning history
+2. latest implemented checkpoint (`28_GATE_13_CHECKPOINT.md`)
+3. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
+4. `26_GATE_12_CHECKPOINT.md` and earlier implemented checkpoints
+5. `16_MASTER_BUILD_PLAN.md`
+6. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
+7. `11`–`14` and `18`
+8. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
+9. `04`–`09` as earlier planning history
 
 If implementation/evaluation contradicts any document, update the plan and preserve the finding in `FAILURE_LOG.md` where appropriate.
 
@@ -80,4 +83,4 @@ If implementation/evaluation contradicts any document, update the plan and prese
 
 ## Product in one sentence
 
-> **ReFlow compiles messy payment evidence into a temporal Money Graph and machine-verifiable reconciliation proofs, using AI only where semantics are genuinely ambiguous and never as the authority on financial truth.**
+> **ReFlow is an evidence-first finance controller that compiles messy payment data into reproducible reconciliation runs, exact money proofs, balance controls and explicit exceptions; AI assists with schema understanding and later investigation, but never defines financial truth.**

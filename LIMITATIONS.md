@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 12**:
+ReFlow implementation scope now reaches **Gate 13**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -21,9 +21,10 @@ ReFlow implementation scope now reaches **Gate 12**:
 - bounded deterministic residual explanation hypotheses that never promote themselves to proof;
 - a hidden-truth baseline evaluation harness with B0/B1/B2/ReFlow Core arms, semantic evidence scoring and independently verifiable benchmark artifacts;
 - a journal-first AI-assisted Source Adapter Compiler with finite declarative transforms, explicit review/migration authorization, versioned schema routing and raw→canonical provenance;
-- independently replayable Gate 12 proposal and automatic-migration development benchmarks.
+- independently replayable Gate 12 proposal and automatic-migration development benchmarks;
+- a deterministic Gate 13 reconciliation control plane with explicit scope, source-delivery/completeness state, versioned policy, proof-derived no-orphan coverage, exact balance control, close readiness and immutable run capsules.
 
-Gate 11 fixed development-seed results and Gate 12 development adapter/migration corpora are regression evidence only. The final held-out reconciliation benchmark, live-model adapter benchmark, scale benchmark, exception-investigation agent, production Razorpay integration and operator UI are **not complete yet**.
+Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora and Gate 13 control-plane fixtures are regression evidence only. The final held-out reconciliation benchmark, live-model adapter benchmark, scale benchmark, durable ExceptionCase lifecycle, exception-investigation agent, production Razorpay integration and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 
@@ -204,14 +205,16 @@ The OpenAI provider requires an explicit model and sends only bounded, heuristic
 
 No live-model Gate 12 quality number is claimed in the repository yet because no live provider benchmark has been frozen and run. The checked-in development reference/mutation corpus validates the compiler, safety boundaries and benchmark itself, not model intelligence.
 
-### 23. The reconciliation control plane is not implemented yet
+### 23. Gate 13 control-plane proofs do not authenticate external source/account inputs
 
-Gates 0–12 prove and explain settlement-level financial truth, but ReFlow does not yet have first-class `ReconciliationScope`, `SourceDeliveryManifest`, `ReconciliationPolicyVersion`, `ReconciliationRun`, run-level evidence-coverage certificates, balance/clearing controls, or durable cross-run `ExceptionCase` lifecycle.
+Gate 13 now implements first-class `ReconciliationScope`, `SourceDeliveryManifest`, `ReconciliationPolicyVersion`, `ReconciliationRun`, proof-derived `EvidenceCoverageCertificate`, exact `BalanceControlProof` and `CloseReadinessCertificate`. Those objects are deterministic, content-addressed and fail closed under direct tampering.
 
-Until those exist, ReFlow cannot claim production-grade close readiness, source-delivery completeness, period/account balance certification, exception ageing/ownership, or durable run orchestration. The authoritative design and revised execution order are documented in `docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`.
+The source manifest binds retained envelope IDs to an explicit ReFlow scope/account, but the current reference implementation does not authenticate the external connector/session that supplied that account identity. Production ingestion must derive merchant/provider/bank account identity from an authenticated connector or trusted integration context rather than arbitrary operator text. The existing manifest/content hashes are integrity bindings, not digital signatures from Razorpay or a bank.
 
-Materiality/tolerance, when added, will prioritize workflow only; it will not change exact proof or residual semantics.
+Likewise, the balance control proves the exact integer equation over supplied opening position, provider activity, bank-proven payout, adjustment and observed closing inputs. Gate 13 does not yet fetch or independently authenticate authoritative external opening/closing balances. It is a control proof, not a new product ledger.
+
+Materiality bands are workflow metadata only and never weaken exact Gate 7/8/9 proof or Gate 13 balance residuals.
 
 ### 24. Application persistence and authenticated workflow are not implemented yet
 
-Current stores are reference/in-memory implementations. Durable runs, proof/case history, adapter approvals, operator dispositions and authenticated ownership will require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.
+Current stores are reference/in-memory implementations. Gate 13 run/certificate objects exist, but durable run history, source manifests, proof/case history, adapter approvals, operator dispositions and authenticated ownership still require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.

@@ -34,4 +34,4 @@ python -m mypy src
 
 ## Development order
 
-Follow `docs/16_MASTER_BUILD_PLAN.md`. A later phase does not start merely to make the demo look complete while an earlier gate is red.
+Follow the latest implemented checkpoint plus `docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for all post-Gate-12 sequencing. `docs/16_MASTER_BUILD_PLAN.md` remains historical/pre-review context. A later gate does not start merely to make the demo look complete while an earlier gate is red.
