@@ -109,7 +109,7 @@ def test_negative_bank_credit_proposal_cannot_activate() -> None:
     adapter = compile_adapter(_bank_spec(), profile_rows(rows))
     report = validate_sample(adapter, rows)
     assert report.state is ActivationState.REJECTED
-    assert "positive credit" in report.error_messages[0]
+    assert "cannot be negative" in report.error_messages[0]
 
 
 def test_missing_source_column_fails_static_compilation() -> None:
