@@ -39,7 +39,7 @@ class AdapterError(ValueError):
 
 type SourceIdentity = tuple[SourceKind, str]
 
-_CANONICAL_CONTRACT_VERSION = "normalized-fixture-canonical-v1"
+_CANONICAL_CONTRACT_VERSION = "canonical-source-link-v2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,10 +47,29 @@ class SourceLink:
     source_kind: SourceKind
     source_record_id: str
     envelope_id: SourceEnvelopeId
+    canonical_record_id: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.source_record_id or self.source_record_id != self.source_record_id.strip():
+            raise ValueError("source record id must be non-empty and trimmed")
+        if self.canonical_record_id is not None and (
+            not self.canonical_record_id
+            or self.canonical_record_id != self.canonical_record_id.strip()
+        ):
+            raise ValueError("canonical record id must be non-empty and trimmed")
+
+    @property
+    def raw_identity(self) -> SourceIdentity:
+        return (self.source_kind, self.source_record_id)
+
+    @property
+    def canonical_identity(self) -> SourceIdentity:
+        return (self.source_kind, self.canonical_record_id or self.source_record_id)
 
     @property
     def identity(self) -> SourceIdentity:
-        return (self.source_kind, self.source_record_id)
+        """Backward-compatible canonical provenance lookup identity."""
+        return self.canonical_identity
 
 
 def _canonical_json_default(value: object) -> object:
@@ -115,6 +134,7 @@ def _canonical_compilation_sha256(
             key=lambda row: (
                 row.source_kind.value,
                 row.source_record_id,
+                row.canonical_record_id or row.source_record_id,
                 str(row.envelope_id),
             ),
         ),
@@ -139,13 +159,21 @@ class CanonicalBatch:
             return
 
         indexed: dict[SourceIdentity, SourceEnvelopeId] = {}
+        raw_indexed: dict[SourceIdentity, SourceEnvelopeId] = {}
         for link in self.source_links:
-            if link.identity in indexed:
+            if link.raw_identity in raw_indexed:
                 raise ValueError(
-                    "canonical batch contains duplicate source provenance identity: "
+                    "canonical batch contains duplicate raw source provenance identity: "
                     f"{link.source_kind.value}/{link.source_record_id}"
                 )
-            indexed[link.identity] = link.envelope_id
+            raw_indexed[link.raw_identity] = link.envelope_id
+            if link.canonical_identity in indexed:
+                raise ValueError(
+                    "canonical batch contains duplicate canonical provenance identity: "
+                    f"{link.source_kind.value}/"
+                    f"{link.canonical_record_id or link.source_record_id}"
+                )
+            indexed[link.canonical_identity] = link.envelope_id
 
         expected: set[SourceIdentity] = set()
         expected.update((SourceKind.MERCHANT, str(row.id)) for row in self.orders)
@@ -212,7 +240,10 @@ class CanonicalBatch:
             raise ValueError("canonical batch facts no longer match its compiled source binding")
 
     def source_index(self) -> dict[SourceIdentity, SourceEnvelopeId]:
-        return {link.identity: link.envelope_id for link in self.source_links}
+        return {link.canonical_identity: link.envelope_id for link in self.source_links}
+
+    def raw_source_index(self) -> dict[SourceIdentity, SourceEnvelopeId]:
+        return {link.raw_identity: link.envelope_id for link in self.source_links}
 
     def _bind_source_links(self, source_links: tuple[SourceLink, ...]) -> CanonicalBatch:
         if self.source_links or self.compilation_sha256 is not None:
@@ -234,6 +265,23 @@ class CanonicalBatch:
             source_links=source_links,
             compilation_sha256=digest,
         )
+
+
+def merge_canonical_batches(*batches: CanonicalBatch) -> CanonicalBatch:
+    if not batches:
+        raise ValueError("at least one canonical batch is required")
+    for batch in batches:
+        if not batch.source_links or batch.compilation_sha256 is None:
+            raise ValueError("only journal-backed canonical batches can be merged")
+    merged = CanonicalBatch(
+        orders=tuple(row for batch in batches for row in batch.orders),
+        payment_events=tuple(row for batch in batches for row in batch.payment_events),
+        recon_entries=tuple(row for batch in batches for row in batch.recon_entries),
+        settlements=tuple(row for batch in batches for row in batch.settlements),
+        bank_entries=tuple(row for batch in batches for row in batch.bank_entries),
+    )
+    links = tuple(link for batch in batches for link in batch.source_links)
+    return merged._bind_source_links(links)
 
 
 def _required(row: RawRecord, key: str) -> object:

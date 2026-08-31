@@ -11,6 +11,7 @@ from .adapters import (
     adapt_payment_event,
     adapt_recon_row,
     adapt_settlement_row,
+    merge_canonical_batches,
 )
 from .pipeline import ingest_observed_batch, journal_observed_batch
 from .records import ObservedBatch, RawRecord
@@ -30,4 +31,5 @@ __all__ = [
     "adapt_settlement_row",
     "ingest_observed_batch",
     "journal_observed_batch",
+    "merge_canonical_batches",
 ]

@@ -1289,6 +1289,216 @@ The v1 artifact serialized selected evidence primarily as row IDs and independen
 
 ---
 
+## F-0050 — Parse success could not prove integer-looking rupee/paise semantics
+
+**Date:** 2026-08-31
+**Area:** Gate 12 adapter activation
+**Severity:** safety-critical
+
+### Symptom
+A source value such as `"100"` could parse successfully under either `RUPEES_TO_PAISE` or `INTEGER_PAISE`. Sample parse success alone could therefore admit a 100x money-unit error.
+
+### Fix
+Financial controls can now independently reject unit mistakes. More importantly, first-seen AI proposals no longer auto-activate from parse success.
+
+---
+
+## F-0051 — Financial control totals did not prove identity/reference semantics
+
+**Date:** 2026-08-31
+**Area:** Gate 12 authorization policy
+**Severity:** safety-critical
+
+### Symptom
+A proposal could map the correct amount column while swapping transaction/reference semantics. The aggregate paise total would still pass.
+
+### Fix
+A passing control total is rejection evidence, not authorization. First-seen proposals remain `NEEDS_REVIEW`; automatic activation requires deterministic canonical migration equivalence.
+
+---
+
+## F-0052 — Validation state was conflated with adapter authorization
+
+**Date:** 2026-08-31
+**Area:** Gate 12 lifecycle
+**Severity:** safety-critical
+
+### Symptom
+The first lifecycle model allowed a sample-validation `APPROVED` state to flow too directly into `ApprovedAdapterVersion`, blurring “parses safely” with “authorized for operational use.”
+
+### Fix
+Activation now requires explicit typed approval evidence: `OPERATOR_REVIEW` or `MIGRATION_EQUIVALENCE`. Validation and authorization are separate contracts.
+
+---
+
+## F-0053 — Zero unsafe activations could become a vacuous benchmark result
+
+**Date:** 2026-08-31
+**Area:** Gate 12 evaluation
+**Severity:** high
+
+### Symptom
+Once first-seen AI schemas were made review-only, a proposal benchmark could report zero unsafe activations simply because no case was allowed to activate.
+
+### Fix
+Gate 12 now has a separate migration benchmark that exercises the real automatic-activation path: one safe canonical-equivalent migration must activate and unsafe unit/identity migrations must be rejected.
+
+---
+
+## F-0054 — Adapter provider had an implicit model default
+
+**Date:** 2026-08-31
+**Area:** Gate 12 provider reproducibility
+**Severity:** medium
+
+### Symptom
+The provider class embedded a default model name, making a live benchmark vulnerable to stale or silently changed model assumptions.
+
+### Fix
+Live provider use now requires an explicit model argument or `REFLOW_ADAPTER_MODEL`; artifacts record the selected model.
+
+---
+
+## F-0055 — Development adapter IDs leaked fixture intent
+
+**Date:** 2026-08-31
+**Area:** Gate 12 benchmark anti-leakage
+**Severity:** high
+
+### Symptom
+Early development adapter IDs included labels such as `integer_rupees` or `negative_credit`, which a model could use as a shortcut.
+
+### Fix
+Provider-facing adapter IDs are neutral deterministic IDs. Descriptive case labels remain post-run benchmark metadata only.
+
+---
+
+## F-0056 — Normalized schema fingerprints disagreed with exact adapter lookup semantics
+
+**Date:** 2026-08-31
+**Area:** Gate 12 drift detection
+**Severity:** high
+
+### Symptom
+A source key such as `Amount` could change to ` Amount ` while keeping the same normalized schema identity, even though the compiled adapter performs exact key lookup and would fail.
+
+### Fix
+Schema fingerprints now bind exact column names as well as normalized names/type families. Exact-key-breaking changes cannot be classified as `KNOWN_SCHEMA`.
+
+---
+
+## F-0057 — Compiler allowed overly broad source/target and constant mappings
+
+**Date:** 2026-08-31
+**Area:** Gate 12 static compiler
+**Severity:** high
+
+### Symptom
+A caller/model contract could pair an incompatible source kind with a canonical record kind, and `CONSTANT` was not narrow enough to prevent invention of authoritative money/identity/time fields.
+
+### Fix
+The compiler enforces the one-to-one supported source-kind→record-kind contract and restricts constants to narrow categorical targets. Money and datetime targets require their typed transforms.
+
+---
+
+## F-0058 — Unknown-schema proposal path bypassed journal-first ingestion
+
+**Date:** 2026-08-31
+**Area:** Gate 12 raw evidence
+**Severity:** high
+
+### Symptom
+The first proposal API profiled/modelled caller rows before they were retained as immutable source evidence.
+
+### Fix
+The supported operational API journals every unknown row first and profiles only retained payloads. Changed replay under the same raw identity is retained as conflicting evidence before failure. The pure row-level proposer is private to tests/benchmarks.
+
+---
+
+## F-0059 — Source lineage assumed raw source identity equalled canonical identity
+
+**Date:** 2026-08-31
+**Area:** Gate 12 / ingestion lineage
+**Severity:** safety-critical
+
+### Symptom
+`SourceLink` originally assumed the raw source-record ID was the same identifier later used by the canonical financial fact. That is false for arbitrary CSV/JSON rows.
+
+### Fix
+`SourceLink` now preserves distinct raw and canonical identities while retaining the immutable envelope ID. Downstream proof APIs keep canonical-identity lookup and can still cite the original raw envelope.
+
+---
+
+## F-0060 — Reviewed adapters had no explicit activation/runtime bridge
+
+**Date:** 2026-08-31
+**Area:** Gate 12 integration
+**Severity:** high
+
+### Symptom
+The compiler could propose/validate an adapter, but there was no explicit operator-review transition and approved runtime that converted retained unknown-source envelopes into a normal journal-backed `CanonicalBatch`.
+
+### Fix
+Gate 12 now has an explicit reviewed-approval action and approved-adapter runtime. Runtime rechecks schema fingerprint, reads retained journal payloads and emits raw→canonical source links. End-to-end tests feed those batches into the existing Money Graph/Gates 7–8.
+
+---
+
+## F-0061 — Validation and approval evidence were not bound to an exact adapter contract
+
+**Date:** 2026-08-31
+**Area:** Gate 12 approval integrity
+**Severity:** safety-critical
+
+### Symptom
+A structurally valid validation report or approval record could theoretically be reused with another adapter version/schema.
+
+### Fix
+`SampleValidationReport` and `AdapterApprovalEvidence` now bind adapter ID, version and schema fingerprint; validation also binds record kind. `ApprovedAdapterVersion` rejects mismatched report/profile/evidence contracts.
+
+---
+
+## F-0062 — Migration artifact verifier had a JSON tuple/list boundary bug
+
+**Date:** 2026-08-31
+**Area:** Gate 12 benchmark reproducibility
+**Severity:** medium
+
+### Symptom
+A generated migration artifact serialized tuple-based diff fields as JSON arrays, while verification compared them to freshly recomputed tuples and rejected its own valid artifact.
+
+### Fix
+Migration diff payloads use explicit JSON-native lists and the standalone generator/verifier regression now replays successfully.
+
+---
+
+## F-0063 — Model-bound sample rows lacked deterministic sensitive-value redaction
+
+**Date:** 2026-08-31
+**Area:** Gate 12 privacy boundary
+**Severity:** high
+
+### Symptom
+Bounded sample rows were sent to the proposal transport without first masking obvious address-like identifiers, long numeric identifiers or known secret-token shapes.
+
+### Fix
+The OpenAI proposal path now redacts those obvious patterns and limits sample-string length before transport. This is explicitly a heuristic privacy layer, not a DLP guarantee. Prompt-like narration remains visible as untrusted data for injection testing.
+
+---
+
+## F-0064 — Adapter-store schema routing assumed one version per fingerprint
+
+**Date:** 2026-08-31
+**Area:** Gate 12 version routing
+**Severity:** medium
+
+### Symptom
+A newer adapter implementation for an unchanged structural schema could create two versions with the same fingerprint, while the first store implementation treated that as an impossible ambiguity.
+
+### Fix
+Historical version lookup is explicit and preserved; schema routing selects the latest approved version for that fingerprint while older versions remain available for reproducibility. Source kind and record kind cannot change across the adapter lineage.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
@@ -1298,8 +1508,8 @@ These are test targets, not claimed failures:
 - exact UTR with wrong amount in real provider fixtures;
 - explicit Instant Settlement `setlod`/`setlodp` payout reconciliation;
 - late source evidence reopening a proof;
-- schema drift;
-- AI adapter inferring the wrong amount unit or debit/credit sign;
+- real-provider schema drift beyond the checked-in Gate 12 development corpus;
+- live-model adapter inference of wrong amount units, debit/credit signs or identity fields;
 - prompt-like text inside bank narration;
 - hallucinated evidence IDs;
 - AI provider outage;

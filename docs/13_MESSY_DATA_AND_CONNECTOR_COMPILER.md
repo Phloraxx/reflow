@@ -12,6 +12,28 @@ The proposed solution is an **AI-assisted Source Adapter Compiler**:
 
 The runtime reconciliation path remains deterministic.
 
+## Implemented Gate 12 contract
+
+Gate 12 is now implemented. The supported operational path is journal-first and separates proposal quality from activation authority:
+
+```text
+raw rows
+  -> immutable SourceEnvelope journal
+  -> structural profile / exact schema fingerprint
+  -> optional bounded AI AdapterSpec proposal
+  -> deterministic compile + canonical sample validation
+  -> REJECTED or NEEDS_REVIEW for first-seen schemas
+  -> explicit operator review OR canonical-equivalent migration evidence
+  -> approved adapter version
+  -> compile retained journal payloads
+  -> CanonicalBatch with raw->canonical SourceLinks
+  -> existing Money Graph / proof pipeline
+```
+
+A financial control total can reject a wrong money mapping, but cannot by itself prove identifier/reference semantics. Therefore a first-seen AI proposal never auto-activates solely because it parses or its total matches. Automatic activation is limited to deterministic migration equivalence from an already approved adapter.
+
+The optional OpenAI provider requires an explicit model, uses strict JSON-schema output with `store=false`, sends bounded/redacted samples, and has no capability to approve an adapter or assert financial truth.
+
 ---
 
 ## 1. Supported source classes
@@ -37,32 +59,21 @@ Razorpay's own Agentic Platform already demonstrates screenshot-based reconcilia
 
 ---
 
-## 2. Canonical source envelope
+## 2. Canonical source envelope and lineage
 
-No raw record goes directly into business logic.
+No unknown raw record goes directly into model inference or business logic. Gate 12 first stores each row as an immutable `SourceEnvelope` with source kind, stable raw source identity, receive time, schema version, payload hash and frozen payload. Conflicting payloads under the same raw identity are preserved before the journal fails closed.
 
-Every record is wrapped as:
+After an adapter is approved, the canonical fact retains a `SourceLink` back to that exact envelope. Gate 12 required the lineage contract to distinguish:
 
 ```text
-SourceEnvelope {
-  ingestion_id
-  source_instance_id
-  source_kind
-  source_record_id?
-  source_event_id?
-  occurred_at?
-  received_at
-  raw_payload_hash
-  adapter_id
-  adapter_version
-  schema_fingerprint
-  validation_state
-  canonical_object?
-  warnings[]
-}
+raw source identity       adapter-batch:<batch>:row:<n>
+canonical identity        bank_... / order_... / recon_... / ...
+raw evidence identity     src_...
 ```
 
-Raw bytes/text should be retained in fixtures/test data where safe, or hashed/reference-stored in deployed mode. The normalized record must always retain lineage back to the source envelope.
+Normalized Gate 4 fixtures often have the same raw and canonical ID, but unknown exports do not. `SourceLink` now preserves both identities while downstream proofs continue to resolve canonical identity -> raw envelope ID.
+
+The canonical compilation digest includes the source links, so changing the raw/canonical lineage changes compilation identity.
 
 ---
 
@@ -143,95 +154,57 @@ But semantic inference is a **proposal**, not financial truth.
 
 ---
 
-## 5. Adapter compilation pipeline
+## 5. Adapter compilation and approval pipeline
 
 ```text
-File/sample
+retained raw journal rows
    ↓
 Structural profiler
    ↓
-AI mapping proposal
+Optional AI mapping proposal
    ↓
 Typed AdapterSpec parser
    ↓
 Static validation
    ↓
-Compile to deterministic transform plan
+Finite deterministic transform plan
    ↓
-Run against sample
+Existing Gate 4 canonical adapter
    ↓
-Financial invariant tests
+Sample/invariant validation
    ↓
-Data-quality report
+Optional independent financial control
    ↓
-APPROVED / NEEDS_REVIEW / REJECTED
+REJECTED / NEEDS_REVIEW
+   ↓
+operator review OR safe migration equivalence
+   ↓
+APPROVED ADAPTER VERSION
 ```
 
-### Step A — structural profiler
+### Structural profiler
 
-Before the LLM:
+Profiles exact and normalized column names, primitive type families, null/presence counts, uniqueness and bounded samples. Schema fingerprints do not include financial row values, but they do include exact source column names because deterministic adapter lookup is exact.
 
-- detect delimiter/encoding;
-- list columns;
-- infer null rates;
-- collect type samples;
-- estimate uniqueness/cardinality;
-- detect obvious dates/numbers;
-- compute source row count;
-- compute safe sample rows.
+### AI proposal
 
-Do not send entire large files to a model.
+The model sees the requested adapter contract, target fields, allowed transforms, structural profile and bounded/redacted sample rows. It returns only `AdapterSpec`. The caller fixes adapter ID/version/source kind/record kind, and a model that changes that contract is rejected.
 
-### Step B — AI proposal
+### Static validation
 
-The model sees:
+The compiler rejects missing columns, unsupported targets/transforms, invalid source-kind↔record-kind pairings, and constants for authoritative money/ID/time fields. `CONSTANT` is restricted to narrow categorical fields.
 
-- header names;
-- small representative samples;
-- deterministic profiler output;
-- target canonical schema;
-- allowed transforms.
+### Sample execution
 
-It returns only `AdapterSpec`.
+The proposed plan canonicalizes through the existing audited adapters. Parse errors, duplicate canonical identities, sign/unit violations, invalid timestamps and other canonical contract violations reject the proposal.
 
-### Step C — static validation
+### Financial controls
 
-Reject mappings that:
+When an independent source total exists, exact integer-paise totals and row counts can reject a 100x unit error. A passing total does **not** establish identity/reference semantics and therefore does not authorize a first-seen proposal.
 
-- reference missing columns;
-- use unknown transforms;
-- map one source field incompatibly;
-- omit required canonical fields for the selected source kind;
-- define impossible unit/sign combinations.
+### Authorization
 
-### Step D — sample execution
-
-Compile and execute the adapter on a bounded sample.
-
-Collect:
-
-- parse success rate;
-- null rate after mapping;
-- value ranges;
-- unit sanity;
-- duplicate ID rate;
-- timestamp distribution;
-- debit/credit consistency;
-- currency consistency.
-
-### Step E — financial controls
-
-Where the source offers control totals, verify them.
-
-Examples:
-
-```text
-Σ parsed credits == source stated credit total
-Σ parsed debits  == source stated debit total
-parsed row count == source declared rows
-```
-
-A mapping that parses 100% of rows but is off by 100× because rupees were interpreted as paise must fail.
+First-seen valid proposals remain `NEEDS_REVIEW`. Operator approval creates typed approval evidence bound to the exact adapter ID/version/schema. Automatic activation is limited to a migration whose old/new fixtures reproduce identical canonical financial facts. Validation and authorization are separate contracts.
 
 ---
 
@@ -260,11 +233,10 @@ A connector is safe because checks pass, not because the LLM says `0.97 confiden
 
 Every ingestion batch gets a deterministic schema fingerprint derived from properties such as:
 
+- exact source column names;
 - normalized column names;
-- column count/order where relevant;
 - inferred primitive type families;
-- declared adapter source kind;
-- stable parsing configuration.
+- declared adapter/record contract outside the structural fingerprint where routing requires it.
 
 The fingerprint does **not** hash sensitive row data.
 
@@ -328,9 +300,9 @@ Existing Adapter v4
                  ↓
       replay old + new fixtures
                  ↓
-      invariants + diff report
+      canonical financial diff
                  ↓
-       approve / reject v5
+ MIGRATION_EQUIVALENCE / reject v5
 ```
 
 Critical rule:
@@ -458,18 +430,22 @@ This is economically and operationally important.
 
 ---
 
-## 15. Security boundaries
+## 15. Security and authority boundaries
 
 The adapter model:
 
-- never receives credentials;
-- never receives arbitrary filesystem access;
+- never receives repository credentials or write tools;
 - never executes generated code;
-- never issues network requests;
-- only selects from allowed transforms;
-- is given bounded samples, ideally redacted where possible.
+- only selects from the finite `AdapterSpec` vocabulary;
+- receives bounded sample rows with deterministic redaction for obvious address-like values, long numeric identifiers and known secret-token patterns;
+- treats free-text source content as untrusted data;
+- cannot choose a different adapter identity/source contract than the caller requested;
+- cannot approve a first-seen adapter;
+- cannot create reconciliation proof.
 
-The deterministic compiler owns execution.
+The redaction layer is heuristic and is **not** a production DLP guarantee. Real customer data is outside the public benchmark scope.
+
+The deterministic compiler, explicit operator-review transition and migration-equivalence validator own activation.
 
 ---
 
@@ -506,7 +482,9 @@ rows/sec after adapter is compiled
 LLM calls per 1M rows
 ```
 
-The safety target for **unit/sign semantic errors reaching reconciliation should be zero** on the benchmark. If the system is uncertain, it should quarantine.
+Gate 12 evaluates two surfaces separately: proposal semantic quality and authorization safety. The checked-in development proposal corpus has 11 cases (7 correct reviewable previews, 4 correct rejections), while the migration corpus has 3 cases (1 safe automatic activation, 2 correct unsafe rejections, 0 unsafe activations). These are development regression results, not a live-model accuracy claim.
+
+The migration benchmark makes the zero-unsafe-activation target non-vacuous by exercising a real automatic activation path. The general proposal benchmark can still count a wrong semantic preview even when the safety layer correctly keeps it out of production.
 
 ---
 

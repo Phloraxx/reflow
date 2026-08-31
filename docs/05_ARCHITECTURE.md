@@ -67,18 +67,21 @@ flowchart LR
   D --> Q
 ```
 
-## Audited implementation boundary before Gate 9
+## Audited implementation boundary through Gate 12
 
 The implementation remains intentionally compact under `src/reflow/`; the earlier monorepo/service layout below is a planning direction, not a claim that those services exist today. The current trusted path is:
 
 ```text
-normalized source records
+known normalized source records OR Gate 12 unknown-source batches
   -> immutable SourceEnvelope journal
   -> canonicalize FROM retained journal payloads
+  -> raw-identity -> canonical-identity SourceLinks
   -> source-order-invariant canonical compilation binding
   -> temporal payment reducer / Money Graph
   -> batch-wide Settlement Composition Proof
   -> batch-wide Bank Receipt Proof
+  -> immutable versioned full proof
+  -> bounded residual hypotheses
 ```
 
 Ownership rules:
@@ -89,7 +92,10 @@ Ownership rules:
 - the payment reducer owns payment-event chronology only, not refund truth;
 - Gate 7 owns batch-wide economic-identity/settlement composition checks;
 - Gate 8 owns batch-wide standard-settlement UTR/bank-receipt checks;
-- Gate 9 must combine the **already batch-safe outputs** and must not reimplement narrower matching logic.
+- Gate 9 combines the **already batch-safe outputs** and does not reimplement narrower matching logic;
+- Gate 10 produces bounded hypotheses only and cannot promote them to proof;
+- Gate 11 evaluates candidate systems against isolated hidden truth;
+- Gate 12 owns unfamiliar-schema proposal/approval/runtime lineage but emits the same canonical domain objects; no Gate-12-specific proof engine exists.
 
 The private per-settlement proof functions exist only as low-level test seams. They are not supported orchestration APIs.
 
@@ -154,6 +160,14 @@ Money = {
 ```
 
 No IEEE-754 float in domain contracts, database arithmetic or eval ground truth.
+
+## Gate 12 source-compiler side path
+
+Unknown schemas still obey journal-first ingestion. Gate 12 journals raw rows before profiling or model inference, then proposes/compiles a finite `AdapterSpec` from the retained payloads. A first-seen AI proposal cannot auto-activate. Explicit operator review or deterministic migration-equivalence evidence is required to create an approved adapter version.
+
+`SourceLink` distinguishes raw identity from canonical identity because arbitrary exports often use row/batch identities that differ from the eventual financial ID. The canonical proof layers consume canonical identity -> raw envelope provenance exactly as they do for normalized Gate 4 sources.
+
+Model/provider failure therefore affects schema understanding only. The existing deterministic financial core and approved adapters continue to operate without the model.
 
 ## Source ingestion
 

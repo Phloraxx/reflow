@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 11**:
+ReFlow implementation scope now reaches **Gate 12**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -19,9 +19,11 @@ ReFlow implementation scope now reaches **Gate 11**:
 - conservative standard-settlement Bank Receipt Proofs using exact UTR identity, exact amount and causal bank timing;
 - immutable versioned full-reconciliation proofs with knowledge cutoffs and reopening;
 - bounded deterministic residual explanation hypotheses that never promote themselves to proof;
-- a hidden-truth baseline evaluation harness with B0/B1/B2/ReFlow Core arms, semantic evidence scoring and independently verifiable benchmark artifacts.
+- a hidden-truth baseline evaluation harness with B0/B1/B2/ReFlow Core arms, semantic evidence scoring and independently verifiable benchmark artifacts;
+- a journal-first AI-assisted Source Adapter Compiler with finite declarative transforms, explicit review/migration authorization, versioned schema routing and raw→canonical provenance;
+- independently replayable Gate 12 proposal and automatic-migration development benchmarks.
 
-Gate 11 fixed development-seed results are regression evidence only. The final held-out benchmark, scale benchmark, AI layers, production Razorpay integration and operator UI are **not complete yet**.
+Gate 11 fixed development-seed results and Gate 12 development adapter/migration corpora are regression evidence only. The final held-out reconciliation benchmark, live-model adapter benchmark, scale benchmark, exception-investigation agent, production Razorpay integration and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 
@@ -126,7 +128,7 @@ The production Razorpay adapter must verify the exact identity semantics of ever
 
 The current bank adapter accepts positive settlement-credit rows. It is not a complete arbitrary bank-statement parser containing debits, balances, reversals and unrelated account traffic.
 
-Unknown bank schemas remain fail-closed until later adapter-compiler/integration work.
+Unknown bank schemas now have a Gate 12 compiler path, but first-seen AI proposals remain review-only and are not production-authorized merely because they parse. The normalized bank contract is still not a universal production bank-statement parser.
 
 ### 12. INR first
 
@@ -146,7 +148,7 @@ Fraud detection, AML transaction monitoring, sanctions screening and credit unde
 
 ### 16. Bank-format coverage is bounded
 
-The Source Adapter Compiler will be benchmarked against an adversarial family of formats, not every Indian bank/accounting export in existence.
+The Gate 12 development proposal/migration corpora exercise an adversarial family of formats, not every Indian bank/accounting export in existence. A separate live-model/provider benchmark is still required before any adapter-model quality claim.
 
 ### 17. PDF/OCR is not the core
 
@@ -191,3 +193,13 @@ The final README/pitch must disclose:
 ## Rule
 
 When reality makes ReFlow look less impressive, update this file rather than weakening the test.
+
+### 22. Gate 12 is not a production connector platform
+
+Gate 12 currently uses an in-memory adapter store and in-memory raw journal for the Buildathon reference implementation. Approval evidence is a typed, self-verifying record created by an explicit caller action; it is not an external identity/signature service and does not prove who performed a review. Production use still requires authenticated operator identity, durable persistence, access control and audit retention.
+
+First-seen AI proposals never auto-activate. Financial control totals can reject wrong money semantics but do not prove identity/reference semantics. Automatic activation is currently limited to a migration whose old/new fixture replay produces identical canonical financial facts and whose approval evidence binds the exact adapter version/schema.
+
+The OpenAI provider requires an explicit model and sends only bounded, heuristically redacted sample values with `store=false`. Redaction covers obvious address-like values, long numeric identifiers and known secret-token patterns, but it is not a DLP guarantee. Real customer/merchant data must not be used in the public benchmark.
+
+No live-model Gate 12 quality number is claimed in the repository yet because no live provider benchmark has been frozen and run. The checked-in development reference/mutation corpus validates the compiler, safety boundaries and benchmark itself, not model intelligence.

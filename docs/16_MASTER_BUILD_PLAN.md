@@ -393,28 +393,32 @@ Development seed results are regression evidence only. The final held-out seed s
 
 ## Phase 12 — Source Adapter Compiler
 
-Only now add the first LLM path.
+**Implemented; final checkpoint/merge validation in progress.** This is the first model-capable path, but the model proposes schema semantics only.
 
-### Build
+### Implemented contract
 
-- structural profiler;
-- AdapterSpec schema;
-- allowed transform registry;
-- LLM provider interface;
-- compiler;
-- static validator;
-- sample validation;
-- schema fingerprint;
-- drift detector;
-- adapter version store.
+- journal unknown source rows before profiling/inference;
+- exact-name/type schema fingerprints and drift classification;
+- finite declarative `AdapterSpec` transform registry;
+- strict source-kind ↔ canonical-record-kind contract;
+- deterministic compilation into the existing Gate 4 canonical adapters;
+- sample validation, duplicate-ID checks and optional financial control totals;
+- first-seen AI proposals are `NEEDS_REVIEW` even when controls pass;
+- explicit operator-review approval records;
+- automatic activation only from deterministic canonical-equivalent migration evidence;
+- versioned adapter store preserving historical routing;
+- raw-identity → canonical-identity `SourceLink` lineage;
+- approved-adapter runtime that feeds the existing Money Graph/Gates 7–10;
+- optional Responses API provider with strict JSON schema, explicit model, `store=false`, bounded/redacted samples;
+- independently replayable development proposal and migration benchmark artifacts.
 
 ### Gate 12
 
-Benchmark unknown schemas.
+The proposal benchmark measures semantic preview quality separately from authorization. A wrong proposal may be safely rejected/reviewed and still counts as a wrong semantic preview.
 
-Safety metric: zero wrong sign/unit adapter activations in the test corpus.
+The migration benchmark exercises the real automatic-activation path. The checked-in development corpus contains one canonical-equivalent safe migration that must activate and wrong-unit / wrong-identity migrations that must not. Development regression target: **zero unsafe automatic activations**.
 
-A wrong model proposal must demonstrably be rejected.
+These are development safety regressions, not a live-model accuracy claim. Live provider/model/version results must be recorded separately when actually run.
 
 ---
 
