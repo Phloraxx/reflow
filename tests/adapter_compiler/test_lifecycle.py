@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
+
 from reflow.adapter_compiler import (
     ActivationState,
     AdapterApprovalEvidence,
@@ -17,10 +19,10 @@ from reflow.adapter_compiler import (
     compile_adapter,
     detect_drift,
     profile_rows,
-    propose_and_validate,
     validate_sample,
 )
 from reflow.domain import SourceKind
+from reflow.adapter_compiler.provider import _propose_and_validate_rows
 
 
 def _rows() -> tuple[dict[str, object], ...]:
@@ -62,7 +64,7 @@ class FixedProvider:
 
 def test_provider_proposal_cannot_bypass_deterministic_validation() -> None:
     provider = FixedProvider(_spec())
-    result = propose_and_validate(
+    result = _propose_and_validate_rows(
         provider,
         _rows(),
         adapter_id="merchant_unknown",
@@ -75,7 +77,7 @@ def test_provider_proposal_cannot_bypass_deterministic_validation() -> None:
     assert result.sample_report.state is ActivationState.NEEDS_REVIEW
     assert "amount_paise" in provider.seen_target_fields
 
-    controlled = propose_and_validate(
+    controlled = _propose_and_validate_rows(
         provider,
         _rows(),
         adapter_id="merchant_unknown",
@@ -105,7 +107,7 @@ def test_provider_proposal_cannot_bypass_deterministic_validation() -> None:
             ),
         )
     )
-    rejected = propose_and_validate(
+    rejected = _propose_and_validate_rows(
         wrong_unit,
         _rows(),
         adapter_id="merchant_unknown",
@@ -120,7 +122,7 @@ def test_provider_proposal_cannot_bypass_deterministic_validation() -> None:
 
 def test_provider_wrong_source_contract_is_rejected_before_activation() -> None:
     wrong = FixedProvider(replace(_spec(), source_kind=SourceKind.BANK))
-    result = propose_and_validate(
+    result = _propose_and_validate_rows(
         wrong,
         _rows(),
         adapter_id="merchant_unknown",
@@ -166,6 +168,14 @@ def test_approved_adapter_store_and_drift_states() -> None:
     type_changed = tuple({**row, "Amount": 100} for row in rows)
     assert detect_drift(approved, profile_rows(type_changed)) is DriftState.BREAKING_DRIFT
 
+    renamed_by_whitespace = tuple(
+        {(" Amount " if key == "Amount" else key): value for key, value in row.items()}
+        for row in rows
+    )
+    renamed_profile = profile_rows(renamed_by_whitespace)
+    assert renamed_profile.schema_fingerprint != profile.schema_fingerprint
+    assert detect_drift(approved, renamed_profile) is DriftState.BREAKING_DRIFT
+
     assert detect_drift(None, profile) is DriftState.UNRECOGNIZED_SOURCE
 
 
@@ -186,3 +196,60 @@ def test_adapter_store_requires_monotonic_versions() -> None:
         )
         store.activate(approved)
     assert [item.spec.version for item in store.versions("merchant_unknown")] == [1, 2]
+
+
+def test_approved_adapter_version_self_verifies_and_store_preserves_contract() -> None:
+    rows = _rows()
+    profile = profile_rows(rows)
+    compiled = compile_adapter(_spec(), profile)
+    report = validate_sample(compiled, rows)
+    approved = ApprovedAdapterVersion.from_compiled(
+        compiled,
+        profile,
+        report,
+        AdapterApprovalEvidence(
+            kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+            reference="self-verification-test",
+        ),
+    )
+    with pytest.raises(ValueError, match="source columns"):
+        replace(approved, source_columns=("Wrong",))
+    with pytest.raises(ValueError, match="schema fingerprint"):
+        replace(approved, schema_fingerprint="0" * 63)
+
+    store = InMemoryAdapterStore()
+    store.activate(approved)
+    assert store.get_version("merchant_unknown", 1) == approved
+    changed = replace(
+        approved,
+        spec=replace(approved.spec, version=2, source_kind=SourceKind.BANK),
+        approval_evidence=AdapterApprovalEvidence(
+            kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+            reference="wrong-contract-test",
+        ),
+    )
+    with pytest.raises(ValueError, match="source kind"):
+        store.activate(changed)
+
+
+def test_same_schema_newer_version_routes_latest_without_losing_history() -> None:
+    rows = _rows()
+    profile = profile_rows(rows)
+    store = InMemoryAdapterStore()
+    approved_versions = []
+    for version in (1, 2):
+        compiled = compile_adapter(_spec(version), profile)
+        approved = ApprovedAdapterVersion.from_compiled(
+            compiled,
+            profile,
+            validate_sample(compiled, rows),
+            AdapterApprovalEvidence(
+                kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+                reference=f"same-schema-review-{version}",
+            ),
+        )
+        store.activate(approved)
+        approved_versions.append(approved)
+    assert store.resolve_schema("merchant_unknown", profile.schema_fingerprint) == approved_versions[-1]
+    assert store.get_version("merchant_unknown", 1) == approved_versions[0]
+    assert store.get_version("merchant_unknown", 2) == approved_versions[1]

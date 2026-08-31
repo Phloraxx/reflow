@@ -29,12 +29,8 @@ from .migration import (
 )
 from .openai_provider import OpenAIAdapterProposalProvider, OpenAIProposalError
 from .profile import ColumnProfile, StructuralProfile, profile_rows
-from .provider import (
-    AdapterProposalProvider,
-    ProposalContext,
-    ProposalEvaluation,
-    propose_and_validate,
-)
+from .proposal_pipeline import JournaledProposalEvaluation, propose_and_validate_journaled
+from .provider import AdapterProposalProvider, ProposalContext, ProposalEvaluation
 from .spec_io import AdapterSpecParseError, adapter_spec_json_schema, parse_adapter_spec_payload
 
 __all__ = [
@@ -59,6 +55,7 @@ __all__ = [
     "OpenAIProposalError",
     "ProposalContext",
     "ProposalEvaluation",
+    "JournaledProposalEvaluation",
     "SampleValidationReport",
     "StructuralProfile",
     "TransformKind",
@@ -69,7 +66,7 @@ __all__ = [
     "migration_approval_evidence",
     "parse_adapter_spec_payload",
     "profile_rows",
-    "propose_and_validate",
+    "propose_and_validate_journaled",
     "required_target_fields",
     "target_fields",
     "validate_sample",

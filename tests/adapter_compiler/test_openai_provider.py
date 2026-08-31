@@ -11,9 +11,9 @@ from reflow.adapter_compiler import (
     FinancialControlTotal,
     OpenAIAdapterProposalProvider,
     OpenAIProposalError,
-    propose_and_validate,
 )
 from reflow.domain import SourceKind
+from reflow.adapter_compiler.provider import _propose_and_validate_rows
 
 
 def _rows() -> tuple[dict[str, object], ...]:
@@ -111,7 +111,7 @@ def test_openai_provider_uses_strict_schema_bounded_data_and_store_false() -> No
         model="test-model",
         transport=transport,
     )
-    result = propose_and_validate(
+    result = _propose_and_validate_rows(
         provider,
         _rows(),
         adapter_id="bank_ai_proposal",
@@ -144,7 +144,7 @@ def test_unsafe_model_unit_proposal_is_rejected_after_structured_output() -> Non
         model="test-model",
         transport=lambda *_: _response(_spec_payload(money_transform="integer_paise")),
     )
-    result = propose_and_validate(
+    result = _propose_and_validate_rows(
         provider,
         _rows(),
         adapter_id="bank_ai_proposal",
@@ -164,7 +164,7 @@ def test_model_cannot_change_requested_adapter_identity() -> None:
         model="test-model",
         transport=lambda *_: _response(payload),
     )
-    result = propose_and_validate(
+    result = _propose_and_validate_rows(
         provider,
         _rows(),
         adapter_id="bank_ai_proposal",
@@ -184,7 +184,7 @@ def test_openai_provider_rejects_missing_output_and_refusal() -> None:
         transport=lambda *_: {"output": []},
     )
     with pytest.raises(OpenAIProposalError, match="no structured output"):
-        propose_and_validate(
+        _propose_and_validate_rows(
             missing,
             _rows(),
             adapter_id="bank_ai_proposal",
@@ -206,7 +206,7 @@ def test_openai_provider_rejects_missing_output_and_refusal() -> None:
         },
     )
     with pytest.raises(OpenAIProposalError, match="refused"):
-        propose_and_validate(
+        _propose_and_validate_rows(
             refusing,
             _rows(),
             adapter_id="bank_ai_proposal",
@@ -222,7 +222,7 @@ def test_verified_financial_control_still_requires_explicit_review() -> None:
         model="test-model",
         transport=lambda *_: _response(_spec_payload()),
     )
-    result = propose_and_validate(
+    result = _propose_and_validate_rows(
         provider,
         _rows(),
         adapter_id="bank_ai_proposal",
@@ -249,7 +249,7 @@ def test_integer_looking_rupees_wrong_unit_fails_independent_control() -> None:
         model="test-model",
         transport=lambda *_: _response(_spec_payload(money_transform="integer_paise")),
     )
-    result = propose_and_validate(
+    result = _propose_and_validate_rows(
         provider,
         rows,
         adapter_id="bank_ai_proposal",
@@ -276,7 +276,7 @@ def test_integer_looking_money_without_independent_control_stays_review_only() -
         model="test-model",
         transport=lambda *_: _response(_spec_payload(money_transform="integer_paise")),
     )
-    result = propose_and_validate(
+    result = _propose_and_validate_rows(
         provider,
         rows,
         adapter_id="bank_ai_proposal",

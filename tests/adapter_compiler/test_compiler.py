@@ -145,3 +145,23 @@ def test_duplicate_canonical_source_identity_rejects_activation() -> None:
     report = validate_sample(compile_adapter(_bank_spec(), profile_rows(rows)), rows)
     assert report.state is ActivationState.REJECTED
     assert report.duplicate_identity_count == 1
+
+
+def test_source_kind_must_match_canonical_record_contract() -> None:
+    rows = _bank_rows()
+    wrong_source = replace(_bank_spec(), source_kind=SourceKind.MERCHANT)
+    with pytest.raises(AdapterCompileError, match="requires source kind"):
+        compile_adapter(wrong_source, profile_rows(rows))
+
+
+def test_model_cannot_invent_financial_identity_or_money_with_constants() -> None:
+    rows = _bank_rows()
+    for target in ("amount_paise", "bank_entry_id", "occurred_at"):
+        mappings = tuple(
+            FieldMapping(target, TransformKind.CONSTANT, constant="100")
+            if mapping.target_field == target
+            else mapping
+            for mapping in _bank_spec().mappings
+        )
+        with pytest.raises(AdapterCompileError, match="constant transform"):
+            compile_adapter(replace(_bank_spec(), mappings=mappings), profile_rows(rows))

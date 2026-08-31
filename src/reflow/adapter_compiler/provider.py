@@ -92,7 +92,7 @@ def _apply_financial_control(
     )
 
 
-def propose_and_validate(
+def _propose_and_validate_rows(
     provider: AdapterProposalProvider,
     rows: tuple[RawRecord, ...],
     *,

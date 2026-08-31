@@ -75,6 +75,7 @@ def profile_rows(rows: tuple[RawRecord, ...], *, sample_limit: int = 5) -> Struc
         columns.append(column)
         fingerprint_columns.append(
             {
+                "name": column.name,
                 "normalized_name": column.normalized_name,
                 "type_families": list(column.type_families),
             }

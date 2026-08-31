@@ -20,6 +20,24 @@ class ApprovedAdapterVersion:
     source_type_families: tuple[tuple[str, tuple[str, ...]], ...]
     approval_evidence: AdapterApprovalEvidence
 
+    def __post_init__(self) -> None:
+        expected_columns = tuple(
+            sorted(
+                mapping.source_column
+                for mapping in self.spec.mappings
+                if mapping.source_column is not None
+            )
+        )
+        if self.source_columns != expected_columns:
+            raise ValueError("approved adapter source columns do not match its spec")
+        family_names = tuple(name for name, _ in self.source_type_families)
+        if family_names != self.source_columns:
+            raise ValueError("approved adapter source type families do not match its columns")
+        if len(self.schema_fingerprint) != 64 or any(
+            char not in "0123456789abcdef" for char in self.schema_fingerprint
+        ):
+            raise ValueError("approved adapter schema fingerprint must be lowercase SHA-256")
+
     @classmethod
     def from_compiled(
         cls,
@@ -61,8 +79,14 @@ class InMemoryAdapterStore:
 
     def activate(self, version: ApprovedAdapterVersion) -> None:
         existing = self._versions.setdefault(version.spec.adapter_id, [])
-        if existing and version.spec.version <= existing[-1].spec.version:
-            raise ValueError("adapter versions must increase monotonically")
+        if existing:
+            latest = existing[-1]
+            if version.spec.source_kind is not latest.spec.source_kind:
+                raise ValueError("adapter source kind cannot change across versions")
+            if version.spec.record_kind is not latest.spec.record_kind:
+                raise ValueError("adapter record kind cannot change across versions")
+            if version.spec.version <= latest.spec.version:
+                raise ValueError("adapter versions must increase monotonically")
         existing.append(version)
 
     def latest(self, adapter_id: str) -> ApprovedAdapterVersion | None:
@@ -76,8 +100,14 @@ class InMemoryAdapterStore:
         matches = [
             version for version in versions if version.schema_fingerprint == schema_fingerprint
         ]
+        return None if not matches else matches[-1]
+
+    def get_version(self, adapter_id: str, version: int) -> ApprovedAdapterVersion | None:
+        matches = [
+            item for item in self._versions.get(adapter_id, ()) if item.spec.version == version
+        ]
         if len(matches) > 1:
-            raise AssertionError("one schema fingerprint maps to multiple adapter versions")
+            raise AssertionError("adapter store contains duplicate version identity")
         return None if not matches else matches[0]
 
     def versions(self, adapter_id: str) -> tuple[ApprovedAdapterVersion, ...]:

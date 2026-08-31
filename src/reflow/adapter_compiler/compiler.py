@@ -81,6 +81,16 @@ _MONEY_TARGETS = frozenset(
 )
 _DATETIME_TARGETS = frozenset({"created_at", "occurred_at", "received_at", "processed_at"})
 
+_EXPECTED_SOURCE_KIND = {
+    CanonicalRecordKind.MERCHANT_ORDER: domain.SourceKind.MERCHANT,
+    CanonicalRecordKind.PAYMENT_EVENT: domain.SourceKind.RAZORPAY_EVENT,
+    CanonicalRecordKind.SETTLEMENT_RECON: domain.SourceKind.RAZORPAY_RECON,
+    CanonicalRecordKind.SETTLEMENT: domain.SourceKind.RAZORPAY_SETTLEMENT,
+    CanonicalRecordKind.BANK_ENTRY: domain.SourceKind.BANK,
+}
+
+_CONSTANT_TARGETS = frozenset({"currency", "event_kind", "entity_kind"})
+
 
 def target_fields(record_kind: CanonicalRecordKind) -> tuple[str, ...]:
     return tuple(sorted(_REQUIRED_FIELDS[record_kind] | _OPTIONAL_FIELDS[record_kind]))
@@ -91,10 +101,16 @@ def required_target_fields(record_kind: CanonicalRecordKind) -> frozenset[str]:
 
 
 def _validate_transform_target(mapping: FieldMapping) -> None:
+    if (
+        mapping.transform is TransformKind.CONSTANT
+        and mapping.target_field not in _CONSTANT_TARGETS
+    ):
+        raise AdapterCompileError(
+            f"constant transform is not allowed for target {mapping.target_field!r}"
+        )
     if mapping.target_field in _MONEY_TARGETS and mapping.transform not in {
         TransformKind.INTEGER_PAISE,
         TransformKind.RUPEES_TO_PAISE,
-        TransformKind.CONSTANT,
     }:
         raise AdapterCompileError(
             f"money target {mapping.target_field!r} requires an exact money transform"
@@ -102,7 +118,6 @@ def _validate_transform_target(mapping: FieldMapping) -> None:
     if mapping.target_field in _DATETIME_TARGETS and mapping.transform not in {
         TransformKind.ISO_DATETIME,
         TransformKind.DATE_TO_ISO_DATETIME,
-        TransformKind.CONSTANT,
     }:
         raise AdapterCompileError(
             f"datetime target {mapping.target_field!r} requires a datetime transform"
@@ -110,6 +125,11 @@ def _validate_transform_target(mapping: FieldMapping) -> None:
 
 
 def _validate_spec(spec: AdapterSpec, profile: StructuralProfile) -> None:
+    expected_source = _EXPECTED_SOURCE_KIND[spec.record_kind]
+    if spec.source_kind is not expected_source:
+        raise AdapterCompileError(
+            f"{spec.record_kind.value} adapter requires source kind {expected_source.value!r}"
+        )
     allowed_targets = _REQUIRED_FIELDS[spec.record_kind] | _OPTIONAL_FIELDS[spec.record_kind]
     mapped_targets = {mapping.target_field for mapping in spec.mappings}
     unknown = mapped_targets - allowed_targets

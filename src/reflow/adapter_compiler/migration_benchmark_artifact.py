@@ -25,7 +25,14 @@ class MigrationArtifactVerificationError(ValueError):
 
 
 def _diff_payload(diff: CanonicalMigrationDiff | None) -> dict[str, object] | None:
-    return None if diff is None else asdict(diff)
+    if diff is None:
+        return None
+    return {
+        "added_ids": list(diff.added_ids),
+        "removed_ids": list(diff.removed_ids),
+        "changed_ids": list(diff.changed_ids),
+        "unchanged_count": diff.unchanged_count,
+    }
 
 
 def migration_benchmark_payload(

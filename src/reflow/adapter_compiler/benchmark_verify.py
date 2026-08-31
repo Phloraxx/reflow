@@ -18,7 +18,7 @@ from .contracts import (
     CanonicalRecordKind,
     FinancialControlTotal,
 )
-from .provider import AdapterProposalProvider, ProposalContext, propose_and_validate
+from .provider import AdapterProposalProvider, ProposalContext, _propose_and_validate_rows
 from .spec_io import parse_adapter_spec_payload
 
 
@@ -90,7 +90,7 @@ def _recompute_case_result(
     provider = _StoredSpecProvider(proposed)
     rows = _rows(case.get("rows"))
     try:
-        evaluated = propose_and_validate(
+        evaluated = _propose_and_validate_rows(
             provider,
             rows,
             adapter_id=_string(case.get("adapter_id"), "adapter id"),

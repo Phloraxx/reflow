@@ -14,7 +14,7 @@ from .contracts import (
     CanonicalRecordKind,
     FinancialControlTotal,
 )
-from .provider import AdapterProposalProvider, propose_and_validate
+from .provider import AdapterProposalProvider, _propose_and_validate_rows
 
 ADAPTER_BENCHMARK_SCHEMA_VERSION = "gate12-adapter-benchmark-v1"
 
@@ -124,7 +124,7 @@ def run_adapter_case(
     case: AdapterBenchmarkCase,
 ) -> AdapterCaseResult:
     try:
-        evaluated = propose_and_validate(
+        evaluated = _propose_and_validate_rows(
             provider,
             case.rows,
             adapter_id=case.adapter_id,
