@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow has implemented the deterministic foundation through **Gate 8**. A pre-Gate-9 independent audit is hardening that merged foundation before full proof/versioning begins:
+ReFlow has implemented the deterministic foundation through **Gate 9** on `main`, with Gate 10 residual solving implemented on its checkpoint branch:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -16,9 +16,11 @@ ReFlow has implemented the deterministic foundation through **Gate 8**. A pre-Ga
 - journal-first raw evidence ingestion and temporal payment reduction;
 - journal-backed Money Graph construction with raw-envelope provenance;
 - deterministic Settlement Composition Proofs with identity, provenance and temporal contradiction checks;
-- conservative standard-settlement Bank Receipt Proofs using exact UTR identity, exact amount and causal bank timing.
+- conservative standard-settlement Bank Receipt Proofs using exact UTR identity, exact amount and causal bank timing;
+- immutable versioned full-reconciliation proofs with knowledge cutoffs and reopening;
+- bounded deterministic residual explanation hypotheses that never promote themselves to proof.
 
-Gate 9 full proof/versioning is implemented on its checkpoint branch. The residual solver, final evaluation harness, AI layers, production Razorpay integration and operator UI are **not complete yet**.
+Gate 10 residual solving is implemented on its checkpoint branch. The final evaluation harness, AI layers, production Razorpay integration and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 
@@ -149,9 +151,13 @@ The Source Adapter Compiler will be benchmarked against an adversarial family of
 
 CSV/JSON are P0. XLSX/PDF/screenshot ingestion remains stretch functionality.
 
-### 18. Residual solving will be bounded
+### 18. Residual solving is bounded and intentionally incomplete
 
-The solver will have strict candidate/time limits. If the solution space is large or ambiguous, the correct output is an exception.
+Gate 10 uses deterministic limits for candidate count, combination size, visited search nodes and returned solutions. It does **not** use wall-clock timeout as a correctness boundary.
+
+The current candidate families are deliberately narrow: unmatched positive bank credits and recon components already blocked by upstream proof rules. Bank over-credit/negative residual explanations, provider-specific Instant Settlement payout explanations, richer fee/refund hypotheses and cross-source semantic hypotheses remain later work.
+
+`candidate_space_truncated`, `search_budget_exhausted` and `solution_limit_reached` explicitly disclose incomplete search. An exact arithmetic explanation remains `HYPOTHESIS`; it cannot change Gate 7, Gate 8 or Gate 9 truth without new authoritative evidence.
 
 ### 19. AI providers are replaceable and fallible
 

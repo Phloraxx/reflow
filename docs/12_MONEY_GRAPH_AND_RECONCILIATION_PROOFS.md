@@ -349,41 +349,34 @@ This is important: two unrelated ₹10,000 transactions do not reconcile merely 
 
 ## 11. Residual Solver
 
-The solver operates only after exact/indexed matching has exhausted obvious paths.
+Gate 10 implements a bounded deterministic residual explanation layer **after** Gate 9. It consumes immutable `ReconciliationProofVersion` residuals and never performs proof promotion.
 
-### Goal
+### Implemented contract
 
-Find admissible explanation sets for an exact residual under bounded constraints.
+1. derive non-zero composition/bank `ResidualTarget`s from one exact proof version;
+2. enumerate only typed, raw-provenance-backed candidates from that proof's exact canonical batch;
+3. bind each candidate identity to settlement, proof version, scope, amount, disposition, reason codes and raw envelopes;
+4. classify causally impossible or already-owned evidence as `BLOCKED_EVIDENCE`;
+5. run deterministic bounded combination search;
+6. emit only exact arithmetic `HYPOTHESIS` explanations;
+7. disclose candidate truncation, node-budget exhaustion and solution-cap exhaustion explicitly.
 
-Example:
+Current candidate kinds are intentionally narrow:
 
-```text
-residual = -₹1,180
-candidate movements:
-  refund A = -₹1,000
-  fee correction = -₹180
-  adjustment B = +₹400
-  duplicate C = -₹1,180
-```
+- `UNMATCHED_BANK_CREDIT` — positive amount-only bank evidence; never identity proof;
+- `BLOCKED_RECON_COMPONENT` — recon evidence excluded by Gate 7 but useful for forensic explanation.
 
-The solver can discover possible combinations but must not immediately convert them into proven edges.
+A candidate set that numerically closes a residual still carries `NOT_FINANCIAL_PROOF`. Blocked evidence additionally carries `USES_BLOCKED_EVIDENCE`. An explanation embeds its bounded candidate objects and derives arithmetic, raw-envelope union and reason codes from them so those fields cannot drift independently.
 
-### Candidate search strategy
+### Scale shape
 
-1. partition by merchant/account/currency/time window;
-2. filter by movement type permitted for the exception;
-3. use exact amount/index lookups;
-4. run bounded subset/constraint search only within the small candidate set;
-5. return zero, one or multiple admissible explanations;
-6. require authoritative evidence before promotion to `PROVEN` where necessary.
+Public `solve_residual()` requires the exact proof, canonical batch and target, so callers cannot bypass deterministic candidate enumeration with handcrafted evidence. `ResidualCandidateIndex` is built once per canonical batch and reused by `solve_all_residuals()`. It indexes bank amount/currency, settlement-local recon rows, UTR ownership and raw source provenance so candidate discovery does not rescan the full bank feed for every residual.
 
-Potential implementation options:
+Search is bounded by deterministic `max_candidates`, `max_combination_size`, `max_nodes` and `max_solutions` values. There is no machine-dependent wall-clock correctness timeout.
 
-- bounded dynamic programming for small residual candidate sets;
-- CP-SAT / integer constraint solver as a stretch feature;
-- deterministic branch-and-bound with strict node/time caps.
+### Explicit non-claims
 
-The solver should have a deterministic timeout/fallback path.
+Candidate truncation means the returned hypotheses are not complete. `solution_limit_reached` means the configured result cap was reached, not that additional solutions definitely exist. Negative bank residual/over-credit explanations, Instant Settlement payout topology, CP-SAT and richer semantic candidate families remain future work.
 
 ---
 

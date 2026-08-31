@@ -185,7 +185,7 @@ The system then searches deterministic candidate explanations:
 - omitted refund;
 - adjustment;
 - duplicate contribution;
-- split bank credit;
+- provider-specific multi-credit payout evidence (future Instant Settlement support);
 - wrong bank candidate;
 - missing source row.
 

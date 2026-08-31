@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 9 versioned full-reconciliation proof implemented and under checkpoint validation. Deterministic core remains AI-free.**
+> **Current phase: Gate 10 deterministic residual solver implemented and under checkpoint validation. Baseline evaluation is next; the deterministic core remains AI-free.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
@@ -292,7 +292,7 @@ Final match-rate, accuracy, throughput and scale numbers will only be published 
 
 ---
 
-## Current proof gate
+## Current deterministic gates
 
 ### Gate 9 — Versioned Full Reconciliation Proof
 
@@ -310,7 +310,11 @@ A settlement gets a new immutable proof version only when its authoritative fina
 
 Late authoritative evidence creates a new version; a previously proven settlement can reopen to a non-reconciled state without rewriting history. Batch updates are staged and committed atomically.
 
-After this Gate 9 checkpoint merges, Phase 10 is the deterministic residual solver. AI remains later.
+### Gate 10 — Bounded Residual Hypotheses
+
+Gate 10 now derives non-zero residual targets from immutable Gate 9 proofs and returns bounded, deterministic explanation hypotheses. Exact arithmetic is never promoted to financial proof. Candidate identities bind the settlement, exact proof version, scope, disposition, reason codes and raw evidence; blocked or pre-settlement evidence stays visibly blocked.
+
+After the Gate 10 checkpoint merges, Phase 11 is the baseline evaluation harness. AI remains later.
 
 ---
 
@@ -392,7 +396,7 @@ CI runs the same validation path.
 - [x] Settlement Composition Proof
 - [x] Bank Receipt Proof
 - [x] full proof versioning
-- [ ] residual solver
+- [x] residual solver
 - [ ] baseline evaluation harness
 - [ ] exception fingerprinting
 - [ ] scale benchmark
