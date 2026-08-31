@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Callable
 
 from reflow import domain
 from reflow.ingestion import (
@@ -32,9 +32,19 @@ class AdapterCompileError(ValueError):
 
 
 _REQUIRED_FIELDS: dict[CanonicalRecordKind, frozenset[str]] = {
-    CanonicalRecordKind.MERCHANT_ORDER: frozenset({"order_id", "amount_paise", "currency", "created_at"}),
+    CanonicalRecordKind.MERCHANT_ORDER: frozenset(
+        {"order_id", "amount_paise", "currency", "created_at"}
+    ),
     CanonicalRecordKind.PAYMENT_EVENT: frozenset(
-        {"event_id", "payment_id", "event_kind", "amount_paise", "currency", "occurred_at", "received_at"}
+        {
+            "event_id",
+            "payment_id",
+            "event_kind",
+            "amount_paise",
+            "currency",
+            "occurred_at",
+            "received_at",
+        }
     ),
     CanonicalRecordKind.SETTLEMENT_RECON: frozenset(
         {
@@ -86,13 +96,17 @@ def _validate_transform_target(mapping: FieldMapping) -> None:
         TransformKind.RUPEES_TO_PAISE,
         TransformKind.CONSTANT,
     }:
-        raise AdapterCompileError(f"money target {mapping.target_field!r} requires an exact money transform")
+        raise AdapterCompileError(
+            f"money target {mapping.target_field!r} requires an exact money transform"
+        )
     if mapping.target_field in _DATETIME_TARGETS and mapping.transform not in {
         TransformKind.ISO_DATETIME,
         TransformKind.DATE_TO_ISO_DATETIME,
         TransformKind.CONSTANT,
     }:
-        raise AdapterCompileError(f"datetime target {mapping.target_field!r} requires a datetime transform")
+        raise AdapterCompileError(
+            f"datetime target {mapping.target_field!r} requires a datetime transform"
+        )
 
 
 def _validate_spec(spec: AdapterSpec, profile: StructuralProfile) -> None:
@@ -156,7 +170,7 @@ def _integer_paise(value: object) -> int:
 
 
 def _rupees_to_paise(value: object) -> int:
-    if isinstance(value, bool) or isinstance(value, float):
+    if isinstance(value, (bool, float)):
         raise AdapterError("rupees transform rejects bool/float inputs")
     text = str(value).strip() if isinstance(value, (str, int)) else ""
     if not text or not _GROUPED_NUMBER_RE.fullmatch(text):
@@ -240,7 +254,10 @@ class CompiledAdapter:
     schema_fingerprint: str
 
     def normalize(self, row: RawRecord) -> dict[str, object]:
-        return {mapping.target_field: _apply_mapping(row, mapping) for mapping in self.spec.mappings}
+        return {
+            mapping.target_field: _apply_mapping(row, mapping)
+            for mapping in self.spec.mappings
+        }
 
     def canonicalize(self, row: RawRecord) -> CanonicalRecord:
         return _ADAPTERS[self.spec.record_kind](self.normalize(row))
@@ -274,7 +291,9 @@ def _canonical_identity(record: CanonicalRecord) -> str:
     return str(record.id)
 
 
-def validate_sample(adapter: CompiledAdapter, rows: tuple[RawRecord, ...]) -> SampleValidationReport:
+def validate_sample(
+    adapter: CompiledAdapter, rows: tuple[RawRecord, ...]
+) -> SampleValidationReport:
     parsed: list[CanonicalRecord] = []
     errors: list[str] = []
     for index, row in enumerate(rows):

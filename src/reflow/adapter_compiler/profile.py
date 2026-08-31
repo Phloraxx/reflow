@@ -65,7 +65,12 @@ def profile_rows(rows: tuple[RawRecord, ...], *, sample_limit: int = 5) -> Struc
             present_count=len(values),
             null_count=sum(value is None for value in values),
             type_families=families,
-            unique_non_null_count=len({json.dumps(value, sort_keys=True, default=str) for value in non_null_values}),
+            unique_non_null_count=len(
+                {
+                    json.dumps(value, sort_keys=True, default=str)
+                    for value in non_null_values
+                }
+            ),
         )
         columns.append(column)
         fingerprint_columns.append(

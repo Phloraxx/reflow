@@ -36,7 +36,9 @@ class ApprovedAdapterVersion:
             if profile.column(name) is not None
         )
         if len(families) != len(source_columns):
-            raise AssertionError("compiled adapter references a column missing from approval profile")
+            raise AssertionError(
+                "compiled adapter references a column missing from approval profile"
+            )
         return cls(
             spec=adapter.spec,
             schema_fingerprint=profile.schema_fingerprint,

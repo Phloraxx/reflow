@@ -120,7 +120,10 @@ def test_approved_adapter_store_and_drift_states() -> None:
     missing_required_source = tuple(
         {key: value for key, value in row.items() if key != "Amount"} for row in rows
     )
-    assert detect_drift(approved, profile_rows(missing_required_source)) is DriftState.BREAKING_DRIFT
+    assert (
+        detect_drift(approved, profile_rows(missing_required_source))
+        is DriftState.BREAKING_DRIFT
+    )
 
     type_changed = tuple({**row, "Amount": 100} for row in rows)
     assert detect_drift(approved, profile_rows(type_changed)) is DriftState.BREAKING_DRIFT

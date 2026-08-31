@@ -84,5 +84,7 @@ def propose_and_validate(
         proposed_spec=spec,
         compiled=compiled,
         sample_report=report,
-        rejection_reason=None if report.state.value == "approved" else "sample validation rejected spec",
+        rejection_reason=(
+            None if report.state.value == "approved" else "sample validation rejected spec"
+        ),
     )
