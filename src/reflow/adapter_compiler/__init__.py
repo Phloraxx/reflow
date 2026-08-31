@@ -19,7 +19,9 @@ from .contracts import (
 )
 from .lifecycle import ApprovedAdapterVersion, InMemoryAdapterStore, detect_drift
 from .migration import CanonicalMigrationDiff, MigrationEvaluation, evaluate_migration
+from .openai_provider import OpenAIAdapterProposalProvider, OpenAIProposalError
 from .profile import ColumnProfile, StructuralProfile, profile_rows
+from .spec_io import AdapterSpecParseError, adapter_spec_json_schema, parse_adapter_spec_payload
 from .provider import (
     AdapterProposalProvider,
     ProposalContext,
@@ -31,6 +33,7 @@ __all__ = [
     "ActivationState",
     "AdapterCompileError",
     "AdapterProposalProvider",
+    "AdapterSpecParseError",
     "AdapterSpec",
     "ApprovedAdapterVersion",
     "CanonicalMigrationDiff",
@@ -41,14 +44,18 @@ __all__ = [
     "FieldMapping",
     "InMemoryAdapterStore",
     "MigrationEvaluation",
+    "OpenAIAdapterProposalProvider",
+    "OpenAIProposalError",
     "ProposalContext",
     "ProposalEvaluation",
     "SampleValidationReport",
     "StructuralProfile",
     "TransformKind",
+    "adapter_spec_json_schema",
     "compile_adapter",
     "detect_drift",
     "evaluate_migration",
+    "parse_adapter_spec_payload",
     "profile_rows",
     "propose_and_validate",
     "required_target_fields",

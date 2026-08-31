@@ -19,6 +19,8 @@ from .profile import StructuralProfile, profile_rows
 
 @dataclass(frozen=True, slots=True)
 class ProposalContext:
+    adapter_id: str
+    version: int
     source_kind: SourceKind
     record_kind: CanonicalRecordKind
     profile: StructuralProfile
@@ -47,12 +49,20 @@ def propose_and_validate(
     provider: AdapterProposalProvider,
     rows: tuple[RawRecord, ...],
     *,
+    adapter_id: str,
+    version: int,
     source_kind: SourceKind,
     record_kind: CanonicalRecordKind,
     sample_limit: int = 5,
 ) -> ProposalEvaluation:
     profile = profile_rows(rows, sample_limit=sample_limit)
+    if not adapter_id or adapter_id != adapter_id.strip():
+        raise ValueError("adapter id must be non-empty and trimmed")
+    if version < 1:
+        raise ValueError("adapter version must be positive")
     context = ProposalContext(
+        adapter_id=adapter_id,
+        version=version,
         source_kind=source_kind,
         record_kind=record_kind,
         profile=profile,
@@ -60,13 +70,18 @@ def propose_and_validate(
         allowed_transforms=tuple(TransformKind),
     )
     spec = provider.propose(context)
-    if spec.source_kind is not source_kind or spec.record_kind is not record_kind:
+    if (
+        spec.adapter_id != adapter_id
+        or spec.version != version
+        or spec.source_kind is not source_kind
+        or spec.record_kind is not record_kind
+    ):
         return ProposalEvaluation(
             context=context,
             proposed_spec=spec,
             compiled=None,
             sample_report=None,
-            rejection_reason="provider proposed a spec for the wrong source/record kind",
+            rejection_reason="provider proposed the wrong adapter identity/source contract",
         )
     try:
         compiled = compile_adapter(spec, profile)

@@ -62,6 +62,8 @@ def test_provider_proposal_cannot_bypass_deterministic_validation() -> None:
     result = propose_and_validate(
         provider,
         _rows(),
+        adapter_id="merchant_unknown",
+        version=1,
         source_kind=SourceKind.MERCHANT,
         record_kind=CanonicalRecordKind.MERCHANT_ORDER,
     )
@@ -82,6 +84,8 @@ def test_provider_proposal_cannot_bypass_deterministic_validation() -> None:
     rejected = propose_and_validate(
         wrong_unit,
         _rows(),
+        adapter_id="merchant_unknown",
+        version=1,
         source_kind=SourceKind.MERCHANT,
         record_kind=CanonicalRecordKind.MERCHANT_ORDER,
     )
@@ -95,12 +99,14 @@ def test_provider_wrong_source_contract_is_rejected_before_activation() -> None:
     result = propose_and_validate(
         wrong,
         _rows(),
+        adapter_id="merchant_unknown",
+        version=1,
         source_kind=SourceKind.MERCHANT,
         record_kind=CanonicalRecordKind.MERCHANT_ORDER,
     )
     assert not result.approved
     assert result.compiled is None
-    assert "wrong source/record kind" in (result.rejection_reason or "")
+    assert "wrong adapter identity/source contract" in (result.rejection_reason or "")
 
 
 def test_approved_adapter_store_and_drift_states() -> None:
