@@ -61,6 +61,17 @@ class InMemoryAdapterStore:
         versions = self._versions.get(adapter_id)
         return None if not versions else versions[-1]
 
+    def resolve_schema(
+        self, adapter_id: str, schema_fingerprint: str
+    ) -> ApprovedAdapterVersion | None:
+        versions = self._versions.get(adapter_id, ())
+        matches = [
+            version for version in versions if version.schema_fingerprint == schema_fingerprint
+        ]
+        if len(matches) > 1:
+            raise AssertionError("one schema fingerprint maps to multiple adapter versions")
+        return None if not matches else matches[0]
+
     def versions(self, adapter_id: str) -> tuple[ApprovedAdapterVersion, ...]:
         return tuple(self._versions.get(adapter_id, ()))
 

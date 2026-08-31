@@ -18,6 +18,7 @@ from .contracts import (
     TransformKind,
 )
 from .lifecycle import ApprovedAdapterVersion, InMemoryAdapterStore, detect_drift
+from .migration import CanonicalMigrationDiff, MigrationEvaluation, evaluate_migration
 from .profile import ColumnProfile, StructuralProfile, profile_rows
 from .provider import (
     AdapterProposalProvider,
@@ -32,12 +33,14 @@ __all__ = [
     "AdapterProposalProvider",
     "AdapterSpec",
     "ApprovedAdapterVersion",
+    "CanonicalMigrationDiff",
     "CanonicalRecordKind",
     "ColumnProfile",
     "CompiledAdapter",
     "DriftState",
     "FieldMapping",
     "InMemoryAdapterStore",
+    "MigrationEvaluation",
     "ProposalContext",
     "ProposalEvaluation",
     "SampleValidationReport",
@@ -45,6 +48,7 @@ __all__ = [
     "TransformKind",
     "compile_adapter",
     "detect_drift",
+    "evaluate_migration",
     "profile_rows",
     "propose_and_validate",
     "required_target_fields",
