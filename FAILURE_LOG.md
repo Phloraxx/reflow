@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through Gate 13 after the final local validation suite. Gate 13 remains unmerged until branch/PR validation completes.
+None currently known in the deterministic implementation through Gate 13. PR #11 merged as `91d3e6adc3bcc2c6d134bb9bbd15f54c207016b8`, and the merge-triggered `main` CI passed.
 
 ---
 
