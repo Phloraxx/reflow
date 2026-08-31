@@ -3,7 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .compiler import CompiledAdapter, SampleValidationReport
-from .contracts import ActivationState, AdapterSpec, DriftState
+from .contracts import (
+    ActivationState,
+    AdapterApprovalEvidence,
+    AdapterSpec,
+    DriftState,
+)
 from .profile import StructuralProfile
 
 
@@ -13,6 +18,7 @@ class ApprovedAdapterVersion:
     schema_fingerprint: str
     source_columns: tuple[str, ...]
     source_type_families: tuple[tuple[str, tuple[str, ...]], ...]
+    approval_evidence: AdapterApprovalEvidence
 
     @classmethod
     def from_compiled(
@@ -20,6 +26,7 @@ class ApprovedAdapterVersion:
         adapter: CompiledAdapter,
         profile: StructuralProfile,
         report: SampleValidationReport,
+        approval_evidence: AdapterApprovalEvidence,
     ) -> ApprovedAdapterVersion:
         if report.state is not ActivationState.APPROVED:
             raise ValueError("only an approved sample validation can activate an adapter")
@@ -44,6 +51,7 @@ class ApprovedAdapterVersion:
             schema_fingerprint=profile.schema_fingerprint,
             source_columns=source_columns,
             source_type_families=families,
+            approval_evidence=approval_evidence,
         )
 
 

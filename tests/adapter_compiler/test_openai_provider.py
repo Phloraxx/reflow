@@ -212,7 +212,7 @@ def test_openai_provider_rejects_missing_output_and_refusal() -> None:
         )
 
 
-def test_verified_financial_control_can_activate_correct_model_proposal() -> None:
+def test_verified_financial_control_still_requires_explicit_review() -> None:
     provider = OpenAIAdapterProposalProvider(
         api_key="test-key",
         transport=lambda *_: _response(_spec_payload()),
@@ -231,7 +231,10 @@ def test_verified_financial_control_can_activate_correct_model_proposal() -> Non
             evidence_label="synthetic bank statement control total",
         ),
     )
-    assert result.approved
+    assert not result.approved
+    assert result.sample_report is not None
+    assert result.sample_report.state is ActivationState.NEEDS_REVIEW
+    assert result.sample_report.financial_control_verified
 
 
 def test_integer_looking_rupees_wrong_unit_fails_independent_control() -> None:

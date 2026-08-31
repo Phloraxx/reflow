@@ -28,8 +28,10 @@ def test_development_adapter_benchmark_has_zero_unsafe_activations() -> None:
     results, report = run_adapter_benchmark(development_reference_provider(), cases)
     assert report.case_count == 11
     assert report.unsafe_activations == 0
-    assert report.safe_activations == report.expected_activations == 6
-    assert report.correct_reviews == report.expected_reviews == 1
+    assert report.safe_activations == report.expected_activations == 0
+    assert report.correct_reviews == report.expected_reviews == 7
+    assert report.correct_previews == 7
+    assert report.incorrect_previews == 0
     assert report.correct_rejections == report.expected_rejections == 4
     assert report.false_rejections_or_reviews == 0
     assert len(results) == len(cases)
@@ -45,7 +47,9 @@ def test_known_wrong_integer_unit_proposal_cannot_activate() -> None:
     target = next(result for result in results if result.case_id == "bench_bank_integer_rupees")
     assert target.state.value == "rejected"
     assert report.unsafe_activations == 0
-    assert report.false_rejections_or_reviews == 1
+    assert report.incorrect_previews == 1
+    assert report.false_rejections_or_reviews == 0
+    assert report.correct_reviews == report.expected_reviews - 1
 
 
 def test_uncontrolled_semantic_mapping_is_review_not_activation() -> None:

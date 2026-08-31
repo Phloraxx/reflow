@@ -11,6 +11,8 @@ from .compiler import (
 )
 from .contracts import (
     ActivationState,
+    AdapterApprovalEvidence,
+    ApprovalEvidenceKind,
     AdapterSpec,
     CanonicalRecordKind,
     DriftState,
@@ -19,7 +21,12 @@ from .contracts import (
     TransformKind,
 )
 from .lifecycle import ApprovedAdapterVersion, InMemoryAdapterStore, detect_drift
-from .migration import CanonicalMigrationDiff, MigrationEvaluation, evaluate_migration
+from .migration import (
+    CanonicalMigrationDiff,
+    MigrationEvaluation,
+    evaluate_migration,
+    migration_approval_evidence,
+)
 from .openai_provider import OpenAIAdapterProposalProvider, OpenAIProposalError
 from .profile import ColumnProfile, StructuralProfile, profile_rows
 from .provider import (
@@ -32,6 +39,8 @@ from .spec_io import AdapterSpecParseError, adapter_spec_json_schema, parse_adap
 
 __all__ = [
     "ActivationState",
+    "AdapterApprovalEvidence",
+    "ApprovalEvidenceKind",
     "AdapterCompileError",
     "AdapterProposalProvider",
     "AdapterSpec",
@@ -57,6 +66,7 @@ __all__ = [
     "compile_adapter",
     "detect_drift",
     "evaluate_migration",
+    "migration_approval_evidence",
     "parse_adapter_spec_payload",
     "profile_rows",
     "propose_and_validate",

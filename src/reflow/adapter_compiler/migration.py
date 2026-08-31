@@ -6,6 +6,7 @@ from reflow import domain
 from reflow.ingestion import RawRecord
 
 from .compiler import CanonicalRecord, CompiledAdapter, SampleValidationReport, validate_sample
+from .contracts import AdapterApprovalEvidence, ApprovalEvidenceKind
 
 
 def _identity(record: CanonicalRecord) -> str:
@@ -103,4 +104,17 @@ def evaluate_migration(
         rejection_reason=(
             None if diff.is_identical else "migration changes canonical financial output"
         ),
+    )
+
+
+def migration_approval_evidence(
+    evaluation: MigrationEvaluation,
+    *,
+    reference: str,
+) -> AdapterApprovalEvidence:
+    if not evaluation.safe_to_activate or evaluation.canonical_diff is None:
+        raise ValueError("unsafe migration cannot create approval evidence")
+    return AdapterApprovalEvidence(
+        kind=ApprovalEvidenceKind.MIGRATION_EQUIVALENCE,
+        reference=reference,
     )

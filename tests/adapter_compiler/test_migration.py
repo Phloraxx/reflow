@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from reflow.adapter_compiler import (
+    AdapterApprovalEvidence,
     AdapterSpec,
+    ApprovalEvidenceKind,
     ApprovedAdapterVersion,
     CanonicalRecordKind,
     FieldMapping,
@@ -9,6 +11,7 @@ from reflow.adapter_compiler import (
     TransformKind,
     compile_adapter,
     evaluate_migration,
+    migration_approval_evidence,
     profile_rows,
     validate_sample,
 )
@@ -97,14 +100,31 @@ def test_activating_new_version_keeps_old_schema_fingerprint_resolvable() -> Non
     store = InMemoryAdapterStore()
     old_profile = profile_rows(_old_rows())
     new_profile = profile_rows(_new_rows())
-    for spec, profile, rows in (
-        (_spec(1, amount_column="Credit"), old_profile, _old_rows()),
-        (_spec(2, amount_column="Bank Credit"), new_profile, _new_rows()),
-    ):
-        compiled = compile_adapter(spec, profile)
-        approved = ApprovedAdapterVersion.from_compiled(
-            compiled, profile, validate_sample(compiled, rows)
-        )
-        store.activate(approved)
+    current = compile_adapter(_spec(1, amount_column="Credit"), old_profile)
+    first = ApprovedAdapterVersion.from_compiled(
+        current,
+        old_profile,
+        validate_sample(current, _old_rows()),
+        AdapterApprovalEvidence(
+            kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+            reference="initial-reviewed-adapter",
+        ),
+    )
+    store.activate(first)
+
+    proposed = compile_adapter(_spec(2, amount_column="Bank Credit"), new_profile)
+    migration = evaluate_migration(
+        current,
+        proposed,
+        old_fixture_rows=_old_rows(),
+        migrated_fixture_rows=_new_rows(),
+    )
+    second = ApprovedAdapterVersion.from_compiled(
+        proposed,
+        new_profile,
+        validate_sample(proposed, _new_rows()),
+        migration_approval_evidence(migration, reference="migration-v1-to-v2"),
+    )
+    store.activate(second)
     assert store.resolve_schema("bank_migrating", old_profile.schema_fingerprint).spec.version == 1
     assert store.resolve_schema("bank_migrating", new_profile.schema_fingerprint).spec.version == 2

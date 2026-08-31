@@ -52,11 +52,6 @@ class AdapterBenchmarkCase:
             and self.financial_control is None
         ):
             raise ValueError("activatable benchmark case requires independent financial control")
-        if (
-            self.expectation is AdapterCaseExpectation.MUST_REVIEW
-            and self.financial_control is not None
-        ):
-            raise ValueError("must-review case cannot carry an activation control")
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,14 +59,12 @@ class AdapterCaseResult:
     case_id: str
     proposed_spec: AdapterSpec | None
     state: ActivationState
-    canonical_records: tuple[CanonicalRecord, ...]
+    preview_records: tuple[CanonicalRecord, ...]
     disposition_reason: str | None
 
     def __post_init__(self) -> None:
-        if self.state is ActivationState.APPROVED and not self.canonical_records:
-            raise ValueError("approved adapter case must carry canonical records")
-        if self.state is not ActivationState.APPROVED and self.canonical_records:
-            raise ValueError("non-approved adapter case cannot carry canonical records")
+        if self.state is ActivationState.APPROVED and not self.preview_records:
+            raise ValueError("approved adapter case must carry canonical preview records")
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +76,9 @@ class AdapterBenchmarkReport:
     rejected: int
     safe_activations: int
     unsafe_activations: int
+    canonical_previews: int
+    correct_previews: int
+    incorrect_previews: int
     expected_activations: int
     expected_reviews: int
     expected_rejections: int
@@ -98,6 +94,8 @@ class AdapterBenchmarkReport:
             raise ValueError("adapter case states do not partition")
         if self.safe_activations + self.unsafe_activations != self.approved:
             raise ValueError("activation safety counts do not partition")
+        if self.correct_previews + self.incorrect_previews != self.canonical_previews:
+            raise ValueError("canonical preview counts do not partition")
         if (
             self.expected_activations + self.expected_reviews + self.expected_rejections
             != self.case_count
@@ -140,7 +138,7 @@ def run_adapter_case(
             case_id=case.case_id,
             proposed_spec=None,
             state=ActivationState.REJECTED,
-            canonical_records=(),
+            preview_records=(),
             disposition_reason=f"{type(exc).__name__}: {exc}",
         )
 
@@ -149,21 +147,20 @@ def run_adapter_case(
         if evaluated.sample_report is None
         else evaluated.sample_report.state
     )
-    if state is not ActivationState.APPROVED or evaluated.compiled is None:
-        return AdapterCaseResult(
-            case_id=case.case_id,
-            proposed_spec=evaluated.proposed_spec,
-            state=state,
-            canonical_records=(),
-            disposition_reason=evaluated.rejection_reason,
-        )
-    records = tuple(evaluated.compiled.canonicalize(row) for row in case.rows)
+    preview: tuple[CanonicalRecord, ...] = ()
+    if evaluated.compiled is not None:
+        try:
+            preview = _sorted_records(
+                tuple(evaluated.compiled.canonicalize(row) for row in case.rows)
+            )
+        except (TypeError, ValueError):
+            preview = ()
     return AdapterCaseResult(
         case_id=case.case_id,
         proposed_spec=evaluated.proposed_spec,
         state=state,
-        canonical_records=_sorted_records(records),
-        disposition_reason=None,
+        preview_records=preview,
+        disposition_reason=evaluated.rejection_reason,
     )
 
 
@@ -182,13 +179,20 @@ def score_adapter_results(
     unsafe_activations = 0
     false_non_activation = 0
     correct_reviews = 0
+    correct_previews = 0
+    incorrect_previews = 0
     correct_rejections = 0
     for case_id, case in case_index.items():
         result = result_index[case_id]
+        if case.expected_records and result.preview_records:
+            if result.preview_records == _sorted_records(case.expected_records):
+                correct_previews += 1
+            else:
+                incorrect_previews += 1
         if result.state is ActivationState.APPROVED:
             if (
                 case.expectation is AdapterCaseExpectation.ACTIVATABLE
-                and result.canonical_records == _sorted_records(case.expected_records)
+                and result.preview_records == _sorted_records(case.expected_records)
             ):
                 safe_activations += 1
             else:
@@ -214,6 +218,9 @@ def score_adapter_results(
         rejected=sum(result.state is ActivationState.REJECTED for result in results),
         safe_activations=safe_activations,
         unsafe_activations=unsafe_activations,
+        canonical_previews=correct_previews + incorrect_previews,
+        correct_previews=correct_previews,
+        incorrect_previews=incorrect_previews,
         expected_activations=sum(
             case.expectation is AdapterCaseExpectation.ACTIVATABLE for case in cases
         ),
@@ -353,7 +360,7 @@ def benchmark_payload(
                     None if result.proposed_spec is None else spec_payload(result.proposed_spec)
                 ),
                 "state": result.state.value,
-                "canonical_records": [canonical_payload(row) for row in result.canonical_records],
+                "preview_records": [canonical_payload(row) for row in result.preview_records],
                 "disposition_reason": result.disposition_reason,
             }
             for result in results

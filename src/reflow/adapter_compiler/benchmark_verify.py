@@ -108,11 +108,17 @@ def _recompute_case_result(
         else evaluated.sample_report.state
     )
     records: list[dict[str, object]] = []
-    if state is ActivationState.APPROVED:
-        if evaluated.compiled is None:
-            raise AdapterArtifactVerificationError("approved proposal lost compiled adapter")
-        records = [canonical_payload(evaluated.compiled.canonicalize(row)) for row in rows]
+    if evaluated.compiled is not None:
+        try:
+            records = [
+                canonical_payload(evaluated.compiled.canonicalize(row))
+                for row in rows
+            ]
+        except (TypeError, ValueError):
+            records = []
         records.sort(key=lambda item: str(item["id"]))
+    if state is ActivationState.APPROVED and not records:
+        raise AdapterArtifactVerificationError("approved proposal lost canonical preview")
     return state, records, True
 
 
@@ -137,6 +143,8 @@ def _recompute_report(
     proposal_present: dict[str, bool] = {}
     unsafe = 0
     safe = 0
+    correct_previews = 0
+    incorrect_previews = 0
     false_non_activation = 0
     correct_reviews = 0
     correct_rejections = 0
@@ -150,7 +158,7 @@ def _recompute_report(
             raise AdapterArtifactVerificationError(
                 f"case {case_id} state differs from deterministic replay"
             )
-        stored_records = _list(result.get("canonical_records"), "canonical records")
+        stored_records = _list(result.get("preview_records"), "preview records")
         if stored_records != records:
             raise AdapterArtifactVerificationError(
                 f"case {case_id} canonical records differ from deterministic replay"
@@ -160,6 +168,11 @@ def _recompute_report(
             _string(case.get("expectation"), "case expectation")
         )
         expected = _list(case.get("expected_records"), "expected canonical records")
+        if expected and records:
+            if records == expected:
+                correct_previews += 1
+            else:
+                incorrect_previews += 1
         if state is ActivationState.APPROVED:
             if expectation is AdapterCaseExpectation.ACTIVATABLE and records == expected:
                 safe += 1
@@ -192,6 +205,9 @@ def _recompute_report(
         rejected=sum(state is ActivationState.REJECTED for state in states.values()),
         safe_activations=safe,
         unsafe_activations=unsafe,
+        canonical_previews=correct_previews + incorrect_previews,
+        correct_previews=correct_previews,
+        incorrect_previews=incorrect_previews,
         expected_activations=sum(
             item is AdapterCaseExpectation.ACTIVATABLE for item in expectations
         ),

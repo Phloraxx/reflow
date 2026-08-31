@@ -38,6 +38,23 @@ class DriftState(StrEnum):
     UNRECOGNIZED_SOURCE = "unrecognized_source"
 
 
+class ApprovalEvidenceKind(StrEnum):
+    OPERATOR_REVIEW = "operator_review"
+    MIGRATION_EQUIVALENCE = "migration_equivalence"
+
+
+@dataclass(frozen=True, slots=True)
+class AdapterApprovalEvidence:
+    kind: ApprovalEvidenceKind
+    reference: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.kind, ApprovalEvidenceKind):
+            raise TypeError("approval evidence kind must be typed")
+        if not self.reference or self.reference != self.reference.strip():
+            raise ValueError("approval evidence reference must be non-empty and trimmed")
+
+
 @dataclass(frozen=True, slots=True)
 class FinancialControlTotal:
     target_field: str
@@ -48,8 +65,14 @@ class FinancialControlTotal:
     def __post_init__(self) -> None:
         if not self.target_field or self.target_field != self.target_field.strip():
             raise ValueError("control target field must be non-empty and trimmed")
-        if isinstance(self.expected_total_paise, bool):
+        if isinstance(self.expected_total_paise, bool) or not isinstance(
+            self.expected_total_paise, int
+        ):
             raise TypeError("control total must be integer paise")
+        if isinstance(self.expected_row_count, bool) or not isinstance(
+            self.expected_row_count, int
+        ):
+            raise TypeError("control row count must be an integer")
         if self.expected_row_count < 1:
             raise ValueError("control row count must be positive")
         if not self.evidence_label or self.evidence_label != self.evidence_label.strip():

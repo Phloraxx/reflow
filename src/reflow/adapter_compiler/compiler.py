@@ -275,6 +275,7 @@ class SampleValidationReport:
     parsed_rows: int
     duplicate_identity_count: int
     error_messages: tuple[str, ...]
+    financial_control_verified: bool = False
 
     @property
     def parse_rate_numerator(self) -> int:

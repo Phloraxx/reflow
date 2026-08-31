@@ -186,7 +186,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
                     utr="UTR-BENCH-001",
                 ),
             ),
-            expectation=AdapterCaseExpectation.ACTIVATABLE,
+            expectation=AdapterCaseExpectation.MUST_REVIEW,
             financial_control=FinancialControlTotal(
                 target_field="amount_paise",
                 expected_total_paise=10000,
@@ -244,7 +244,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
                     utr="UTR-BENCH-003",
                 ),
             ),
-            expectation=AdapterCaseExpectation.ACTIVATABLE,
+            expectation=AdapterCaseExpectation.MUST_REVIEW,
             financial_control=FinancialControlTotal(
                 target_field="amount_paise",
                 expected_total_paise=4000,
@@ -274,7 +274,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
                     external_reference="RCPT-001",
                 ),
             ),
-            expectation=AdapterCaseExpectation.ACTIVATABLE,
+            expectation=AdapterCaseExpectation.MUST_REVIEW,
             financial_control=FinancialControlTotal(
                 target_field="amount_paise",
                 expected_total_paise=25050,
@@ -310,7 +310,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
                     received_at=payment_time,
                 ),
             ),
-            expectation=AdapterCaseExpectation.ACTIVATABLE,
+            expectation=AdapterCaseExpectation.MUST_REVIEW,
             financial_control=FinancialControlTotal(
                 target_field="amount_paise",
                 expected_total_paise=25050,
@@ -340,7 +340,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
                     utr="UTR-SETL-BENCH-001",
                 ),
             ),
-            expectation=AdapterCaseExpectation.ACTIVATABLE,
+            expectation=AdapterCaseExpectation.MUST_REVIEW,
             financial_control=FinancialControlTotal(
                 target_field="amount_paise",
                 expected_total_paise=24200,
@@ -380,7 +380,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
                     occurred_at=payment_time,
                 ),
             ),
-            expectation=AdapterCaseExpectation.ACTIVATABLE,
+            expectation=AdapterCaseExpectation.MUST_REVIEW,
             financial_control=FinancialControlTotal(
                 target_field="settlement_effect_paise",
                 expected_total_paise=24200,

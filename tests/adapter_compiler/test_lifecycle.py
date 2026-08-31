@@ -4,6 +4,8 @@ from dataclasses import replace
 
 from reflow.adapter_compiler import (
     ActivationState,
+    AdapterApprovalEvidence,
+    ApprovalEvidenceKind,
     AdapterSpec,
     ApprovedAdapterVersion,
     CanonicalRecordKind,
@@ -87,7 +89,10 @@ def test_provider_proposal_cannot_bypass_deterministic_validation() -> None:
             evidence_label="synthetic merchant control total",
         ),
     )
-    assert controlled.approved
+    assert not controlled.approved
+    assert controlled.sample_report is not None
+    assert controlled.sample_report.state is ActivationState.NEEDS_REVIEW
+    assert controlled.sample_report.financial_control_verified
 
     wrong_unit = FixedProvider(
         replace(
@@ -133,7 +138,15 @@ def test_approved_adapter_store_and_drift_states() -> None:
     profile = profile_rows(rows)
     compiled = compile_adapter(_spec(), profile)
     report = validate_sample(compiled, rows)
-    approved = ApprovedAdapterVersion.from_compiled(compiled, profile, report)
+    approved = ApprovedAdapterVersion.from_compiled(
+        compiled,
+        profile,
+        report,
+        AdapterApprovalEvidence(
+            kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+            reference="test-review-1",
+        ),
+    )
     store = InMemoryAdapterStore()
     store.activate(approved)
     assert store.latest("merchant_unknown") == approved
@@ -166,6 +179,10 @@ def test_adapter_store_requires_monotonic_versions() -> None:
             compiled,
             profile,
             validate_sample(compiled, rows),
+            AdapterApprovalEvidence(
+                kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+                reference=f"test-review-{version}",
+            ),
         )
         store.activate(approved)
     assert [item.spec.version for item in store.versions("merchant_unknown")] == [1, 2]

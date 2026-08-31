@@ -85,7 +85,11 @@ def _apply_financial_control(
             state=ActivationState.REJECTED,
             error_messages=(*report.error_messages, "financial control total mismatch"),
         )
-    return report
+    return replace(
+        report,
+        state=ActivationState.NEEDS_REVIEW,
+        financial_control_verified=True,
+    )
 
 
 def propose_and_validate(
@@ -149,7 +153,7 @@ def propose_and_validate(
             None
             if report.state is ActivationState.APPROVED
             else (
-                "independent financial control required before activation"
+                "explicit operator review or verified migration required before activation"
                 if report.state is ActivationState.NEEDS_REVIEW
                 else "sample or financial-control validation rejected spec"
             )
