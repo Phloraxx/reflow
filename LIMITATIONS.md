@@ -203,3 +203,15 @@ First-seen AI proposals never auto-activate. Financial control totals can reject
 The OpenAI provider requires an explicit model and sends only bounded, heuristically redacted sample values with `store=false`. Redaction covers obvious address-like values, long numeric identifiers and known secret-token patterns, but it is not a DLP guarantee. Real customer/merchant data must not be used in the public benchmark.
 
 No live-model Gate 12 quality number is claimed in the repository yet because no live provider benchmark has been frozen and run. The checked-in development reference/mutation corpus validates the compiler, safety boundaries and benchmark itself, not model intelligence.
+
+### 23. The reconciliation control plane is not implemented yet
+
+Gates 0–12 prove and explain settlement-level financial truth, but ReFlow does not yet have first-class `ReconciliationScope`, `SourceDeliveryManifest`, `ReconciliationPolicyVersion`, `ReconciliationRun`, run-level evidence-coverage certificates, balance/clearing controls, or durable cross-run `ExceptionCase` lifecycle.
+
+Until those exist, ReFlow cannot claim production-grade close readiness, source-delivery completeness, period/account balance certification, exception ageing/ownership, or durable run orchestration. The authoritative design and revised execution order are documented in `docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`.
+
+Materiality/tolerance, when added, will prioritize workflow only; it will not change exact proof or residual semantics.
+
+### 24. Application persistence and authenticated workflow are not implemented yet
+
+Current stores are reference/in-memory implementations. Durable runs, proof/case history, adapter approvals, operator dispositions and authenticated ownership will require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.

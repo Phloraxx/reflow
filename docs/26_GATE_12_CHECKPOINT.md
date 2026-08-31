@@ -2,11 +2,12 @@
 
 ## Status
 
-Gate 12 is implemented on `build/gate-12-source-adapter-compiler` and is in final documentation/merge validation.
+Gate 12 is implemented, checkpointed, merged through PR #9, and verified on `main` at `a7bf0d134dcd524a370591b023986a42c72bcae6`.
 
-Latest code-only checkpoint verified in GitHub Actions:
+Final Gate 12 checkpoint evidence:
 
-- commit: `7495ed1c93ee4ae764deb2e09b45ea76d9532bb9`
+- branch code checkpoint: `7495ed1c93ee4ae764deb2e09b45ea76d9532bb9`
+- merged `main`: `a7bf0d134dcd524a370591b023986a42c72bcae6`
 - Ruff: passed
 - strict mypy: passed across 49 source files
 - pytest: 221 passed
@@ -238,6 +239,6 @@ Live provider runs require both `OPENAI_API_KEY` and an explicit `--model`; thei
 
 ## Gate verdict
 
-The Gate 12 code contract is green at the code checkpoint. Final repository admission still requires this documentation checkpoint to pass exact-head CI, PR review CI, merge, and the resulting `main` CI.
+Gate 12 passed branch exact-head CI, independent PR-triggered CI, merge, and the resulting `main` CI with Ruff, strict mypy and 221 tests.
 
-Phase 13 must not weaken Gate 12. The exception-investigation agent may consume adapter/source health, proofs and residuals, but it cannot approve first-seen adapters, bypass the journal, manufacture canonical facts or promote hypotheses to financial proof.
+The post-Gate-12 strategic review in `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` deliberately postpones the exception-investigation agent until a deterministic reconciliation control plane and exception-case lifecycle exist. Any later agent must preserve Gate 12 boundaries: it cannot approve first-seen adapters, bypass the journal, manufacture canonical facts or promote hypotheses to financial proof.

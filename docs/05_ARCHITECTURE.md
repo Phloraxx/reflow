@@ -99,6 +99,28 @@ Ownership rules:
 
 The private per-settlement proof functions exist only as low-level test seams. They are not supported orchestration APIs.
 
+
+## Post-Gate-12 strategic control plane (planned, not implemented)
+
+The post-Gate-12 strategic review identified a missing deterministic operational layer between settlement proofs and the future investigation agent. The current implementation still stops at the Gate 12 proof/evaluation/adapter boundary. The next planned architecture adds:
+
+```text
+ReconciliationScope + SourceDeliveryManifest + PolicyVersion
+        ↓
+existing journal / canonical / proof kernel
+        ↓
+ReconciliationRun
+  ├─ EvidenceCoverageCertificate
+  ├─ BalanceControlProof
+  └─ ExceptionCase lifecycle
+        ↓
+future bounded Investigation Agent
+```
+
+These objects are **not current capabilities**. Their purpose is to make source completeness, run reproducibility, account/period boundaries, no-orphan-money coverage, close readiness and exception continuity deterministic before an LLM is allowed to investigate cases. See `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the authoritative revised sequence.
+
+The planned balance control is deliberately not a new general ledger: it verifies scoped clearing/cash-position equations using existing authoritative evidence and exact integer money. Materiality may prioritize exceptions but never weakens proof truth.
+
 ## Recommended implementation stack
 
 The exact language is less important than correctness, but the implementation should optimize for shipping a polished, inspectable system quickly.

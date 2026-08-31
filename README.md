@@ -4,18 +4,18 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 12 Source Adapter Compiler implemented on the checkpoint branch and under final documentation/merge validation. The first AI path is schema-semantic proposal only; first-seen schemas require explicit review, automatic activation is limited to deterministic migration equivalence, and AI has no financial-proof authority. Final held-out/live-model metrics have not been run or published.**
+> **Current phase: strategic post-Gate-12 architecture pause. Gates 0–12 are merged and green. Phase 13 agent work is frozen while the deterministic reconciliation control plane (run/scope/source-completeness/case/balance controls) is designed. See `docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
 It compiles messy merchant, Razorpay and bank evidence into a temporal **Money Graph**, proves how payments/refunds/transfers/adjustments compose into settlements, proves bank receipt independently, and ultimately emits a versioned machine-verifiable **Reconciliation Proof**. Anything the deterministic engine cannot prove becomes a residual, contradiction, ambiguity or exception.
 
-AI has two planned, bounded jobs:
+AI has two bounded jobs:
 
-1. **Source Adapter Synthesizer** — understand unfamiliar financial exports and propose a constrained adapter that must compile and pass deterministic financial tests before activation.
-2. **Exception Investigation Agent** — use read-only evidence/proof tools to investigate unresolved cases and propose the next safe step.
+1. **Source Adapter Compiler (implemented in Gate 12)** — understand unfamiliar financial exports and propose a constrained adapter; first-seen AI proposals remain review-only and activation is deterministic/auditable.
+2. **Exception Investigation Agent (planned, deliberately paused)** — use read-only evidence/proof/case tools to investigate unresolved cases and propose the next safe step.
 
-**The LLM never decides whether money reconciles.** Neither AI layer has been added yet.
+**The LLM never decides whether money reconciles.**
 
 ---
 
