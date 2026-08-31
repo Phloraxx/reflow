@@ -2,11 +2,15 @@
 
 ## Status
 
-Gate 13 is implemented on branch `build/gate-13-reconciliation-control-plane`, based on the strategic-review `main` checkpoint `8c28a53370c4cb30c83b42d741a74667d607a5c6`.
+Gate 13 is implemented and merged through PR #11. The implementation branch was based on the strategic-review `main` checkpoint `8c28a53370c4cb30c83b42d741a74667d607a5c6`.
 
-Code/test checkpoint commit: `19530e3286a6a2ac05acf43d34c338d738641f49`.
+Verified checkpoints:
 
-Documentation/PR merge status is intentionally recorded separately so the checkpoint does not claim an unverified merge.
+- code/test checkpoint: `19530e3286a6a2ac05acf43d34c338d738641f49`;
+- branch/documentation head: `73c717ee1ead515efab161338ef0448fc9f154a6`;
+- PR #11 merge commit on `main`: `91d3e6adc3bcc2c6d134bb9bbd15f54c207016b8`;
+- PR #11 CI: passed;
+- merge-triggered `main` CI: passed.
 
 This checkpoint follows `docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` and deliberately does **not** resume the abandoned exception-investigation-agent branch.
 

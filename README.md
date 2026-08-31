@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 13 — Reconciliation Control Plane is implemented on its review branch after the post-Gate-12 strategic pause. The old exception-agent branch remains abandoned. Gate 14 will add deterministic ExceptionCase lifecycle before any investigation agent. See `docs/28_GATE_13_CHECKPOINT.md`.**
+> **Current phase: Gate 13 — Reconciliation Control Plane is merged and green on `main` (PR #11, merge `91d3e6a`). The old exception-agent branch remains abandoned. Next is Gate 14: deterministic ExceptionCase lifecycle + fingerprints before any investigation agent. See `docs/28_GATE_13_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
