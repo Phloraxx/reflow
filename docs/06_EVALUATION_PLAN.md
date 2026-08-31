@@ -116,6 +116,24 @@ Corruptions must test the intended layer. `WRONG_RECON_AMOUNT`, for example, sta
 
 Canonical compilation identity is invariant to source-row delivery order, so row permutation cannot manufacture a new evidence version.
 
+## Gate 12 adapter-compiler evaluation
+
+Gate 12 uses a separate adapter benchmark so schema semantics are not conflated with reconciliation scoring. Candidate providers never receive hidden canonical truth.
+
+Two surfaces are measured separately:
+
+1. **proposal semantic quality** — whether the proposed spec produces the expected canonical financial facts;
+2. **authorization safety** — whether an incorrect proposal/migration crosses into an approved adapter version.
+
+First-seen AI schemas are review-only, so zero unsafe activations on that path would be vacuous by itself. The migration benchmark therefore exercises a real deterministic automatic-activation path: one canonical-equivalent migration must activate and wrong-unit / wrong-identity migrations must be rejected.
+
+Checked-in development regression corpus at Gate 12:
+
+- proposal corpus: 11 cases, 7 correct reviewable previews, 4 correct rejections;
+- migration corpus: 3 cases, 1 safe activation, 2 correct rejections, 0 unsafe activations, 0 routing failures.
+
+Both artifact families include replay verifiers. These are development harness/safety results, not live-model accuracy or final submission metrics. A live provider run must record the explicit model/version and preserve proposal quality separately from activation safety.
+
 ## Deterministic-core metrics
 
 ### 1. Settlement amount correctness

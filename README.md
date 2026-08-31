@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 11 baseline evaluation harness implemented and checkpointed. Final held-out metrics have not been run or published; next is the Source Adapter Compiler, and the deterministic financial core remains AI-free.**
+> **Current phase: Gate 12 Source Adapter Compiler implemented on the checkpoint branch and under final documentation/merge validation. The first AI path is schema-semantic proposal only; first-seen schemas require explicit review, automatic activation is limited to deterministic migration equivalence, and AI has no financial-proof authority. Final held-out/live-model metrics have not been run or published.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
@@ -322,6 +322,12 @@ Gate 10 now derives non-zero residual targets from immutable Gate 9 proofs and r
 
 Gate 11 compares B0 naive 1:1, B1 strong grouped exact, B2 fuzzy threshold and ReFlow Core on the same journal-backed canonical evidence. Candidate decisions carry the selected canonical financial facts themselves; the scorer checks semantic evidence identity rather than trusting row IDs or caller-supplied totals.
 
+### Gate 12 — AI-assisted Source Adapter Compiler
+
+Gate 12 journals an unfamiliar source before inference, profiles its exact schema, asks an optional model for a finite declarative `AdapterSpec`, and compiles that spec through the same audited canonical adapters used by the deterministic core. First-seen AI proposals never auto-activate: correct proposals remain `NEEDS_REVIEW`, deterministic controls may reject unsafe proposals early, and only explicit operator review or canonical-equivalent migration evidence can create an approved adapter version.
+
+Approved adapters preserve both raw source identity and canonical financial identity in `SourceLink`, so unknown exports enter the existing Money Graph/proof pipeline without a second reconciliation path. Development adapter and migration artifacts are independently replayable; live-model accuracy remains unclaimed until an explicit model/key benchmark is run.
+
 Benchmark JSON uses the `gate11-evaluation-v2` schema and includes a minimal post-run truth projection plus raw candidate decisions so `python -m reflow.evaluation.verify <artifact.json>` can recompute every stored report. Checked-in development seeds are regression evidence only; the final held-out benchmark remains unrun. AI remains later.
 
 ---
@@ -421,7 +427,7 @@ CI runs the same validation path.
 
 ### AI / product surface
 
-- [ ] Source Adapter Synthesizer
+- [x] Source Adapter Compiler / bounded AI proposal path
 - [ ] Exception Investigation Agent
 - [ ] operator UI
 - [ ] failure campaign

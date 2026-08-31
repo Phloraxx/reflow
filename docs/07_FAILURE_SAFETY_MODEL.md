@@ -104,22 +104,29 @@ Controls:
 - ambiguity detection;
 - fuzzy text cannot independently authorize.
 
-### Boundary E — AI investigation (planned; AI is not implemented yet)
+### Boundary E1 — AI source-adapter proposal (implemented in Gate 12)
 
-The model will not access raw arbitrary SQL or write tools.
+The first model-capable path is limited to unfamiliar-schema semantics. The model returns only a declarative `AdapterSpec`; it has no financial-proof or adapter-activation authority.
 
-Planned controls:
+Controls:
 
-- finite read-only tool registry;
-- typed arguments;
-- tool-call budget;
-- timeout;
-- enumerated root causes/actions;
-- evidence ID validation;
-- numeric-faithfulness validation;
-- deterministic proposal gate;
-- one bounded re-plan at most before escalation;
-- core reconciliation works without a model.
+- raw unknown rows are journaled before inference;
+- caller fixes adapter ID/version/source kind/record kind;
+- finite transform vocabulary; no code/SQL/shell generation;
+- strict source-kind ↔ canonical-record-kind contract;
+- money/ID/time targets cannot be invented as constants;
+- bounded samples with deterministic redaction for obvious sensitive values;
+- prompt-like source text remains untrusted data;
+- deterministic canonical sample/invariant validation;
+- independent controls may reject but cannot authorize first-seen semantics;
+- first-seen valid proposals require explicit operator review;
+- automatic activation is limited to canonical-equivalent migration evidence;
+- approval/validation records bind exact adapter version/schema;
+- approved runtime reads retained journal payloads and preserves raw→canonical lineage.
+
+### Boundary E2 — AI exception investigation (planned)
+
+The later investigation model will not access raw arbitrary SQL or write tools. Planned controls include finite read-only tools, typed arguments, tool-call budget, timeouts, evidence-ID validation, numeric-faithfulness checks, bounded re-planning and deterministic proposal validation. The core reconciliation and approved adapters must continue working without a model.
 
 ### Boundary F — actions
 
@@ -257,7 +264,7 @@ Expected result: it remains inert source text.
 - redact contact/email/UPI/card data from checked-in demo fixtures unless completely synthetic;
 - do not use real customer data in the public benchmark;
 - logs should store bounded/redacted payloads where practical;
-- model prompts should contain only the minimum evidence needed for a case.
+- model prompts should contain only the minimum evidence needed for a case; Gate 12 bounds samples and redacts obvious address-like values, long numeric identifiers and known secret-token patterns before transport. This is heuristic redaction, not a DLP guarantee.
 
 ## Human approval policy
 
