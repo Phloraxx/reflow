@@ -173,10 +173,6 @@ def run_naive_one_to_one(batch: CanonicalBatch) -> CandidateRun:
         bank = index.bank_by_amount.get(_money_key(settlement.amount), ())
         chosen_recon = recon if len(recon) == 1 else ()
         chosen_bank = bank if len(bank) == 1 else ()
-        composition_amount = _sum_recon(chosen_recon, settlement.amount.currency)
-        bank_amount = domain.sum_money(
-            [row.amount for row in chosen_bank], settlement.amount.currency
-        )
         reconciled = len(chosen_recon) == 1 and len(chosen_bank) == 1
         decisions.append(
             CandidateDecision(
