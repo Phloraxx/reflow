@@ -101,6 +101,30 @@ class CloseReadinessCertificateId(EntityId):
     prefix = "close_"
 
 
+class ExceptionTrackingKeyId(EntityId):
+    prefix = "track_"
+
+
+class ExceptionCaseId(EntityId):
+    prefix = "case_"
+
+
+class ExceptionCaseObservationId(EntityId):
+    prefix = "caseobs_"
+
+
+class ExceptionDispositionId(EntityId):
+    prefix = "disp_"
+
+
+class IncidentFingerprintId(EntityId):
+    prefix = "incident_"
+
+
+class IncidentClusterId(EntityId):
+    prefix = "cluster_"
+
+
 class ResidualCandidateId(EntityId):
     prefix = "rcand_"
 

@@ -1577,6 +1577,85 @@ Resolved in Gate 13.
 
 ---
 
+
+## F-0068 — Gate 14 rerun fixture accidentally reused one deterministic Gate 13 run identity
+
+**Date:** 2026-09-01
+**Area:** Gate 14 test quality
+**Severity:** medium
+
+### Symptom
+The first Gate 14 continuity tests changed only `completed_at` while reusing the same Gate 13 run inputs, policy, source manifests and knowledge cutoff. Gate 13 intentionally derives run identity from immutable financial inputs rather than execution timing, so the supposed “second run” had the same `ReconciliationRunId`.
+
+### Root cause
+The test fixture treated execution metadata as run identity even though Gate 13 explicitly proved that identical inputs/policy/cutoff reproduce the same run identity.
+
+### Why it matters
+A case-continuity test could have claimed cross-run behavior while actually replaying one deterministic run capsule.
+
+### Fix
+The Gate 14 rerun helper now emits a genuinely new source-delivery manifest set for the later execution while keeping the canonical economics unchanged. The second run therefore has a distinct immutable input capsule and run ID without changing the settlement tracking identity or incident semantics.
+
+### Regression protection
+The unchanged-economics, first/last-seen and out-of-order acceptance tests all use genuinely distinct Gate 13 run identities.
+
+### Status
+Resolved in Gate 14.
+
+---
+
+## F-0069 — Closed workflow could be reopened without an explicit REOPEN disposition
+
+**Date:** 2026-09-01
+**Area:** Gate 14 workflow lifecycle
+**Severity:** high
+
+### Symptom
+After an operator `CLOSE` or `ACCEPT_OPERATIONAL_VARIANCE`, a later `ACKNOWLEDGE`, `DEFER` or source-correction disposition could derive a non-closed workflow state even though no `REOPEN` action had occurred.
+
+### Root cause
+Workflow state was folded from append-only dispositions, but the append boundary did not enforce the semantic transition rule that `REOPEN` is the only action allowed to reopen an operator-closed case.
+
+### Why it matters
+Financial truth remained unchanged, but case workflow/audit history could claim a reopened operational state without the explicit action required by the contract.
+
+### Fix
+New dispositions on an operator-closed, non-green case are rejected unless the disposition is exactly `REOPEN`. Financially reconciled or superseded cases remain closed to new workflow mutations.
+
+### Regression protection
+`test_closed_workflow_requires_explicit_reopen_before_other_status_changes` and `test_reopen_changes_workflow_only`.
+
+### Status
+Resolved in Gate 14.
+
+---
+
+## F-0070 — Stale prior economics could reverse a newer case supersession
+
+**Date:** 2026-09-01
+**Area:** Gate 14 case continuity
+**Severity:** high
+
+### Symptom
+After a changed settlement amount/UTR created a new case and superseded the old one, applying an older run carrying the prior tracking identity could reactivate the old case and supersede the newer case in the opposite direction.
+
+### Root cause
+Chronology was enforced only inside each individual case history. The ledger did not maintain a monotonic last-observed timestamp for the scoped settlement across changes in tracking identity.
+
+### Why it matters
+Out-of-order processing could reverse economic supersession and reconnect current workflow to stale case identity/history. Gate 7–9 proof truth was not altered, but the operational audit trail would be wrong.
+
+### Fix
+Gate 14 now enforces settlement-level chronological monotonicity across all case identities and rejects reactivation of a tracking identity that has already been superseded. Run application remains staged/atomic, so a stale proof cannot partially append other cases before the failure is raised.
+
+### Regression protection
+`test_stale_prior_economic_identity_cannot_reverse_supersession` plus the atomic multi-case run regression.
+
+### Status
+Resolved in Gate 14.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
