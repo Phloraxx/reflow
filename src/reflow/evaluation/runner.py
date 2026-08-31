@@ -26,7 +26,9 @@ def _decision_payload(run: CandidateRun) -> dict[str, Any]:
                 "composition_amount_paise": item.composition_amount.amount_paise,
                 "bank_amount_paise": item.bank_amount.amount_paise,
                 "currency": item.settlement_amount.currency.value,
-                "composition_component_ids": [str(value) for value in item.composition_component_ids],
+                "composition_component_ids": [
+                    str(value) for value in item.composition_component_ids
+                ],
                 "bank_entry_ids": [str(value) for value in item.bank_entry_ids],
                 "reason_codes": list(item.reason_codes),
             }

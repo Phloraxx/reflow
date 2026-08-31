@@ -18,7 +18,7 @@ __all__ = [
     "EvaluationReport",
     "EvaluationResult",
     "EvaluationSourceRejected",
-    "evaluate_observation",
     "SourceRejection",
+    "evaluate_observation",
     "score_candidate_run",
 ]
