@@ -25,9 +25,9 @@ from reflow.residual_solver import (
     ResidualSolverError,
     ResidualSolverLimits,
     ResidualTarget,
+    _solve_candidate_set,
     enumerate_residual_candidates,
     residual_targets,
-    _solve_candidate_set,
     solve_all_residuals,
     solve_residual,
 )
