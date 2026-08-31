@@ -237,11 +237,11 @@ def verify_benchmark_payload(payload: Mapping[str, object]) -> tuple[EvaluationR
 
     reports_by_name: dict[str, Mapping[str, object]] = {}
     for raw_report in raw_reports:
-        report = _mapping(raw_report, "report")
-        system_name = _string(report.get("system_name"), "report system name")
+        stored_report = _mapping(raw_report, "report")
+        system_name = _string(stored_report.get("system_name"), "report system name")
         if system_name in reports_by_name:
             raise ArtifactVerificationError("artifact contains duplicate report system names")
-        reports_by_name[system_name] = report
+        reports_by_name[system_name] = stored_report
 
     recomputed: list[EvaluationReport] = []
     seen_runs: set[str] = set()
@@ -253,12 +253,12 @@ def verify_benchmark_payload(payload: Mapping[str, object]) -> tuple[EvaluationR
         stored = reports_by_name.get(run.system_name)
         if stored is None:
             raise ArtifactVerificationError(f"missing report for {run.system_name}")
-        report = score_candidate_run(truth, run)
-        if report_payload(report) != dict(stored):
+        recomputed_report = score_candidate_run(truth, run)
+        if report_payload(recomputed_report) != dict(stored):
             raise ArtifactVerificationError(
                 f"stored report does not match recomputed score for {run.system_name}"
             )
-        recomputed.append(report)
+        recomputed.append(recomputed_report)
 
     if set(reports_by_name) != seen_runs:
         raise ArtifactVerificationError("artifact contains a report without a candidate run")
