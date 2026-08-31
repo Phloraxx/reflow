@@ -34,8 +34,8 @@ None currently known in the deterministic implementation through Gate 8. Gate 8 
 
 ## F-0001 — Cross-period refund violated temporal causality
 
-**Date:** 2026-08-29  
-**Area:** simulator  
+**Date:** 2026-08-29
+**Area:** simulator
 **Severity:** high
 
 ### Symptom
@@ -74,8 +74,8 @@ Synthetic timing distributions still need later calibration against real integra
 
 ## F-0002 — Frozen source envelope contained mutable evidence
 
-**Date:** 2026-08-29  
-**Area:** engine  
+**Date:** 2026-08-29
+**Area:** engine
 **Severity:** safety-critical
 
 ### Symptom
@@ -114,8 +114,8 @@ Persistent append-only storage is still a later infrastructure phase; the curren
 
 ## F-0003 — Legitimate webhook retry could be treated as conflicting evidence
 
-**Date:** 2026-08-29  
-**Area:** engine  
+**Date:** 2026-08-29
+**Area:** engine
 **Severity:** high
 
 ### Symptom
@@ -154,8 +154,8 @@ Crash/restart idempotency requires persistent journal storage later.
 
 ## F-0004 — Money Graph topology hid duplicate recon evidence
 
-**Date:** 2026-08-29  
-**Area:** evaluation  
+**Date:** 2026-08-29
+**Area:** evaluation
 **Severity:** high
 
 ### Symptom
@@ -194,8 +194,8 @@ Graph metrics remain synthetic until the held-out benchmark phase.
 
 ## F-0005 — Refund recon validation was under-constrained
 
-**Date:** 2026-08-29  
-**Area:** ingestion  
+**Date:** 2026-08-29
+**Area:** ingestion
 **Severity:** high
 
 ### Symptom
@@ -234,8 +234,8 @@ This is not claimed as the production Razorpay Settlement Recon conversion rule.
 
 ## F-0006 — High-cardinality timestamps could cross the settlement boundary
 
-**Date:** 2026-08-29  
-**Area:** simulator  
+**Date:** 2026-08-29
+**Area:** simulator
 **Severity:** medium
 
 ### Symptom
@@ -270,8 +270,8 @@ Later performance tests must ensure generator overhead does not dominate engine 
 
 ## F-0007 — Typed IDs accepted a prefix with no identifier
 
-**Date:** 2026-08-29  
-**Area:** engine  
+**Date:** 2026-08-29
+**Area:** engine
 **Severity:** low
 
 ### Symptom
@@ -294,8 +294,8 @@ None.
 
 ## F-0008 — Append-only journal was not on the ingestion path
 
-**Date:** 2026-08-29  
-**Area:** ingestion  
+**Date:** 2026-08-29
+**Area:** ingestion
 **Severity:** safety-critical
 
 ### Symptom
@@ -334,8 +334,8 @@ The journal is currently an in-memory reference implementation. Durable crash/re
 
 ## F-0009 — Canonical objects lost their raw-envelope provenance
 
-**Date:** 2026-08-29  
-**Area:** ingestion / Money Graph  
+**Date:** 2026-08-29
+**Area:** ingestion / Money Graph
 **Severity:** safety-critical
 
 ### Symptom
@@ -374,8 +374,8 @@ Persistent raw evidence storage is still in-memory.
 
 ## F-0010 — Gate 7 compared row values before economic identity
 
-**Date:** 2026-08-29  
-**Area:** reconciliation engine  
+**Date:** 2026-08-29
+**Area:** reconciliation engine
 **Severity:** safety-critical
 
 ### Symptom
@@ -414,8 +414,8 @@ Real Razorpay recon identity semantics must be verified before generalizing the 
 
 ## F-0011 — Gate 7 could use future recon evidence
 
-**Date:** 2026-08-29  
-**Area:** reconciliation engine  
+**Date:** 2026-08-29
+**Area:** reconciliation engine
 **Severity:** safety-critical
 
 ### Symptom
@@ -454,8 +454,8 @@ Production source clocks/time semantics require source-specific validation later
 
 ## F-0012 — One economic movement could be claimed by multiple settlements
 
-**Date:** 2026-08-29  
-**Area:** reconciliation engine  
+**Date:** 2026-08-29
+**Area:** reconciliation engine
 **Severity:** safety-critical
 
 ### Symptom
@@ -494,8 +494,8 @@ The production adapter must confirm provider identity semantics for each real re
 
 ## F-0013 — Raw envelope digest and ID were not self-verifying
 
-**Date:** 2026-08-29  
-**Area:** evidence/provenance  
+**Date:** 2026-08-29
+**Area:** evidence/provenance
 **Severity:** safety-critical
 
 ### Symptom
@@ -534,8 +534,8 @@ This proves internal evidence integrity, not external authenticity. Production w
 
 ## F-0014 — Refund lifecycle was mixed into the normalized payment-event model
 
-**Date:** 2026-08-29  
-**Area:** domain / ingestion  
+**Date:** 2026-08-29
+**Area:** domain / ingestion
 **Severity:** medium
 
 ### Symptom
@@ -575,7 +575,7 @@ The current normalized event fixtures are not yet the final raw Razorpay webhook
 ## F-0015 — Synthetic split-bank truth conflated standard and Instant Settlements
 
 **Date:** 2026-08-30
-**Area:** simulator / bank proof / provider semantics  
+**Area:** simulator / bank proof / provider semantics
 **Severity:** high
 
 ### Symptom
@@ -624,7 +624,7 @@ Instant Settlement reconciliation is not implemented. It requires a separate pro
 ## F-0016 — Reused settlement UTR still attributed the same bank transaction twice
 
 **Date:** 2026-08-30
-**Area:** bank proof / identity attribution  
+**Area:** bank proof / identity attribution
 **Severity:** safety-critical
 
 ### Symptom
@@ -664,7 +664,7 @@ Gate 9 must continue treating accepted attribution fields as proof-state-depende
 ## F-0017 — Same-amount diagnostics could make Gate 8 proof payloads approach quadratic growth
 
 **Date:** 2026-08-30
-**Area:** bank proof / scale  
+**Area:** bank proof / scale
 **Severity:** high
 
 ### Symptom
@@ -704,7 +704,7 @@ Final throughput, memory and maximum-volume claims still require the dedicated b
 ## F-0018 — Valid low-cardinality world configuration could create a non-positive cross-period settlement
 
 **Date:** 2026-08-30
-**Area:** simulator / evaluation  
+**Area:** simulator / evaluation
 **Severity:** high
 
 ### Symptom
@@ -1172,6 +1172,120 @@ The pure combination-search function was exposed as the supported single-residua
 
 ### Fix
 Public `solve_residual()` now requires the immutable `ReconciliationProofVersion`, its exact `CanonicalBatch` and the target. It derives candidates through the audited enumerator before invoking the private `_solve_candidate_set()` test seam. `solve_all_residuals()` uses the same safe path with one reusable batch index.
+
+---
+
+---
+
+## F-0042 — Scorer treated settlement truth as sufficient for auto-match correctness
+
+**Date:** 2026-08-31
+**Area:** Gate 11 scorer
+**Severity:** safety-critical
+
+### Symptom
+An auto-approved settlement could be counted as true merely because the settlement really reconciled, even when the candidate cited the wrong bank/recon evidence.
+
+### Root cause
+The first scorer classified settlement status rather than the candidate's exact financial proof claim.
+
+### Fix
+True auto-reconciliation now requires correct truth state, amount and semantically exact selected composition/bank evidence. Wrong identity contributes to the silent false-auto-match numerator.
+
+---
+
+## F-0043 — Candidate decisions could supply financial totals independently of selected evidence
+
+**Date:** 2026-08-31
+**Area:** Gate 11 candidate contract
+**Severity:** high
+
+### Symptom
+A candidate could select one set of evidence while separately reporting composition/bank totals that made its residual look better.
+
+### Fix
+Candidate decisions now carry selected canonical recon/bank facts. Amounts, IDs and residuals are derived properties.
+
+---
+## F-0044 — Baseline implementations had unfair repeated full-feed scans
+
+**Date:** 2026-08-31
+**Area:** Gate 11 baseline fairness
+**Severity:** high
+
+### Symptom
+B0/B1/B2 initially rescanned recon/bank collections per settlement while ReFlow already used indexed processing, making future throughput comparison structurally unfair.
+
+### Fix
+All baselines now build one-pass amount/UTR/settlement indexes before per-settlement work.
+
+---
+
+## F-0045 — Evaluation report fields were not fully self-verifying
+
+**Date:** 2026-08-31
+**Area:** Gate 11 metric integrity
+**Severity:** high
+
+### Symptom
+Derived recall/false-match/count fields could be reconstructed inconsistently even when the underlying integer counts disagreed.
+
+### Fix
+`EvaluationReport` validates decision partitions, status totals, denominators, recall and silent-false-rate fields against its primitive counts.
+
+---
+## F-0046 — Benchmark artifacts could not independently reproduce stored metrics
+
+**Date:** 2026-08-31
+**Area:** Gate 11 reproducibility
+**Severity:** high
+
+### Symptom
+The first JSON artifact stored raw decisions and reports but omitted the minimal post-run truth required to recompute scores independently.
+
+### Fix
+Artifacts now include a minimal financial truth projection plus a verifier that reconstructs candidate decisions and recomputes all reports from scratch.
+
+---
+
+## F-0047 — Stable evidence IDs could hide corrupted economic meaning
+
+**Date:** 2026-08-31
+**Area:** Gate 11 semantic scoring
+**Severity:** safety-critical
+
+### Symptom
+A corrupted recon/bank fact could retain its original row ID. ID-only edge scoring could therefore count changed economic meaning as correct evidence.
+
+### Fix
+Candidate decisions carry selected canonical evidence objects. Semantic edge fingerprints include financially relevant normalized fields and causal validity; narration-only noise is excluded.
+
+---
+## F-0048 — Strong grouped baseline omitted deterministic identity safeguards
+
+**Date:** 2026-08-31
+**Area:** Gate 11 baseline design
+**Severity:** high
+
+### Symptom
+The initial B1 grouped-exact arm could reconcile without checking duplicate economic identities, cross-settlement ownership reuse, or settlement-UTR reuse.
+
+### Fix
+B1 now applies those deterministic uniqueness checks and refuses structurally unsafe grouped matches.
+
+---
+
+## F-0049 — Evaluation artifact schema stored evidence references without semantic closure
+
+**Date:** 2026-08-31
+**Area:** Gate 11 artifact contract
+**Severity:** high
+
+### Symptom
+The v1 artifact serialized selected evidence primarily as row IDs and independently supplied amounts, so a reviewer could not reconstruct the exact observed financial facts used by a candidate.
+
+### Fix
+`gate11-evaluation-v2` serializes selected canonical recon/bank evidence, derives decision amounts/IDs from those facts, and verifies the serialized derived totals during parsing.
 
 ---
 
