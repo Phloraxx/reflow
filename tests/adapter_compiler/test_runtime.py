@@ -100,9 +100,13 @@ def test_rejected_or_schema_changed_adapter_cannot_enter_runtime() -> None:
     approved = approve_reviewed_proposal(evaluation, reference="operator-reviewed:bank")
     assert batch.bank_entries
     foreign_case = _case("bench_bank_prompt_data")
+    renamed_rows = tuple(
+        {("Bank Credit" if key == "Credit" else key): value for key, value in row.items()}
+        for row in foreign_case.rows
+    )
     foreign_eval = propose_and_validate_journaled(
         development_reference_provider(),
-        foreign_case.rows,
+        renamed_rows,
         journal,
         batch_id="runtime-foreign-schema",
         received_at=_RECEIVED_AT,
