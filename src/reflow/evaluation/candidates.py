@@ -94,7 +94,10 @@ def run_naive_one_to_one(batch: CanonicalBatch) -> CandidateRun:
     return CandidateRun("B0_naive_1to1", tuple(decisions))
 
 
-def _grouped_recon(batch: CanonicalBatch, settlement_id: domain.SettlementId):
+def _grouped_recon(
+    batch: CanonicalBatch,
+    settlement_id: domain.SettlementId,
+) -> tuple[domain.SettlementReconEntry, ...]:
     return tuple(
         sorted(
             (row for row in batch.recon_entries if row.settlement_id == settlement_id),
