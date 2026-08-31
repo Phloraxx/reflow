@@ -21,7 +21,9 @@ def _index_records(
         record = adapter.canonicalize(row)
         identity = _identity(record)
         if identity in indexed:
-            raise ValueError(f"migration fixture contains duplicate canonical identity {identity!r}")
+            raise ValueError(
+            f"migration fixture contains duplicate canonical identity {identity!r}"
+        )
         indexed[identity] = record
     return indexed
 
@@ -56,7 +58,7 @@ def evaluate_migration(
 ) -> MigrationEvaluation:
     old_validation = validate_sample(current, old_fixture_rows)
     new_validation = validate_sample(proposed, migrated_fixture_rows)
-    if not old_validation.state.value == "approved":
+    if old_validation.state.value != "approved":
         return MigrationEvaluation(
             old_validation=old_validation,
             new_validation=new_validation,
@@ -64,7 +66,7 @@ def evaluate_migration(
             safe_to_activate=False,
             rejection_reason="current adapter no longer replays its historical fixture corpus",
         )
-    if not new_validation.state.value == "approved":
+    if new_validation.state.value != "approved":
         return MigrationEvaluation(
             old_validation=old_validation,
             new_validation=new_validation,
@@ -78,7 +80,13 @@ def evaluate_migration(
     old_ids = set(old_records)
     new_ids = set(new_records)
     common = old_ids & new_ids
-    changed = tuple(sorted(identity for identity in common if old_records[identity] != new_records[identity]))
+    changed = tuple(
+        sorted(
+            identity
+            for identity in common
+            if old_records[identity] != new_records[identity]
+        )
+    )
     diff = CanonicalMigrationDiff(
         added_ids=tuple(sorted(new_ids - old_ids)),
         removed_ids=tuple(sorted(old_ids - new_ids)),
@@ -90,5 +98,7 @@ def evaluate_migration(
         new_validation=new_validation,
         canonical_diff=diff,
         safe_to_activate=diff.is_identical,
-        rejection_reason=None if diff.is_identical else "migration changes canonical financial output",
+        rejection_reason=(
+            None if diff.is_identical else "migration changes canonical financial output"
+        ),
     )

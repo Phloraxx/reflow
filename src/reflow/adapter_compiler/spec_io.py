@@ -84,7 +84,9 @@ def parse_adapter_spec_payload(payload: object) -> AdapterSpec:
     for raw in raw_mappings:
         item = _mapping(raw, "field mapping")
         constant = item.get("constant")
-        if constant is not None and (isinstance(constant, bool) or not isinstance(constant, (str, int))):
+        if constant is not None and (
+            isinstance(constant, bool) or not isinstance(constant, (str, int))
+        ):
             raise AdapterSpecParseError("mapping constant must be string, integer or null")
         mappings.append(
             FieldMapping(
