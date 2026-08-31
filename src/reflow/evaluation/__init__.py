@@ -7,7 +7,15 @@ from .harness import (
     SourceRejection,
     evaluate_observation,
 )
-from .scoring import CountMetric, EdgeMetrics, EvaluationReport, score_candidate_run
+from .scoring import (
+    CountMetric,
+    EdgeMetrics,
+    EvaluationReport,
+    EvaluationTruth,
+    EvaluationTruthSettlement,
+    project_hidden_truth,
+    score_candidate_run,
+)
 
 __all__ = [
     "CandidateDecision",
@@ -18,7 +26,10 @@ __all__ = [
     "EvaluationReport",
     "EvaluationResult",
     "EvaluationSourceRejected",
+    "EvaluationTruth",
+    "EvaluationTruthSettlement",
     "SourceRejection",
     "evaluate_observation",
+    "project_hidden_truth",
     "score_candidate_run",
 ]

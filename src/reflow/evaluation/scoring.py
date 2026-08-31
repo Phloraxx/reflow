@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from reflow.domain import SettlementId
+from reflow import domain
 from reflow.simulator.truth import BankExpectation, HiddenWorld
 
 from .candidates import CandidateRun
@@ -27,6 +27,57 @@ class EdgeMetrics:
     def __post_init__(self) -> None:
         if min(self.true_positive, self.false_positive, self.false_negative) < 0:
             raise ValueError("edge metric counts cannot be negative")
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationTruthSettlement:
+    settlement_id: domain.SettlementId
+    settlement_amount: domain.Money
+    composition_component_ids: tuple[domain.ReconEntryId, ...]
+    bank_entry_ids: tuple[domain.BankEntryId, ...]
+    bank_expectation: BankExpectation
+
+    def __post_init__(self) -> None:
+        if self.composition_component_ids != tuple(
+            sorted(set(self.composition_component_ids), key=str)
+        ):
+            raise ValueError("truth composition ids must be unique and sorted")
+        if self.bank_entry_ids != tuple(sorted(set(self.bank_entry_ids), key=str)):
+            raise ValueError("truth bank ids must be unique and sorted")
+
+    @property
+    def reconciled(self) -> bool:
+        return self.bank_expectation is BankExpectation.MATCHED
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluationTruth:
+    settlements: tuple[EvaluationTruthSettlement, ...]
+
+    def __post_init__(self) -> None:
+        ids = [item.settlement_id for item in self.settlements]
+        if len(set(ids)) != len(ids):
+            raise ValueError("evaluation truth contains duplicate settlement ids")
+        expected = tuple(sorted(self.settlements, key=lambda item: str(item.settlement_id)))
+        if self.settlements != expected:
+            raise ValueError("evaluation truth settlements must be sorted")
+
+
+def project_hidden_truth(world: HiddenWorld) -> EvaluationTruth:
+    """Expose only the minimal post-run truth needed to score candidate decisions."""
+    settlements = tuple(
+        EvaluationTruthSettlement(
+            settlement_id=case.settlement.id,
+            settlement_amount=case.settlement.amount,
+            composition_component_ids=tuple(
+                sorted((row.id for row in case.recon_entries), key=str)
+            ),
+            bank_entry_ids=tuple(sorted((row.id for row in case.bank_entries), key=str)),
+            bank_expectation=case.bank_expectation,
+        )
+        for case in sorted(world.cases, key=lambda item: str(item.settlement.id))
+    )
+    return EvaluationTruth(settlements)
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,12 +137,15 @@ class EvaluationReport:
 type ScoredEdge = tuple[str, str]
 
 
-def _truth_edges(world: HiddenWorld) -> tuple[set[ScoredEdge], set[ScoredEdge]]:
+def _truth_edges(truth: EvaluationTruth) -> tuple[set[ScoredEdge], set[ScoredEdge]]:
     composition: set[ScoredEdge] = set()
     bank: set[ScoredEdge] = set()
-    for case in world.cases:
-        composition.update((str(row.id), str(case.settlement.id)) for row in case.recon_entries)
-        bank.update((str(row.id), str(case.settlement.id)) for row in case.bank_entries)
+    for item in truth.settlements:
+        composition.update(
+            (str(row_id), str(item.settlement_id))
+            for row_id in item.composition_component_ids
+        )
+        bank.update((str(row_id), str(item.settlement_id)) for row_id in item.bank_entry_ids)
     return composition, bank
 
 
@@ -103,36 +157,32 @@ def _edge_metrics(predicted: set[ScoredEdge], truth: set[ScoredEdge]) -> EdgeMet
     )
 
 
-def score_candidate_run(world: HiddenWorld, run: CandidateRun) -> EvaluationReport:
-    truth_by_settlement = {case.settlement.id: case for case in world.cases}
+def score_candidate_run(truth: EvaluationTruth, run: CandidateRun) -> EvaluationReport:
+    truth_by_settlement = {item.settlement_id: item for item in truth.settlements}
     decisions = {decision.settlement_id: decision for decision in run.decisions}
     unknown = set(decisions) - set(truth_by_settlement)
     if unknown:
         raise ValueError(f"candidate run contains unknown settlements: {sorted(map(str, unknown))}")
 
     truth_reconciled_ids = {
-        case.settlement.id
-        for case in world.cases
-        if case.bank_expectation is BankExpectation.MATCHED
+        item.settlement_id for item in truth.settlements if item.reconciled
     }
     predicted_reconciled_ids = {
         settlement_id
         for settlement_id, decision in decisions.items()
         if decision.auto_reconciled
     }
-    true_auto_ids: set[SettlementId] = set()
+    true_auto_ids: set[domain.SettlementId] = set()
     for settlement_id in predicted_reconciled_ids:
         decision = decisions[settlement_id]
-        truth = truth_by_settlement[settlement_id]
-        truth_component_ids = {row.id for row in truth.recon_entries}
-        truth_bank_ids = {row.id for row in truth.bank_entries}
+        expected = truth_by_settlement[settlement_id]
         if (
-            truth.bank_expectation is BankExpectation.MATCHED
-            and decision.settlement_amount == truth.settlement.amount
-            and decision.composition_amount == truth.settlement.amount
-            and decision.bank_amount == truth.settlement.amount
-            and set(decision.composition_component_ids) == truth_component_ids
-            and set(decision.bank_entry_ids) == truth_bank_ids
+            expected.reconciled
+            and decision.settlement_amount == expected.settlement_amount
+            and decision.composition_amount == expected.settlement_amount
+            and decision.bank_amount == expected.settlement_amount
+            and decision.composition_component_ids == expected.composition_component_ids
+            and decision.bank_entry_ids == expected.bank_entry_ids
         ):
             true_auto_ids.add(settlement_id)
     true_auto = len(true_auto_ids)
@@ -145,10 +195,10 @@ def score_candidate_run(world: HiddenWorld, run: CandidateRun) -> EvaluationRepo
     predicted_composition_edges: set[ScoredEdge] = set()
     predicted_bank_edges: set[ScoredEdge] = set()
     for settlement_id, decision in decisions.items():
-        truth = truth_by_settlement[settlement_id]
-        if decision.settlement_amount == truth.settlement.amount:
+        expected = truth_by_settlement[settlement_id]
+        if decision.settlement_amount == expected.settlement_amount:
             settlement_correct += 1
-        if decision.composition_amount == truth.settlement.amount:
+        if decision.composition_amount == expected.settlement_amount:
             composition_correct += 1
         reported_residual += abs(decision.composition_residual.amount_paise)
         reported_residual += abs(decision.bank_residual.amount_paise)
@@ -159,22 +209,22 @@ def score_candidate_run(world: HiddenWorld, run: CandidateRun) -> EvaluationRepo
             (str(row_id), str(settlement_id)) for row_id in decision.bank_entry_ids
         )
 
-    truth_composition_edges, truth_bank_edges = _truth_edges(world)
+    truth_composition_edges, truth_bank_edges = _truth_edges(truth)
     auto_count = len(predicted_reconciled_ids)
     truth_count = len(truth_reconciled_ids)
     return EvaluationReport(
         system_name=run.system_name,
-        settlement_count=len(world.cases),
+        settlement_count=len(truth.settlements),
         auto_reconciled=auto_count,
         true_auto_reconciled=true_auto,
         false_auto_reconciled=false_auto,
-        unresolved=len(world.cases) - auto_count,
+        unresolved=len(truth.settlements) - auto_count,
         missing_decisions=missing_decisions,
         truth_reconciled=truth_count,
         reconciliation_recall=CountMetric(true_auto, truth_count),
         silent_false_auto_match_rate=CountMetric(false_auto, auto_count),
-        settlement_amount_correct=CountMetric(settlement_correct, len(world.cases)),
-        composition_amount_correct=CountMetric(composition_correct, len(world.cases)),
+        settlement_amount_correct=CountMetric(settlement_correct, len(truth.settlements)),
+        composition_amount_correct=CountMetric(composition_correct, len(truth.settlements)),
         composition_edges=_edge_metrics(predicted_composition_edges, truth_composition_edges),
         bank_edges=_edge_metrics(predicted_bank_edges, truth_bank_edges),
         absolute_reported_residual_paise=reported_residual,

@@ -13,7 +13,7 @@ from reflow.evaluation.candidates import (
     CandidateStatus,
 )
 from reflow.evaluation.harness import evaluate_observation
-from reflow.evaluation.scoring import score_candidate_run
+from reflow.evaluation.scoring import project_hidden_truth, score_candidate_run
 from reflow.simulator import CorruptionPlan, WorldConfig, generate_world, observe_world
 
 
@@ -79,7 +79,10 @@ def test_scorer_catches_intentionally_broken_reconcile_everything_mutation() -> 
                 reason_codes=("INTENTIONALLY_BROKEN_MUTATION",),
             )
         )
-    report = score_candidate_run(world, CandidateRun("broken_reconcile_all", tuple(decisions)))
+    report = score_candidate_run(
+        project_hidden_truth(world),
+        CandidateRun("broken_reconcile_all", tuple(decisions)),
+    )
 
     assert report.false_auto_reconciled > 0
     assert report.silent_false_auto_match_rate.numerator == report.false_auto_reconciled
@@ -100,7 +103,9 @@ def test_scorer_catches_wrong_bank_edge_even_when_status_is_unresolved() -> None
         bank_entry_ids=(second.bank_entries[0].id,),
         reason_codes=("INTENTIONALLY_WRONG_EDGE",),
     )
-    report = score_candidate_run(world, CandidateRun("broken_bank_edge", (decision,)))
+    report = score_candidate_run(
+        project_hidden_truth(world), CandidateRun("broken_bank_edge", (decision,))
+    )
     assert report.bank_edges.false_positive == 1
     assert report.missing_decisions == len(world.cases) - 1
 
@@ -127,7 +132,9 @@ def test_auto_reconciled_with_wrong_bank_identity_is_a_silent_false_match() -> N
         bank_entry_ids=(second.bank_entries[0].id,),
         reason_codes=("INTENTIONALLY_WRONG_AUTO_BANK_EDGE",),
     )
-    report = score_candidate_run(world, CandidateRun("wrong_auto_edge", (decision,)))
+    report = score_candidate_run(
+        project_hidden_truth(world), CandidateRun("wrong_auto_edge", (decision,))
+    )
     assert report.auto_reconciled == 1
     assert report.true_auto_reconciled == 0
     assert report.false_auto_reconciled == 1
@@ -149,7 +156,9 @@ def test_auto_reconciled_with_correct_ids_but_wrong_bank_amount_is_false() -> No
         bank_entry_ids=tuple(sorted((entry.id for entry in case.bank_entries), key=str)),
         reason_codes=("INTENTIONALLY_WRONG_AUTO_BANK_AMOUNT",),
     )
-    report = score_candidate_run(world, CandidateRun("wrong_auto_amount", (decision,)))
+    report = score_candidate_run(
+        project_hidden_truth(world), CandidateRun("wrong_auto_amount", (decision,))
+    )
     assert report.auto_reconciled == 1
     assert report.true_auto_reconciled == 0
     assert report.false_auto_reconciled == 1
@@ -227,6 +236,8 @@ def test_benchmark_payload_is_deterministic_for_same_seed_profile() -> None:
     second = benchmark_payload(**kwargs)
     assert first == second
     assert first["status"] == "evaluated"
+    assert len(first["truth"]["settlements"]) == 20
+    assert all("scenario" not in item for item in first["truth"]["settlements"])
     assert len(first["runs"]) == 4
     assert len(first["reports"]) == 4
 

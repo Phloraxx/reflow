@@ -14,7 +14,12 @@ from .candidates import (
     run_naive_one_to_one,
     run_reflow_core,
 )
-from .scoring import EvaluationReport, score_candidate_run
+from .scoring import (
+    EvaluationReport,
+    EvaluationTruth,
+    project_hidden_truth,
+    score_candidate_run,
+)
 
 DEFAULT_EVALUATION_RECEIVED_AT = datetime(2027, 1, 1, tzinfo=UTC)
 
@@ -34,6 +39,7 @@ class EvaluationSourceRejected(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class EvaluationResult:
+    truth: EvaluationTruth
     reports: tuple[EvaluationReport, ...]
     runs: tuple[CandidateRun, ...]
 
@@ -55,6 +61,7 @@ def evaluate_observation(
                 retained_raw_envelopes=len(journal),
             )
         ) from exc
+    truth = project_hidden_truth(world)
     runs = (
         run_naive_one_to_one(batch),
         run_grouped_exact(batch),
@@ -62,6 +69,7 @@ def evaluate_observation(
         run_reflow_core(batch, journal, knowledge_cutoff=received_at),
     )
     return EvaluationResult(
-        reports=tuple(score_candidate_run(world, run) for run in runs),
+        truth=truth,
+        reports=tuple(score_candidate_run(truth, run) for run in runs),
         runs=runs,
     )

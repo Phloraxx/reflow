@@ -10,7 +10,7 @@ from reflow.simulator import WorldConfig, generate_world, observe_world
 from .candidates import CandidateRun
 from .harness import EvaluationSourceRejected, evaluate_observation
 from .profiles import EvaluationProfile, corruption_plan
-from .scoring import EvaluationReport
+from .scoring import EvaluationReport, EvaluationTruth
 
 EVALUATION_SCHEMA_VERSION = "gate11-evaluation-v1"
 
@@ -34,6 +34,24 @@ def _decision_payload(run: CandidateRun) -> dict[str, Any]:
             }
             for item in run.decisions
         ],
+    }
+
+
+def _truth_payload(truth: EvaluationTruth) -> dict[str, Any]:
+    return {
+        "settlements": [
+            {
+                "settlement_id": str(item.settlement_id),
+                "settlement_amount_paise": item.settlement_amount.amount_paise,
+                "currency": item.settlement_amount.currency.value,
+                "composition_component_ids": [
+                    str(value) for value in item.composition_component_ids
+                ],
+                "bank_entry_ids": [str(value) for value in item.bank_entry_ids],
+                "bank_expectation": item.bank_expectation.value,
+            }
+            for item in truth.settlements
+        ]
     }
 
 
@@ -117,12 +135,14 @@ def benchmark_payload(
                 "message": exc.rejection.message,
                 "retained_raw_envelopes": exc.rejection.retained_raw_envelopes,
             },
+            "truth": None,
             "runs": [],
             "reports": [],
         }
     return {
         **metadata,
         "status": "evaluated",
+        "truth": _truth_payload(result.truth),
         "runs": [_decision_payload(run) for run in result.runs],
         "reports": [_report_payload(report) for report in result.reports],
     }
