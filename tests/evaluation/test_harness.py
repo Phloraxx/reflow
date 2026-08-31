@@ -64,18 +64,17 @@ def test_scorer_catches_intentionally_broken_reconcile_everything_mutation() -> 
     world, _ = _clean_observation(311)
     decisions = []
     for case in sorted(world.cases, key=lambda item: str(item.settlement.id)):
-        bank_ids = tuple(entry.id for entry in case.bank_entries)
         decisions.append(
             CandidateDecision(
                 settlement_id=case.settlement.id,
                 status=CandidateStatus.RECONCILED,
                 settlement_amount=case.settlement.amount,
-                composition_amount=case.settlement.amount,
-                bank_amount=case.settlement.amount,
-                composition_component_ids=tuple(
-                    sorted((entry.id for entry in case.recon_entries), key=str)
+                composition_components=tuple(
+                    sorted(case.recon_entries, key=lambda row: str(row.id))
                 ),
-                bank_entry_ids=tuple(sorted(bank_ids, key=str)),
+                bank_entries=tuple(
+                    sorted(case.bank_entries, key=lambda row: str(row.id))
+                ),
                 reason_codes=("INTENTIONALLY_BROKEN_MUTATION",),
             )
         )
@@ -97,10 +96,10 @@ def test_scorer_catches_wrong_bank_edge_even_when_status_is_unresolved() -> None
         settlement_id=first.settlement.id,
         status=CandidateStatus.UNRESOLVED,
         settlement_amount=first.settlement.amount,
-        composition_amount=first.settlement.amount,
-        bank_amount=domain.Money.zero(first.settlement.amount.currency),
-        composition_component_ids=tuple(entry.id for entry in first.recon_entries),
-        bank_entry_ids=(second.bank_entries[0].id,),
+        composition_components=tuple(
+            sorted(first.recon_entries, key=lambda row: str(row.id))
+        ),
+        bank_entries=(second.bank_entries[0],),
         reason_codes=("INTENTIONALLY_WRONG_EDGE",),
     )
     report = score_candidate_run(
@@ -124,12 +123,10 @@ def test_auto_reconciled_with_wrong_bank_identity_is_a_silent_false_match() -> N
         settlement_id=first.settlement.id,
         status=CandidateStatus.RECONCILED,
         settlement_amount=first.settlement.amount,
-        composition_amount=first.settlement.amount,
-        bank_amount=first.settlement.amount,
-        composition_component_ids=tuple(
-            sorted((entry.id for entry in first.recon_entries), key=str)
+        composition_components=tuple(
+            sorted(first.recon_entries, key=lambda row: str(row.id))
         ),
-        bank_entry_ids=(second.bank_entries[0].id,),
+        bank_entries=(second.bank_entries[0],),
         reason_codes=("INTENTIONALLY_WRONG_AUTO_BANK_EDGE",),
     )
     report = score_candidate_run(
@@ -144,16 +141,22 @@ def test_auto_reconciled_with_wrong_bank_identity_is_a_silent_false_match() -> N
 def test_auto_reconciled_with_correct_ids_but_wrong_bank_amount_is_false() -> None:
     world, _ = _clean_observation(327)
     case = next(case for case in world.cases if case.bank_entries)
+    original_bank = case.bank_entries[0]
+    wrong_bank = replace(
+        original_bank,
+        amount=domain.Money(
+            original_bank.amount.amount_paise + 1,
+            original_bank.amount.currency,
+        ),
+    )
     decision = CandidateDecision(
         settlement_id=case.settlement.id,
         status=CandidateStatus.RECONCILED,
         settlement_amount=case.settlement.amount,
-        composition_amount=case.settlement.amount,
-        bank_amount=domain.Money.zero(case.settlement.amount.currency),
-        composition_component_ids=tuple(
-            sorted((entry.id for entry in case.recon_entries), key=str)
+        composition_components=tuple(
+            sorted(case.recon_entries, key=lambda row: str(row.id))
         ),
-        bank_entry_ids=tuple(sorted((entry.id for entry in case.bank_entries), key=str)),
+        bank_entries=(wrong_bank,),
         reason_codes=("INTENTIONALLY_WRONG_AUTO_BANK_AMOUNT",),
     )
     report = score_candidate_run(
@@ -177,6 +180,67 @@ def test_evaluation_report_rejects_inconsistent_derived_metrics() -> None:
                 report,
                 silent_false_auto_match_rate=CountMetric(1, report.auto_reconciled),
             )
+
+
+def test_same_recon_id_with_corrupted_economic_meaning_scores_false() -> None:
+    world, _ = _clean_observation(329)
+    case = next(
+        case
+        for case in world.cases
+        if len(case.recon_entries) >= 2 and case.bank_entries
+    )
+    original = case.recon_entries[0]
+    replacement_entity = next(
+        row.entity_id
+        for row in case.recon_entries[1:]
+        if row.entity_kind is original.entity_kind and row.entity_id != original.entity_id
+    )
+    corrupted = replace(original, entity_id=replacement_entity)
+    components = tuple(
+        sorted((corrupted, *case.recon_entries[1:]), key=lambda row: str(row.id))
+    )
+    decision = CandidateDecision(
+        settlement_id=case.settlement.id,
+        status=CandidateStatus.RECONCILED,
+        settlement_amount=case.settlement.amount,
+        composition_components=components,
+        bank_entries=tuple(sorted(case.bank_entries, key=lambda row: str(row.id))),
+        reason_codes=("INTENTIONALLY_CORRUPTED_RECON_MEANING",),
+    )
+    report = score_candidate_run(
+        project_hidden_truth(world), CandidateRun("corrupted_recon_meaning", (decision,))
+    )
+    assert report.true_auto_reconciled == 0
+    assert report.false_auto_reconciled == 1
+    assert report.composition_edges.false_positive >= 1
+    assert report.composition_edges.false_negative >= 1
+
+
+def test_bank_narration_noise_and_causal_delay_do_not_invalidate_truth() -> None:
+    from datetime import timedelta
+
+    world, _ = _clean_observation(330)
+    case = next(case for case in world.cases if case.bank_entries)
+    noisy_delayed = replace(
+        case.bank_entries[0],
+        narration="NOISY PRESENTATION TEXT ONLY",
+        occurred_at=case.bank_entries[0].occurred_at + timedelta(days=2),
+    )
+    decision = CandidateDecision(
+        settlement_id=case.settlement.id,
+        status=CandidateStatus.RECONCILED,
+        settlement_amount=case.settlement.amount,
+        composition_components=tuple(
+            sorted(case.recon_entries, key=lambda row: str(row.id))
+        ),
+        bank_entries=(noisy_delayed,),
+        reason_codes=("PRESENTATION_NOISE_ONLY",),
+    )
+    report = score_candidate_run(
+        project_hidden_truth(world), CandidateRun("presentation_noise", (decision,))
+    )
+    assert report.true_auto_reconciled == 1
+    assert report.false_auto_reconciled == 0
 
 def test_fuzzy_baseline_can_false_match_amount_time_while_reflow_refuses() -> None:
     world, observed = _clean_observation(331, settlements=20)
@@ -350,8 +414,8 @@ def test_benchmark_artifact_verifier_rejects_tampered_raw_decision() -> None:
     )
     tampered = deepcopy(payload)
     run = next(item for item in tampered["runs"] if item["system_name"] == "ReFlow_Core")
-    decision = next(item for item in run["decisions"] if item["bank_entry_ids"])
-    decision["bank_entry_ids"] = []
+    decision = next(item for item in run["decisions"] if item["bank_entries"])
+    decision["bank_entries"][0]["bank_entry_id"] = "bank_tampered_artifact"
     with pytest.raises(ArtifactVerificationError, match="recomputed score"):
         verify_benchmark_payload(tampered)
 

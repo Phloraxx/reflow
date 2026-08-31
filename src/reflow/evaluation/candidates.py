@@ -29,25 +29,47 @@ class CandidateDecision:
     settlement_id: domain.SettlementId
     status: CandidateStatus
     settlement_amount: domain.Money
-    composition_amount: domain.Money
-    bank_amount: domain.Money
-    composition_component_ids: tuple[domain.ReconEntryId, ...]
-    bank_entry_ids: tuple[domain.BankEntryId, ...]
+    composition_components: tuple[domain.SettlementReconEntry, ...]
+    bank_entries: tuple[domain.BankEntry, ...]
     reason_codes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        if self.composition_amount.currency != self.settlement_amount.currency:
-            raise ValueError("candidate composition currency differs from settlement")
-        if self.bank_amount.currency != self.settlement_amount.currency:
-            raise ValueError("candidate bank currency differs from settlement")
-        if self.composition_component_ids != tuple(
-            sorted(set(self.composition_component_ids), key=str)
-        ):
-            raise ValueError("candidate composition ids must be unique and sorted")
-        if self.bank_entry_ids != tuple(sorted(set(self.bank_entry_ids), key=str)):
-            raise ValueError("candidate bank ids must be unique and sorted")
+        component_ids = tuple(row.id for row in self.composition_components)
+        if component_ids != tuple(sorted(set(component_ids), key=str)):
+            raise ValueError("candidate composition evidence must be unique and sorted")
+        bank_ids = tuple(row.id for row in self.bank_entries)
+        if bank_ids != tuple(sorted(set(bank_ids), key=str)):
+            raise ValueError("candidate bank evidence must be unique and sorted")
+        for row in self.composition_components:
+            if row.settlement_effect.currency != self.settlement_amount.currency:
+                raise ValueError("candidate composition currency differs from settlement")
+        for row in self.bank_entries:
+            if row.amount.currency != self.settlement_amount.currency:
+                raise ValueError("candidate bank currency differs from settlement")
         if self.reason_codes != tuple(sorted(set(self.reason_codes))):
             raise ValueError("candidate reason codes must be unique and sorted")
+
+    @property
+    def composition_amount(self) -> domain.Money:
+        return domain.sum_money(
+            [row.settlement_effect for row in self.composition_components],
+            self.settlement_amount.currency,
+        )
+
+    @property
+    def bank_amount(self) -> domain.Money:
+        return domain.sum_money(
+            [row.amount for row in self.bank_entries],
+            self.settlement_amount.currency,
+        )
+
+    @property
+    def composition_component_ids(self) -> tuple[domain.ReconEntryId, ...]:
+        return tuple(row.id for row in self.composition_components)
+
+    @property
+    def bank_entry_ids(self) -> tuple[domain.BankEntryId, ...]:
+        return tuple(row.id for row in self.bank_entries)
 
     @property
     def composition_residual(self) -> domain.Money:
@@ -92,11 +114,17 @@ class _BaselineIndex:
             domain.SettlementId, list[domain.SettlementReconEntry]
         ] = {}
         recon_by_effect: dict[MoneyKey, list[domain.SettlementReconEntry]] = {}
+        economic_owners: dict[
+            tuple[domain.ReconEntityKind, str], set[domain.SettlementId]
+        ] = {}
         for recon_row in batch.recon_entries:
             recon_by_settlement.setdefault(recon_row.settlement_id, []).append(recon_row)
             recon_by_effect.setdefault(
                 _money_key(recon_row.settlement_effect), []
             ).append(recon_row)
+            economic_owners.setdefault(
+                (recon_row.entity_kind, str(recon_row.entity_id)), set()
+            ).add(recon_row.settlement_id)
         self.recon_by_settlement = {
             key: tuple(sorted(rows, key=lambda row: str(row.id)))
             for key, rows in recon_by_settlement.items()
@@ -104,6 +132,15 @@ class _BaselineIndex:
         self.recon_by_effect = {
             key: tuple(sorted(rows, key=lambda row: str(row.id)))
             for key, rows in recon_by_effect.items()
+        }
+        self.economic_owners = {key: frozenset(value) for key, value in economic_owners.items()}
+
+        settlement_utr_owners: dict[str, set[domain.SettlementId]] = {}
+        for settlement in batch.settlements:
+            if settlement.utr is not None:
+                settlement_utr_owners.setdefault(settlement.utr, set()).add(settlement.id)
+        self.settlement_utr_owners = {
+            key: frozenset(value) for key, value in settlement_utr_owners.items()
         }
 
         bank_by_amount: dict[MoneyKey, list[domain.BankEntry]] = {}
@@ -146,10 +183,8 @@ def run_naive_one_to_one(batch: CanonicalBatch) -> CandidateRun:
                 settlement_id=settlement.id,
                 status=(CandidateStatus.RECONCILED if reconciled else CandidateStatus.UNRESOLVED),
                 settlement_amount=settlement.amount,
-                composition_amount=composition_amount,
-                bank_amount=bank_amount,
-                composition_component_ids=tuple(sorted((row.id for row in chosen_recon), key=str)),
-                bank_entry_ids=tuple(sorted((row.id for row in chosen_bank), key=str)),
+                composition_components=tuple(sorted(chosen_recon, key=lambda row: str(row.id))),
+                bank_entries=tuple(sorted(chosen_bank, key=lambda row: str(row.id))),
                 reason_codes=(() if reconciled else ("NO_UNIQUE_ONE_TO_ONE_MATCH",)),
             )
         )
@@ -180,8 +215,27 @@ def run_grouped_exact(batch: CanonicalBatch) -> CandidateRun:
         )
         composition_ok = composition_amount == settlement.amount
         bank_ok = len(accepted_bank) == 1 and bank_amount == settlement.amount
-        if composition_ok and bank_ok:
+        identities = [(row.entity_kind, str(row.entity_id)) for row in recon]
+        identity_unique = len(identities) == len(set(identities))
+        ownership_unique = all(
+            len(index.economic_owners[identity]) == 1 for identity in identities
+        )
+        utr_unique = (
+            settlement.utr is not None
+            and len(index.settlement_utr_owners.get(settlement.utr, ())) == 1
+        )
+        structurally_safe = identity_unique and ownership_unique and utr_unique
+        reasons: set[str] = set()
+        if not identity_unique:
+            reasons.add("DUPLICATE_ECONOMIC_IDENTITY")
+        if not ownership_unique:
+            reasons.add("ECONOMIC_IDENTITY_REUSED_ACROSS_SETTLEMENTS")
+        if not utr_unique:
+            reasons.add("SETTLEMENT_UTR_NOT_UNIQUE")
+        if composition_ok and bank_ok and structurally_safe:
             status = CandidateStatus.RECONCILED
+        elif not structurally_safe:
+            status = CandidateStatus.CONTRADICTED
         elif not composition_ok or (bool(accepted_bank) and bank_amount != settlement.amount):
             status = CandidateStatus.RESIDUAL
         else:
@@ -191,11 +245,9 @@ def run_grouped_exact(batch: CanonicalBatch) -> CandidateRun:
                 settlement_id=settlement.id,
                 status=status,
                 settlement_amount=settlement.amount,
-                composition_amount=composition_amount,
-                bank_amount=bank_amount,
-                composition_component_ids=tuple(sorted((row.id for row in recon), key=str)),
-                bank_entry_ids=tuple(sorted((row.id for row in accepted_bank), key=str)),
-                reason_codes=(),
+                composition_components=tuple(sorted(recon, key=lambda row: str(row.id))),
+                bank_entries=tuple(sorted(accepted_bank, key=lambda row: str(row.id))),
+                reason_codes=tuple(sorted(reasons)),
             )
         )
     return CandidateRun("B1_grouped_exact", tuple(decisions))
@@ -249,10 +301,8 @@ def run_fuzzy_threshold(batch: CanonicalBatch, *, threshold: int = 6) -> Candida
                 settlement_id=settlement.id,
                 status=status,
                 settlement_amount=settlement.amount,
-                composition_amount=composition_amount,
-                bank_amount=bank_amount,
-                composition_component_ids=tuple(sorted((row.id for row in recon), key=str)),
-                bank_entry_ids=tuple(sorted((row.id for row in chosen), key=str)),
+                composition_components=tuple(sorted(recon, key=lambda row: str(row.id))),
+                bank_entries=tuple(sorted(chosen, key=lambda row: str(row.id))),
                 reason_codes=(("FUZZY_BANK_THRESHOLD",) if chosen else ("NO_FUZZY_BANK_MATCH",)),
             )
         )
@@ -284,15 +334,17 @@ def run_reflow_core(
         ReconciliationStatus.INCOMPLETE: CandidateStatus.INCOMPLETE,
         ReconciliationStatus.CONTRADICTED: CandidateStatus.CONTRADICTED,
     }
+    recon_by_id = {row.id: row for row in batch.recon_entries}
+    bank_by_id = {row.id: row for row in batch.bank_entries}
     decisions = tuple(
         CandidateDecision(
             settlement_id=proof.settlement_id,
             status=status_map[proof.status],
             settlement_amount=proof.composition.settlement_amount,
-            composition_amount=proof.composition.observed_composition,
-            bank_amount=proof.bank.observed_bank_credit,
-            composition_component_ids=proof.composition.component_ids,
-            bank_entry_ids=proof.bank.bank_entry_ids,
+            composition_components=tuple(
+                recon_by_id[row_id] for row_id in proof.composition.component_ids
+            ),
+            bank_entries=tuple(bank_by_id[row_id] for row_id in proof.bank.bank_entry_ids),
             reason_codes=proof.reason_codes,
         )
         for proof in sorted(update.created_versions, key=lambda item: str(item.settlement_id))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from reflow import domain
 from reflow.simulator.truth import BankExpectation, HiddenWorld
@@ -33,17 +34,29 @@ class EdgeMetrics:
 class EvaluationTruthSettlement:
     settlement_id: domain.SettlementId
     settlement_amount: domain.Money
-    composition_component_ids: tuple[domain.ReconEntryId, ...]
-    bank_entry_ids: tuple[domain.BankEntryId, ...]
+    processed_at: datetime
+    settlement_utr: str | None
+    composition_components: tuple[domain.SettlementReconEntry, ...]
+    bank_entries: tuple[domain.BankEntry, ...]
     bank_expectation: BankExpectation
 
     def __post_init__(self) -> None:
-        if self.composition_component_ids != tuple(
-            sorted(set(self.composition_component_ids), key=str)
-        ):
-            raise ValueError("truth composition ids must be unique and sorted")
-        if self.bank_entry_ids != tuple(sorted(set(self.bank_entry_ids), key=str)):
-            raise ValueError("truth bank ids must be unique and sorted")
+        if self.processed_at.tzinfo is None or self.processed_at.utcoffset() is None:
+            raise ValueError("truth settlement processed_at must be timezone-aware")
+        component_ids = tuple(row.id for row in self.composition_components)
+        if component_ids != tuple(sorted(set(component_ids), key=str)):
+            raise ValueError("truth composition evidence must be unique and sorted")
+        bank_ids = tuple(row.id for row in self.bank_entries)
+        if bank_ids != tuple(sorted(set(bank_ids), key=str)):
+            raise ValueError("truth bank evidence must be unique and sorted")
+
+    @property
+    def composition_component_ids(self) -> tuple[domain.ReconEntryId, ...]:
+        return tuple(row.id for row in self.composition_components)
+
+    @property
+    def bank_entry_ids(self) -> tuple[domain.BankEntryId, ...]:
+        return tuple(row.id for row in self.bank_entries)
 
     @property
     def reconciled(self) -> bool:
@@ -64,15 +77,17 @@ class EvaluationTruth:
 
 
 def project_hidden_truth(world: HiddenWorld) -> EvaluationTruth:
-    """Expose only the minimal post-run truth needed to score candidate decisions."""
+    """Expose only post-run financial truth needed to rescore candidate evidence."""
     settlements = tuple(
         EvaluationTruthSettlement(
             settlement_id=case.settlement.id,
             settlement_amount=case.settlement.amount,
-            composition_component_ids=tuple(
-                sorted((row.id for row in case.recon_entries), key=str)
+            processed_at=case.settlement.processed_at,
+            settlement_utr=case.settlement.utr,
+            composition_components=tuple(
+                sorted(case.recon_entries, key=lambda row: str(row.id))
             ),
-            bank_entry_ids=tuple(sorted((row.id for row in case.bank_entries), key=str)),
+            bank_entries=tuple(sorted(case.bank_entries, key=lambda row: str(row.id))),
             bank_expectation=case.bank_expectation,
         )
         for case in sorted(world.cases, key=lambda item: str(item.settlement.id))
@@ -168,18 +183,82 @@ class EvaluationReport:
             raise ValueError("absolute residual cannot be negative")
 
 
-type ScoredEdge = tuple[str, str]
+type ScoredEdge = tuple[str, ...]
+
+
+def _recon_edge(
+    row: domain.SettlementReconEntry,
+    *,
+    target_settlement_id: domain.SettlementId,
+    settlement_processed_at: datetime,
+) -> ScoredEdge:
+    return (
+        "recon",
+        str(target_settlement_id),
+        str(row.id),
+        str(row.settlement_id),
+        row.entity_kind.value,
+        str(row.entity_id),
+        str(row.gross_amount.amount_paise),
+        row.gross_amount.currency.value,
+        str(row.fee.amount_paise),
+        str(row.tax.amount_paise),
+        str(row.settlement_effect.amount_paise),
+        "causal" if row.occurred_at <= settlement_processed_at else "late",
+    )
+
+
+def _bank_edge(
+    row: domain.BankEntry,
+    *,
+    target_settlement_id: domain.SettlementId,
+    settlement_processed_at: datetime,
+) -> ScoredEdge:
+    return (
+        "bank",
+        str(target_settlement_id),
+        str(row.id),
+        str(row.amount.amount_paise),
+        row.amount.currency.value,
+        row.utr or "",
+        "causal" if row.occurred_at >= settlement_processed_at else "pre_settlement",
+    )
+
+
+def _composition_edges(
+    rows: tuple[domain.SettlementReconEntry, ...],
+    truth: EvaluationTruthSettlement,
+) -> set[ScoredEdge]:
+    return {
+        _recon_edge(
+            row,
+            target_settlement_id=truth.settlement_id,
+            settlement_processed_at=truth.processed_at,
+        )
+        for row in rows
+    }
+
+
+def _bank_edges(
+    rows: tuple[domain.BankEntry, ...],
+    truth: EvaluationTruthSettlement,
+) -> set[ScoredEdge]:
+    return {
+        _bank_edge(
+            row,
+            target_settlement_id=truth.settlement_id,
+            settlement_processed_at=truth.processed_at,
+        )
+        for row in rows
+    }
 
 
 def _truth_edges(truth: EvaluationTruth) -> tuple[set[ScoredEdge], set[ScoredEdge]]:
     composition: set[ScoredEdge] = set()
     bank: set[ScoredEdge] = set()
     for item in truth.settlements:
-        composition.update(
-            (str(row_id), str(item.settlement_id))
-            for row_id in item.composition_component_ids
-        )
-        bank.update((str(row_id), str(item.settlement_id)) for row_id in item.bank_entry_ids)
+        composition.update(_composition_edges(item.composition_components, item))
+        bank.update(_bank_edges(item.bank_entries, item))
     return composition, bank
 
 
@@ -188,6 +267,18 @@ def _edge_metrics(predicted: set[ScoredEdge], truth: set[ScoredEdge]) -> EdgeMet
         true_positive=len(predicted & truth),
         false_positive=len(predicted - truth),
         false_negative=len(truth - predicted),
+    )
+
+
+def _financial_evidence_matches(
+    decision_components: tuple[domain.SettlementReconEntry, ...],
+    decision_bank: tuple[domain.BankEntry, ...],
+    truth: EvaluationTruthSettlement,
+) -> bool:
+    return (
+        _composition_edges(decision_components, truth)
+        == _composition_edges(truth.composition_components, truth)
+        and _bank_edges(decision_bank, truth) == _bank_edges(truth.bank_entries, truth)
     )
 
 
@@ -215,8 +306,11 @@ def score_candidate_run(truth: EvaluationTruth, run: CandidateRun) -> Evaluation
             and decision.settlement_amount == expected.settlement_amount
             and decision.composition_amount == expected.settlement_amount
             and decision.bank_amount == expected.settlement_amount
-            and decision.composition_component_ids == expected.composition_component_ids
-            and decision.bank_entry_ids == expected.bank_entry_ids
+            and _financial_evidence_matches(
+                decision.composition_components,
+                decision.bank_entries,
+                expected,
+            )
         ):
             true_auto_ids.add(settlement_id)
     true_auto = len(true_auto_ids)
@@ -237,11 +331,9 @@ def score_candidate_run(truth: EvaluationTruth, run: CandidateRun) -> Evaluation
         reported_residual += abs(decision.composition_residual.amount_paise)
         reported_residual += abs(decision.bank_residual.amount_paise)
         predicted_composition_edges.update(
-            (str(row_id), str(settlement_id)) for row_id in decision.composition_component_ids
+            _composition_edges(decision.composition_components, expected)
         )
-        predicted_bank_edges.update(
-            (str(row_id), str(settlement_id)) for row_id in decision.bank_entry_ids
-        )
+        predicted_bank_edges.update(_bank_edges(decision.bank_entries, expected))
 
     truth_composition_edges, truth_bank_edges = _truth_edges(truth)
     status_counts = {status: 0 for status in CandidateStatus}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 
 from reflow import domain
@@ -14,11 +15,37 @@ from .scoring import (
     score_candidate_run,
 )
 
-EVALUATION_SCHEMA_VERSION = "gate11-evaluation-v1"
+EVALUATION_SCHEMA_VERSION = "gate11-evaluation-v2"
 
 
 class ArtifactVerificationError(ValueError):
     """Serialized benchmark evidence is malformed or inconsistent with recomputed scores."""
+
+
+def _recon_payload(row: domain.SettlementReconEntry) -> dict[str, Any]:
+    return {
+        "recon_id": str(row.id),
+        "settlement_id": str(row.settlement_id),
+        "entity_kind": row.entity_kind.value,
+        "entity_id": str(row.entity_id),
+        "gross_amount_paise": row.gross_amount.amount_paise,
+        "fee_paise": row.fee.amount_paise,
+        "tax_paise": row.tax.amount_paise,
+        "settlement_effect_paise": row.settlement_effect.amount_paise,
+        "currency": row.settlement_effect.currency.value,
+        "occurred_at": row.occurred_at.isoformat(),
+    }
+
+
+def _bank_payload(row: domain.BankEntry) -> dict[str, Any]:
+    return {
+        "bank_entry_id": str(row.id),
+        "amount_paise": row.amount.amount_paise,
+        "currency": row.amount.currency.value,
+        "occurred_at": row.occurred_at.isoformat(),
+        "narration": row.narration,
+        "utr": row.utr,
+    }
 
 
 def truth_payload(truth: EvaluationTruth) -> dict[str, Any]:
@@ -28,10 +55,12 @@ def truth_payload(truth: EvaluationTruth) -> dict[str, Any]:
                 "settlement_id": str(item.settlement_id),
                 "settlement_amount_paise": item.settlement_amount.amount_paise,
                 "currency": item.settlement_amount.currency.value,
-                "composition_component_ids": [
-                    str(value) for value in item.composition_component_ids
+                "processed_at": item.processed_at.isoformat(),
+                "settlement_utr": item.settlement_utr,
+                "composition_components": [
+                    _recon_payload(row) for row in item.composition_components
                 ],
-                "bank_entry_ids": [str(value) for value in item.bank_entry_ids],
+                "bank_entries": [_bank_payload(row) for row in item.bank_entries],
                 "bank_expectation": item.bank_expectation.value,
             }
             for item in truth.settlements
@@ -50,10 +79,10 @@ def decision_payload(run: CandidateRun) -> dict[str, Any]:
                 "composition_amount_paise": item.composition_amount.amount_paise,
                 "bank_amount_paise": item.bank_amount.amount_paise,
                 "currency": item.settlement_amount.currency.value,
-                "composition_component_ids": [
-                    str(value) for value in item.composition_component_ids
+                "composition_components": [
+                    _recon_payload(row) for row in item.composition_components
                 ],
-                "bank_entry_ids": [str(value) for value in item.bank_entry_ids],
+                "bank_entries": [_bank_payload(row) for row in item.bank_entries],
                 "reason_codes": list(item.reason_codes),
             }
             for item in run.decisions
@@ -128,14 +157,79 @@ def _string(value: object, label: str) -> str:
     return value
 
 
+def _optional_string(value: object, label: str) -> str | None:
+    if value is None:
+        return None
+    return _string(value, label)
+
+
 def _integer(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ArtifactVerificationError(f"{label} must be an integer")
     return value
 
 
+def _datetime(value: object, label: str) -> datetime:
+    raw = _string(value, label)
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise ArtifactVerificationError(f"{label} must be an ISO datetime") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ArtifactVerificationError(f"{label} must be timezone-aware")
+    return parsed
+
+
 def _string_list(value: object, label: str) -> tuple[str, ...]:
     return tuple(_string(item, label) for item in _list(value, label))
+
+
+def _entity_id(kind: domain.ReconEntityKind, value: str) -> domain.EntityId:
+    constructors: dict[domain.ReconEntityKind, type[domain.EntityId]] = {
+        domain.ReconEntityKind.PAYMENT: domain.PaymentId,
+        domain.ReconEntityKind.REFUND: domain.RefundId,
+        domain.ReconEntityKind.TRANSFER: domain.TransferId,
+        domain.ReconEntityKind.ADJUSTMENT: domain.AdjustmentId,
+    }
+    return constructors[kind](value)
+
+
+def _parse_recon(payload: object, label: str) -> domain.SettlementReconEntry:
+    item = _mapping(payload, label)
+    currency = domain.Currency(_string(item.get("currency"), f"{label} currency"))
+    kind = domain.ReconEntityKind(_string(item.get("entity_kind"), f"{label} entity kind"))
+    return domain.SettlementReconEntry(
+        id=domain.ReconEntryId(_string(item.get("recon_id"), f"{label} id")),
+        settlement_id=domain.SettlementId(
+            _string(item.get("settlement_id"), f"{label} settlement id")
+        ),
+        entity_kind=kind,
+        entity_id=_entity_id(kind, _string(item.get("entity_id"), f"{label} entity id")),
+        gross_amount=domain.Money(
+            _integer(item.get("gross_amount_paise"), f"{label} gross amount"), currency
+        ),
+        fee=domain.Money(_integer(item.get("fee_paise"), f"{label} fee"), currency),
+        tax=domain.Money(_integer(item.get("tax_paise"), f"{label} tax"), currency),
+        settlement_effect=domain.Money(
+            _integer(item.get("settlement_effect_paise"), f"{label} settlement effect"),
+            currency,
+        ),
+        occurred_at=_datetime(item.get("occurred_at"), f"{label} occurred_at"),
+    )
+
+
+def _parse_bank(payload: object, label: str) -> domain.BankEntry:
+    item = _mapping(payload, label)
+    currency = domain.Currency(_string(item.get("currency"), f"{label} currency"))
+    return domain.BankEntry(
+        id=domain.BankEntryId(_string(item.get("bank_entry_id"), f"{label} id")),
+        amount=domain.Money(
+            _integer(item.get("amount_paise"), f"{label} amount"), currency
+        ),
+        occurred_at=_datetime(item.get("occurred_at"), f"{label} occurred_at"),
+        narration=_string(item.get("narration"), f"{label} narration"),
+        utr=_optional_string(item.get("utr"), f"{label} utr"),
+    )
 
 
 def parse_truth(payload: object) -> EvaluationTruth:
@@ -153,16 +247,19 @@ def parse_truth(payload: object) -> EvaluationTruth:
                     _integer(item.get("settlement_amount_paise"), "truth settlement amount"),
                     currency,
                 ),
-                composition_component_ids=tuple(
-                    domain.ReconEntryId(value)
-                    for value in _string_list(
-                        item.get("composition_component_ids"),
-                        "truth composition component ids",
+                processed_at=_datetime(item.get("processed_at"), "truth processed_at"),
+                settlement_utr=_optional_string(
+                    item.get("settlement_utr"), "truth settlement utr"
+                ),
+                composition_components=tuple(
+                    _parse_recon(value, "truth recon")
+                    for value in _list(
+                        item.get("composition_components"), "truth composition components"
                     )
                 ),
-                bank_entry_ids=tuple(
-                    domain.BankEntryId(value)
-                    for value in _string_list(item.get("bank_entry_ids"), "truth bank ids")
+                bank_entries=tuple(
+                    _parse_bank(value, "truth bank")
+                    for value in _list(item.get("bank_entries"), "truth bank entries")
                 ),
                 bank_expectation=BankExpectation(
                     _string(item.get("bank_expectation"), "truth bank expectation")
@@ -179,43 +276,40 @@ def parse_candidate_run(payload: object) -> CandidateRun:
     for raw in _list(root.get("decisions"), "candidate decisions"):
         item = _mapping(raw, "candidate decision")
         currency = domain.Currency(_string(item.get("currency"), "candidate currency"))
-        decisions.append(
-            CandidateDecision(
-                settlement_id=domain.SettlementId(
-                    _string(item.get("settlement_id"), "candidate settlement id")
-                ),
-                status=CandidateStatus(_string(item.get("status"), "candidate status")),
-                settlement_amount=domain.Money(
-                    _integer(item.get("settlement_amount_paise"), "candidate settlement amount"),
-                    currency,
-                ),
-                composition_amount=domain.Money(
-                    _integer(
-                        item.get("composition_amount_paise"),
-                        "candidate composition amount",
-                    ),
-                    currency,
-                ),
-                bank_amount=domain.Money(
-                    _integer(item.get("bank_amount_paise"), "candidate bank amount"),
-                    currency,
-                ),
-                composition_component_ids=tuple(
-                    domain.ReconEntryId(value)
-                    for value in _string_list(
-                        item.get("composition_component_ids"),
-                        "candidate composition component ids",
-                    )
-                ),
-                bank_entry_ids=tuple(
-                    domain.BankEntryId(value)
-                    for value in _string_list(
-                        item.get("bank_entry_ids"), "candidate bank ids"
-                    )
-                ),
-                reason_codes=_string_list(item.get("reason_codes"), "candidate reason codes"),
-            )
+        decision = CandidateDecision(
+            settlement_id=domain.SettlementId(
+                _string(item.get("settlement_id"), "candidate settlement id")
+            ),
+            status=CandidateStatus(_string(item.get("status"), "candidate status")),
+            settlement_amount=domain.Money(
+                _integer(item.get("settlement_amount_paise"), "candidate settlement amount"),
+                currency,
+            ),
+            composition_components=tuple(
+                _parse_recon(value, "candidate recon")
+                for value in _list(
+                    item.get("composition_components"), "candidate composition components"
+                )
+            ),
+            bank_entries=tuple(
+                _parse_bank(value, "candidate bank")
+                for value in _list(item.get("bank_entries"), "candidate bank entries")
+            ),
+            reason_codes=_string_list(item.get("reason_codes"), "candidate reason codes"),
         )
+        if _integer(
+            item.get("composition_amount_paise"), "candidate composition amount"
+        ) != decision.composition_amount.amount_paise:
+            raise ArtifactVerificationError(
+                "candidate serialized composition amount differs from selected evidence"
+            )
+        if _integer(item.get("bank_amount_paise"), "candidate bank amount") != (
+            decision.bank_amount.amount_paise
+        ):
+            raise ArtifactVerificationError(
+                "candidate serialized bank amount differs from selected evidence"
+            )
+        decisions.append(decision)
     return CandidateRun(system_name=system_name, decisions=tuple(decisions))
 
 
