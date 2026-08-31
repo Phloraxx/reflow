@@ -73,6 +73,34 @@ class ProofVersionId(EntityId):
     prefix = "proofv_"
 
 
+class ReconciliationScopeId(EntityId):
+    prefix = "scope_"
+
+
+class SourceDeliveryManifestId(EntityId):
+    prefix = "delivery_"
+
+
+class ReconciliationPolicyVersionId(EntityId):
+    prefix = "policy_"
+
+
+class ReconciliationRunId(EntityId):
+    prefix = "run_"
+
+
+class EvidenceCoverageCertificateId(EntityId):
+    prefix = "coverage_"
+
+
+class BalanceControlProofId(EntityId):
+    prefix = "balctrl_"
+
+
+class CloseReadinessCertificateId(EntityId):
+    prefix = "close_"
+
+
 class ResidualCandidateId(EntityId):
     prefix = "rcand_"
 

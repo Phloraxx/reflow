@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through Gate 8. Gate 8 still requires exact-head PR validation and merge before Gate 9 begins.
+None currently known in the deterministic implementation through Gate 13 after the final local validation suite. Gate 13 remains unmerged until branch/PR validation completes.
 
 ---
 
@@ -1496,6 +1496,84 @@ A newer adapter implementation for an unchanged structural schema could create t
 
 ### Fix
 Historical version lookup is explicit and preserved; schema routing selects the latest approved version for that fingerprint while older versions remain available for reproducibility. Source kind and record kind cannot change across the adapter lineage.
+
+---
+
+## F-0065 — Gate 13 coverage certificate trusted caller-supplied truth labels
+
+**Date:** 2026-08-31
+**Area:** Gate 13 evidence coverage
+**Severity:** safety-critical
+
+### Symptom
+The first Gate 13 coverage builder accepted arbitrary `PROVEN` / residual bucket assignments from its caller and only checked that every manifest envelope appeared once.
+
+### Root cause
+Exhaustiveness and epistemic authority were conflated: exact-one-bucket coverage was enforced, but the financial meaning of the bucket was not derived from deterministic proof fragments.
+
+### Why it matters
+A caller could label unresolved canonical evidence `PROVEN`, producing a formally complete no-orphan certificate without a proof-backed justification.
+
+### Fix
+Coverage classification is now derived from the exact Gate 7/8/9 proof evidence plus canonical upstream state. Callers cannot label canonical evidence `PROVEN`; the only explicit assignment still permitted is `QUARANTINED` for retained evidence that did not canonicalize. Contradicted/residual proof evidence has conservative precedence and cannot be masked by a proven fragment. The coverage certificate binds exact proof-version IDs and self-validates its bucket summaries, orphan state, content hash and deterministic ID.
+
+### Regression protection
+`test_every_manifest_evidence_record_has_exactly_one_coverage_bucket`, `test_unclassified_relevant_evidence_becomes_orphan_and_blocks_close`, `test_noncanonical_retained_evidence_requires_explicit_quarantine`, `test_contradicted_fragment_cannot_be_masked_by_proven_fragment_coverage`, and direct certificate-tamper tests.
+
+### Status
+Resolved in Gate 13.
+
+---
+
+## F-0066 — Gate 13 run capsule did not require one proof per settlement
+
+**Date:** 2026-08-31
+**Area:** Gate 13 run integrity
+**Severity:** safety-critical
+
+### Symptom
+The first run builder validated every supplied proof but did not require the supplied proof set to equal the canonical settlement set.
+
+### Root cause
+The implementation reused proof-integrity checks but omitted Gate 9's batch-completeness cardinality invariant at the new run boundary.
+
+### Why it matters
+A run could theoretically omit a non-green settlement proof while still binding valid coverage/balance artifacts, creating an incomplete run capsule.
+
+### Fix
+Coverage and run construction now index Gate 9 proofs against the canonical settlement set and require exact set equality: one proof per canonical settlement, with no missing, duplicate or extra settlement proof. Coverage, close readiness and the run capsule all bind the same canonical-sorted proof-version IDs. The run object self-validates its input/output hashes and deterministic content-addressed ID.
+
+### Regression protection
+Gate 13 tests reject incomplete proof sets and direct run-output tampering.
+
+### Status
+Resolved in Gate 13.
+
+---
+
+## F-0067 — Gate 13 row-permutation acceptance fixture was initially vacuous
+
+**Date:** 2026-09-01
+**Area:** Gate 13 test quality
+**Severity:** medium
+
+### Symptom
+The first Gate 13 run-identity permutation test reversed each source tuple, but the fixture contained only one row per source. The test therefore passed without exercising a real source-row ordering change.
+
+### Root cause
+The acceptance assertion was correct, but the minimal fixture cardinality made the mutation a no-op.
+
+### Why it matters
+A green test could have overstated independent Gate 13 evidence for the required source-delivery permutation invariant. Gate 9 already had stronger permutation coverage, but Gate 13 needed its own non-vacuous run-level regression.
+
+### Fix
+The Gate 13 fixture now includes a second independent merchant row. Reversing the merchant source genuinely changes delivery order while the canonical compilation, manifest content and run identity remain deterministic.
+
+### Regression protection
+`test_source_row_delivery_permutation_does_not_change_run_identity` now runs against a multi-row source fixture.
+
+### Status
+Resolved in Gate 13.
 
 ---
 

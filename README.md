@@ -4,16 +4,16 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: strategic post-Gate-12 architecture pause. Gates 0–12 are merged and green. Phase 13 agent work is frozen while the deterministic reconciliation control plane (run/scope/source-completeness/case/balance controls) is designed. See `docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`.**
+> **Current phase: Gate 13 — Reconciliation Control Plane is implemented on its review branch after the post-Gate-12 strategic pause. The old exception-agent branch remains abandoned. Gate 14 will add deterministic ExceptionCase lifecycle before any investigation agent. See `docs/28_GATE_13_CHECKPOINT.md`.**
 
-ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
+ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
 It compiles messy merchant, Razorpay and bank evidence into a temporal **Money Graph**, proves how payments/refunds/transfers/adjustments compose into settlements, proves bank receipt independently, and ultimately emits a versioned machine-verifiable **Reconciliation Proof**. Anything the deterministic engine cannot prove becomes a residual, contradiction, ambiguity or exception.
 
 AI has two bounded jobs:
 
 1. **Source Adapter Compiler (implemented in Gate 12)** — understand unfamiliar financial exports and propose a constrained adapter; first-seen AI proposals remain review-only and activation is deterministic/auditable.
-2. **Exception Investigation Agent (planned, deliberately paused)** — use read-only evidence/proof/case tools to investigate unresolved cases and propose the next safe step.
+2. **Exception Investigation Agent (planned, still deliberately deferred)** — only after deterministic ExceptionCase lifecycle and real provider-shaped validation, use read-only evidence/proof/case tools to investigate unresolved cases and propose the next safe step.
 
 **The LLM never decides whether money reconciles.**
 
@@ -52,11 +52,17 @@ flowchart LR
   S --> P{Full Reconciliation Proof - Gate 9}
   K --> P
 
-  P -->|proven| R[PROVEN]
-  P -->|residual / contradiction / ambiguity| X[Exception]
+  M[Scope + SourceDeliveryManifest] --> CP[Gate 13 Reconciliation Control Plane]
+  P --> CP
+  CP --> CV[Evidence Coverage / No-Orphan Control]
+  CP --> BL[Balance / Clearing Control]
+  CV --> CR[Close Readiness]
+  BL --> CR
+  CR --> RR[Immutable Reconciliation Run]
 
+  P -->|residual / contradiction / ambiguity| X[Future ExceptionCase]
   X -. later .-> AI[Bounded Investigation Agent]
-  U[Unknown Source] -. later .-> AS[AI Adapter Synthesizer]
+  U[Unknown Source] -.-> AS[Gate 12 Adapter Compiler]
 ```
 
 Raw evidence is journaled **before** canonicalization. The compiler reads the journal’s retained immutable payloads, not mutable caller rows, then binds canonical facts plus exact `SourceLink`s with a source-order-invariant compilation SHA-256. Money Graph evidence and proof fragments cite raw envelope IDs rather than stopping at canonical row IDs.
@@ -203,7 +209,10 @@ See:
 - [`docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md)
 - [`docs/23_GATE_9_CHECKPOINT.md`](docs/23_GATE_9_CHECKPOINT.md)
 - [`docs/24_GATE_10_CHECKPOINT.md`](docs/24_GATE_10_CHECKPOINT.md)
-- [`docs/25_GATE_11_CHECKPOINT.md`](docs/25_GATE_11_CHECKPOINT.md) — current evaluation checkpoint — Gate 8 checkpoint;
+- [`docs/25_GATE_11_CHECKPOINT.md`](docs/25_GATE_11_CHECKPOINT.md)
+- [`docs/26_GATE_12_CHECKPOINT.md`](docs/26_GATE_12_CHECKPOINT.md)
+- [`docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative revised roadmap
+- [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md) — current deterministic control-plane checkpoint — Gate 8 checkpoint;
 - [`docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — current line-by-line logic and architecture audit;
 - [`LIMITATIONS.md`](LIMITATIONS.md) — current non-claims and unresolved scope.
 
@@ -330,6 +339,14 @@ Approved adapters preserve both raw source identity and canonical financial iden
 
 Benchmark JSON uses the `gate11-evaluation-v2` schema and includes a minimal post-run truth projection plus raw candidate decisions so `python -m reflow.evaluation.verify <artifact.json>` can recompute every stored report. Checked-in development seeds are regression evidence only; the final held-out benchmark remains unrun. AI remains later.
 
+### Gate 13 — Reconciliation Control Plane
+
+Gate 13 wraps the proof kernel with content-addressed `ReconciliationScope`, source-delivery manifests, policy versions, proof-derived evidence coverage, exact balance/clearing control, close readiness and immutable `ReconciliationRun` capsules. Source `WAITING`/`LATE`/`PARTIAL`/`COMPLETE` state is explicit, and SNAPSHOT versus DELTA deliveries have different carry-forward semantics.
+
+Canonical coverage labels are derived from Gate 7/8/9 proof evidence rather than caller assertions. Every canonical settlement must have exactly one Gate 9 proof. Orphan or quarantined relevant evidence blocks close readiness, and contradicted/residual evidence cannot be masked by another proven fragment. Materiality changes workflow priority only; it never changes exact proof status or residuals.
+
+See [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md).
+
 ---
 
 ## Commands
@@ -386,7 +403,10 @@ CI runs the same validation path.
 - [`docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md)
 - [`docs/23_GATE_9_CHECKPOINT.md`](docs/23_GATE_9_CHECKPOINT.md)
 - [`docs/24_GATE_10_CHECKPOINT.md`](docs/24_GATE_10_CHECKPOINT.md)
-- [`docs/25_GATE_11_CHECKPOINT.md`](docs/25_GATE_11_CHECKPOINT.md) — current evaluation checkpoint
+- [`docs/25_GATE_11_CHECKPOINT.md`](docs/25_GATE_11_CHECKPOINT.md)
+- [`docs/26_GATE_12_CHECKPOINT.md`](docs/26_GATE_12_CHECKPOINT.md)
+- [`docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative revised roadmap
+- [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md) — current deterministic control-plane checkpoint
 
 ---
 
@@ -420,7 +440,11 @@ CI runs the same validation path.
 - [x] full proof versioning
 - [x] residual solver
 - [x] baseline evaluation harness
-- [ ] exception fingerprinting
+- [x] reconciliation scope + source-delivery manifests
+- [x] policy-versioned immutable reconciliation runs
+- [x] proof-derived evidence coverage / no-orphan-money control
+- [x] exact balance/clearing-position control + close readiness
+- [ ] deterministic ExceptionCase lifecycle / fingerprinting
 - [ ] scale benchmark
 - [ ] real Razorpay Test Mode / Settlement Recon adapter evidence
 - [ ] Instant Settlement `setlod` / `setlodp` proof support
