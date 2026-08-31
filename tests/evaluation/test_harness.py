@@ -354,3 +354,14 @@ def test_benchmark_artifact_verifier_rejects_tampered_raw_decision() -> None:
     decision["bank_entry_ids"] = []
     with pytest.raises(ArtifactVerificationError, match="recomputed score"):
         verify_benchmark_payload(tampered)
+
+
+def test_evaluation_report_exposes_exact_exception_status_counts() -> None:
+    world, observed = _clean_observation(461, settlements=20)
+    report = evaluate_observation(world, observed).reports[-1]
+    counts = report.decision_status_counts
+    assert counts.total == len(world.cases)
+    assert counts.reconciled == report.auto_reconciled
+    assert counts.unresolved + counts.residual + counts.incomplete + counts.contradicted == (
+        report.unresolved
+    )

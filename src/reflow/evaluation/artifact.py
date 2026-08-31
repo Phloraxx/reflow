@@ -71,6 +71,13 @@ def report_payload(report: EvaluationReport) -> dict[str, Any]:
         "unresolved": report.unresolved,
         "missing_decisions": report.missing_decisions,
         "truth_reconciled": report.truth_reconciled,
+        "decision_status_counts": {
+            "reconciled": report.decision_status_counts.reconciled,
+            "unresolved": report.decision_status_counts.unresolved,
+            "residual": report.decision_status_counts.residual,
+            "incomplete": report.decision_status_counts.incomplete,
+            "contradicted": report.decision_status_counts.contradicted,
+        },
         "reconciliation_recall": {
             "numerator": report.reconciliation_recall.numerator,
             "denominator": report.reconciliation_recall.denominator,

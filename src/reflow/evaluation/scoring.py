@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from reflow import domain
 from reflow.simulator.truth import BankExpectation, HiddenWorld
 
-from .candidates import CandidateRun
+from .candidates import CandidateRun, CandidateStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +81,35 @@ def project_hidden_truth(world: HiddenWorld) -> EvaluationTruth:
 
 
 @dataclass(frozen=True, slots=True)
+class DecisionStatusCounts:
+    reconciled: int
+    unresolved: int
+    residual: int
+    incomplete: int
+    contradicted: int
+
+    def __post_init__(self) -> None:
+        if min(
+            self.reconciled,
+            self.unresolved,
+            self.residual,
+            self.incomplete,
+            self.contradicted,
+        ) < 0:
+            raise ValueError("decision status counts cannot be negative")
+
+    @property
+    def total(self) -> int:
+        return (
+            self.reconciled
+            + self.unresolved
+            + self.residual
+            + self.incomplete
+            + self.contradicted
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class EvaluationReport:
     system_name: str
     settlement_count: int
@@ -90,6 +119,7 @@ class EvaluationReport:
     unresolved: int
     missing_decisions: int
     truth_reconciled: int
+    decision_status_counts: DecisionStatusCounts
     reconciliation_recall: CountMetric
     silent_false_auto_match_rate: CountMetric
     settlement_amount_correct: CountMetric
@@ -114,6 +144,10 @@ class EvaluationReport:
         decision_count = self.settlement_count - self.missing_decisions
         if self.auto_reconciled > decision_count:
             raise ValueError("auto-reconciled count cannot exceed emitted decisions")
+        if self.decision_status_counts.total != decision_count:
+            raise ValueError("decision status counts must equal emitted decision count")
+        if self.decision_status_counts.reconciled != self.auto_reconciled:
+            raise ValueError("reconciled status count must equal auto-reconciled count")
         if self.reconciliation_recall != CountMetric(
             self.true_auto_reconciled, self.truth_reconciled
         ):
@@ -210,6 +244,9 @@ def score_candidate_run(truth: EvaluationTruth, run: CandidateRun) -> Evaluation
         )
 
     truth_composition_edges, truth_bank_edges = _truth_edges(truth)
+    status_counts = {status: 0 for status in CandidateStatus}
+    for decision in decisions.values():
+        status_counts[decision.status] += 1
     auto_count = len(predicted_reconciled_ids)
     truth_count = len(truth_reconciled_ids)
     return EvaluationReport(
@@ -221,6 +258,13 @@ def score_candidate_run(truth: EvaluationTruth, run: CandidateRun) -> Evaluation
         unresolved=len(truth.settlements) - auto_count,
         missing_decisions=missing_decisions,
         truth_reconciled=truth_count,
+        decision_status_counts=DecisionStatusCounts(
+            reconciled=status_counts[CandidateStatus.RECONCILED],
+            unresolved=status_counts[CandidateStatus.UNRESOLVED],
+            residual=status_counts[CandidateStatus.RESIDUAL],
+            incomplete=status_counts[CandidateStatus.INCOMPLETE],
+            contradicted=status_counts[CandidateStatus.CONTRADICTED],
+        ),
         reconciliation_recall=CountMetric(true_auto, truth_count),
         silent_false_auto_match_rate=CountMetric(false_auto, auto_count),
         settlement_amount_correct=CountMetric(settlement_correct, len(truth.settlements)),

@@ -10,6 +10,7 @@ from .harness import (
 )
 from .scoring import (
     CountMetric,
+    DecisionStatusCounts,
     EdgeMetrics,
     EvaluationReport,
     EvaluationTruth,
@@ -24,6 +25,7 @@ __all__ = [
     "CandidateRun",
     "CandidateStatus",
     "CountMetric",
+    "DecisionStatusCounts",
     "EdgeMetrics",
     "EvaluationReport",
     "EvaluationResult",
