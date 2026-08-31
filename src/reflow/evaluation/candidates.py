@@ -92,9 +92,9 @@ class _BaselineIndex:
             domain.SettlementId, list[domain.SettlementReconEntry]
         ] = {}
         recon_by_effect: dict[MoneyKey, list[domain.SettlementReconEntry]] = {}
-        for row in batch.recon_entries:
-            recon_by_settlement.setdefault(row.settlement_id, []).append(row)
-            recon_by_effect.setdefault(_money_key(row.settlement_effect), []).append(row)
+        for recon_row in batch.recon_entries:
+            recon_by_settlement.setdefault(recon_row.settlement_id, []).append(recon_row)
+            recon_by_effect.setdefault(_money_key(recon_row.settlement_effect), []).append(recon_row)
         self.recon_by_settlement = {
             key: tuple(sorted(rows, key=lambda row: str(row.id)))
             for key, rows in recon_by_settlement.items()
@@ -106,10 +106,10 @@ class _BaselineIndex:
 
         bank_by_amount: dict[MoneyKey, list[domain.BankEntry]] = {}
         bank_by_utr: dict[str, list[domain.BankEntry]] = {}
-        for row in batch.bank_entries:
-            bank_by_amount.setdefault(_money_key(row.amount), []).append(row)
-            if row.utr is not None:
-                bank_by_utr.setdefault(row.utr, []).append(row)
+        for bank_row in batch.bank_entries:
+            bank_by_amount.setdefault(_money_key(bank_row.amount), []).append(bank_row)
+            if bank_row.utr is not None:
+                bank_by_utr.setdefault(bank_row.utr, []).append(bank_row)
         self.bank_by_amount = {
             key: tuple(sorted(rows, key=lambda row: str(row.id)))
             for key, rows in bank_by_amount.items()
