@@ -21,17 +21,16 @@ from .lifecycle import ApprovedAdapterVersion, InMemoryAdapterStore, detect_drif
 from .migration import CanonicalMigrationDiff, MigrationEvaluation, evaluate_migration
 from .openai_provider import OpenAIAdapterProposalProvider, OpenAIProposalError
 from .profile import ColumnProfile, StructuralProfile, profile_rows
-from .spec_io import AdapterSpecParseError, adapter_spec_json_schema, parse_adapter_spec_payload
 from .provider import (
     AdapterProposalProvider,
     ProposalContext,
     ProposalEvaluation,
     propose_and_validate,
 )
+from .spec_io import AdapterSpecParseError, adapter_spec_json_schema, parse_adapter_spec_payload
 
 __all__ = [
     "ActivationState",
-    "adapter_spec_json_schema",
     "AdapterCompileError",
     "AdapterProposalProvider",
     "AdapterSpec",
@@ -40,25 +39,26 @@ __all__ = [
     "CanonicalMigrationDiff",
     "CanonicalRecordKind",
     "ColumnProfile",
-    "compile_adapter",
     "CompiledAdapter",
-    "detect_drift",
     "DriftState",
-    "evaluate_migration",
     "FieldMapping",
     "InMemoryAdapterStore",
     "MigrationEvaluation",
     "OpenAIAdapterProposalProvider",
     "OpenAIProposalError",
-    "parse_adapter_spec_payload",
-    "profile_rows",
     "ProposalContext",
     "ProposalEvaluation",
-    "propose_and_validate",
-    "required_target_fields",
     "SampleValidationReport",
     "StructuralProfile",
-    "target_fields",
     "TransformKind",
+    "adapter_spec_json_schema",
+    "compile_adapter",
+    "detect_drift",
+    "evaluate_migration",
+    "parse_adapter_spec_payload",
+    "profile_rows",
+    "propose_and_validate",
+    "required_target_fields",
+    "target_fields",
     "validate_sample",
 ]
