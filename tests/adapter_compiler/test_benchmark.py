@@ -13,6 +13,7 @@ from reflow.adapter_compiler.benchmark import (
     run_adapter_benchmark,
 )
 from reflow.adapter_compiler.benchmark_fixtures import (
+    BankReferenceSwapMutationProvider,
     WrongUnitMutationProvider,
     development_adapter_cases,
     development_reference_provider,
@@ -53,6 +54,23 @@ def test_known_wrong_integer_unit_proposal_cannot_activate() -> None:
     assert report.incorrect_previews == 1
     assert report.false_rejections_or_reviews == 0
     assert report.correct_reviews == report.expected_reviews - 1
+
+
+def test_control_total_cannot_hide_wrong_reference_semantics() -> None:
+    cases = development_adapter_cases()
+    target_case = next(
+        item for item in cases if item.case_id == "bench_bank_integer_rupees"
+    )
+    provider = BankReferenceSwapMutationProvider(
+        development_reference_provider(),
+        target_case.adapter_id,
+    )
+    results, report = run_adapter_benchmark(provider, cases)
+    target = next(result for result in results if result.case_id == target_case.case_id)
+    assert target.state.value == "needs_review"
+    assert report.unsafe_activations == 0
+    assert report.incorrect_previews == 1
+    assert report.correct_reviews == report.expected_reviews
 
 
 def test_uncontrolled_semantic_mapping_is_review_not_activation() -> None:

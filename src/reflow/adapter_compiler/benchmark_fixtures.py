@@ -143,6 +143,28 @@ class WrongUnitMutationProvider(AdapterProposalProvider):
         )
 
 
+class BankReferenceSwapMutationProvider(AdapterProposalProvider):
+    """Keep money correct while swapping two semantically distinct text fields."""
+
+    def __init__(self, base: DevelopmentReferenceProvider, target_adapter_id: str) -> None:
+        self.base = base
+        self.target_adapter_id = target_adapter_id
+
+    def propose(self, context: ProposalContext) -> AdapterSpec:
+        spec = self.base.propose(context)
+        if context.adapter_id != self.target_adapter_id:
+            return spec
+        mappings = []
+        for mapping in spec.mappings:
+            if mapping.target_field == "narration":
+                mappings.append(replace(mapping, source_column="Reference"))
+            elif mapping.target_field == "utr":
+                mappings.append(replace(mapping, source_column="Memo"))
+            else:
+                mappings.append(mapping)
+        return replace(spec, mappings=tuple(mappings))
+
+
 def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
     bank_controlled_id = "bench_bank_integer_rupees"
     bank_review_id = "bench_bank_no_control"
