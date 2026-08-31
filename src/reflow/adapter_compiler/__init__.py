@@ -1,0 +1,53 @@
+"""AI-bounded declarative source adapter compiler."""
+
+from .compiler import (
+    AdapterCompileError,
+    CompiledAdapter,
+    SampleValidationReport,
+    compile_adapter,
+    required_target_fields,
+    target_fields,
+    validate_sample,
+)
+from .contracts import (
+    ActivationState,
+    AdapterSpec,
+    CanonicalRecordKind,
+    DriftState,
+    FieldMapping,
+    TransformKind,
+)
+from .lifecycle import ApprovedAdapterVersion, InMemoryAdapterStore, detect_drift
+from .profile import ColumnProfile, StructuralProfile, profile_rows
+from .provider import (
+    AdapterProposalProvider,
+    ProposalContext,
+    ProposalEvaluation,
+    propose_and_validate,
+)
+
+__all__ = [
+    "ActivationState",
+    "AdapterCompileError",
+    "AdapterProposalProvider",
+    "AdapterSpec",
+    "ApprovedAdapterVersion",
+    "CanonicalRecordKind",
+    "ColumnProfile",
+    "CompiledAdapter",
+    "DriftState",
+    "FieldMapping",
+    "InMemoryAdapterStore",
+    "ProposalContext",
+    "ProposalEvaluation",
+    "SampleValidationReport",
+    "StructuralProfile",
+    "TransformKind",
+    "compile_adapter",
+    "detect_drift",
+    "profile_rows",
+    "propose_and_validate",
+    "required_target_fields",
+    "target_fields",
+    "validate_sample",
+]
