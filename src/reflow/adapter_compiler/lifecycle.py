@@ -30,15 +30,15 @@ class ApprovedAdapterVersion:
                 if mapping.source_column is not None
             )
         )
-        families = tuple(
-            (name, profile.column(name).type_families)
-            for name in source_columns
-            if profile.column(name) is not None
-        )
-        if len(families) != len(source_columns):
-            raise AssertionError(
-                "compiled adapter references a column missing from approval profile"
-            )
+        family_rows: list[tuple[str, tuple[str, ...]]] = []
+        for name in source_columns:
+            column = profile.column(name)
+            if column is None:
+                raise AssertionError(
+                    "compiled adapter references a column missing from approval profile"
+                )
+            family_rows.append((name, column.type_families))
+        families = tuple(family_rows)
         return cls(
             spec=adapter.spec,
             schema_fingerprint=profile.schema_fingerprint,
