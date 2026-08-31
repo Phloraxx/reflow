@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from reflow import domain
 from reflow.simulator.truth import BankExpectation, HiddenWorld
 
 from .candidates import CandidateRun

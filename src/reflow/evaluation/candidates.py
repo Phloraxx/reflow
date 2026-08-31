@@ -49,7 +49,10 @@ class CandidateRun:
         ids = [decision.settlement_id for decision in self.decisions]
         if len(set(ids)) != len(ids):
             raise ValueError("candidate run contains duplicate settlement decisions")
-        if self.decisions != tuple(sorted(self.decisions, key=lambda item: str(item.settlement_id))):
+        expected = tuple(
+            sorted(self.decisions, key=lambda item: str(item.settlement_id))
+        )
+        if self.decisions != expected:
             raise ValueError("candidate decisions must be sorted by settlement id")
 
 

@@ -52,7 +52,10 @@ def test_clean_world_runs_all_baselines_and_reflow_without_silent_false_match() 
     assert all(report.missing_decisions == 0 for report in reports.values())
     assert reports["ReFlow_Core"].false_auto_reconciled == 0
     assert reports["ReFlow_Core"].true_auto_reconciled == reports["ReFlow_Core"].truth_reconciled
-    assert reports["B0_naive_1to1"].true_auto_reconciled < reports["ReFlow_Core"].true_auto_reconciled
+    assert (
+        reports["B0_naive_1to1"].true_auto_reconciled
+        < reports["ReFlow_Core"].true_auto_reconciled
+    )
 
 
 def test_scorer_catches_intentionally_broken_reconcile_everything_mutation() -> None:
@@ -110,7 +113,10 @@ def test_fuzzy_baseline_can_false_match_amount_time_while_reflow_refuses() -> No
     template["narration"] = "RAZORPAY settlement amount candidate"
     changed = replace(observed, bank_rows=(*observed.bank_rows, template))
 
-    reports = {report.system_name: report for report in evaluate_observation(world, changed).reports}
+    reports = {
+        report.system_name: report
+        for report in evaluate_observation(world, changed).reports
+    }
     assert reports["B2_fuzzy_threshold"].false_auto_reconciled >= 1
     assert reports["ReFlow_Core"].false_auto_reconciled == 0
 
@@ -118,4 +124,6 @@ def test_fuzzy_baseline_can_false_match_amount_time_while_reflow_refuses() -> No
 def test_hidden_scenario_position_changes_across_seeds() -> None:
     first = generate_world(341, WorldConfig(settlement_count=20))
     second = generate_world(342, WorldConfig(settlement_count=20))
-    assert tuple(case.scenario for case in first.cases) != tuple(case.scenario for case in second.cases)
+    assert tuple(case.scenario for case in first.cases) != tuple(
+        case.scenario for case in second.cases
+    )
