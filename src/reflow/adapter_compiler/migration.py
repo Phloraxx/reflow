@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from reflow import domain
 from reflow.ingestion import RawRecord
 
 from .compiler import CanonicalRecord, CompiledAdapter, SampleValidationReport, validate_sample
 
 
 def _identity(record: CanonicalRecord) -> str:
-    source_event_id = getattr(record, "source_event_id", None)
-    return source_event_id if isinstance(source_event_id, str) else str(record.id)
+    if isinstance(record, domain.PaymentEvent):
+        return record.source_event_id
+    return str(record.id)
 
 
 def _index_records(
