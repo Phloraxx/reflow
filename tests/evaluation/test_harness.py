@@ -105,6 +105,34 @@ def test_scorer_catches_wrong_bank_edge_even_when_status_is_unresolved() -> None
     assert report.missing_decisions == len(world.cases) - 1
 
 
+
+
+def test_auto_reconciled_with_wrong_bank_identity_is_a_silent_false_match() -> None:
+    world, _ = _clean_observation(326)
+    first = next(case for case in world.cases if case.bank_entries)
+    second = next(
+        case
+        for case in world.cases
+        if case.settlement.id != first.settlement.id and case.bank_entries
+    )
+    decision = CandidateDecision(
+        settlement_id=first.settlement.id,
+        status=CandidateStatus.RECONCILED,
+        settlement_amount=first.settlement.amount,
+        composition_amount=first.settlement.amount,
+        bank_amount=first.settlement.amount,
+        composition_component_ids=tuple(
+            sorted((entry.id for entry in first.recon_entries), key=str)
+        ),
+        bank_entry_ids=(second.bank_entries[0].id,),
+        reason_codes=("INTENTIONALLY_WRONG_AUTO_BANK_EDGE",),
+    )
+    report = score_candidate_run(world, CandidateRun("wrong_auto_edge", (decision,)))
+    assert report.auto_reconciled == 1
+    assert report.true_auto_reconciled == 0
+    assert report.false_auto_reconciled == 1
+    assert report.silent_false_auto_match_rate.numerator == 1
+
 def test_fuzzy_baseline_can_false_match_amount_time_while_reflow_refuses() -> None:
     world, observed = _clean_observation(331, settlements=20)
     target = next(case for case in world.cases if not case.bank_entries)

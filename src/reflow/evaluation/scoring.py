@@ -96,8 +96,22 @@ def score_candidate_run(world: HiddenWorld, run: CandidateRun) -> EvaluationRepo
         for settlement_id, decision in decisions.items()
         if decision.auto_reconciled
     }
-    true_auto = len(predicted_reconciled_ids & truth_reconciled_ids)
-    false_auto = len(predicted_reconciled_ids - truth_reconciled_ids)
+    true_auto_ids: set[object] = set()
+    for settlement_id in predicted_reconciled_ids:
+        decision = decisions[settlement_id]
+        truth = truth_by_settlement[settlement_id]
+        truth_component_ids = {row.id for row in truth.recon_entries}
+        truth_bank_ids = {row.id for row in truth.bank_entries}
+        if (
+            truth.bank_expectation is BankExpectation.MATCHED
+            and decision.settlement_amount == truth.settlement.amount
+            and decision.composition_amount == truth.settlement.amount
+            and set(decision.composition_component_ids) == truth_component_ids
+            and set(decision.bank_entry_ids) == truth_bank_ids
+        ):
+            true_auto_ids.add(settlement_id)
+    true_auto = len(true_auto_ids)
+    false_auto = len(predicted_reconciled_ids) - true_auto
     missing_decisions = len(set(truth_by_settlement) - set(decisions))
 
     settlement_correct = 0
