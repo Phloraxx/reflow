@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from reflow.domain import SettlementId
 from reflow.simulator.truth import BankExpectation, HiddenWorld
 
 from .candidates import CandidateRun
@@ -47,14 +48,37 @@ class EvaluationReport:
     absolute_reported_residual_paise: int
 
     def __post_init__(self) -> None:
+        if not self.system_name or self.system_name != self.system_name.strip():
+            raise ValueError("evaluation report system name must be non-empty and trimmed")
         if self.settlement_count < 0:
             raise ValueError("settlement count cannot be negative")
+        if not 0 <= self.truth_reconciled <= self.settlement_count:
+            raise ValueError("truth-reconciled count must fit inside settlement count")
         if self.auto_reconciled != self.true_auto_reconciled + self.false_auto_reconciled:
             raise ValueError("auto-reconciled count must partition into true and false")
         if self.unresolved + self.auto_reconciled != self.settlement_count:
             raise ValueError("every truth settlement must be reconciled or unresolved")
         if not 0 <= self.missing_decisions <= self.unresolved:
             raise ValueError("missing decisions must be a subset of unresolved cases")
+        decision_count = self.settlement_count - self.missing_decisions
+        if self.auto_reconciled > decision_count:
+            raise ValueError("auto-reconciled count cannot exceed emitted decisions")
+        if self.reconciliation_recall != CountMetric(
+            self.true_auto_reconciled, self.truth_reconciled
+        ):
+            raise ValueError("reconciliation recall does not match report counts")
+        if self.silent_false_auto_match_rate != CountMetric(
+            self.false_auto_reconciled, self.auto_reconciled
+        ):
+            raise ValueError("silent false-match rate does not match report counts")
+        for label, metric in (
+            ("settlement amount correctness", self.settlement_amount_correct),
+            ("composition amount correctness", self.composition_amount_correct),
+        ):
+            if metric.denominator != self.settlement_count:
+                raise ValueError(f"{label} denominator must equal settlement count")
+            if metric.numerator > decision_count:
+                raise ValueError(f"{label} cannot exceed emitted decisions")
         if self.absolute_reported_residual_paise < 0:
             raise ValueError("absolute residual cannot be negative")
 
@@ -96,7 +120,7 @@ def score_candidate_run(world: HiddenWorld, run: CandidateRun) -> EvaluationRepo
         for settlement_id, decision in decisions.items()
         if decision.auto_reconciled
     }
-    true_auto_ids: set[object] = set()
+    true_auto_ids: set[SettlementId] = set()
     for settlement_id in predicted_reconciled_ids:
         decision = decisions[settlement_id]
         truth = truth_by_settlement[settlement_id]
@@ -106,6 +130,7 @@ def score_candidate_run(world: HiddenWorld, run: CandidateRun) -> EvaluationRepo
             truth.bank_expectation is BankExpectation.MATCHED
             and decision.settlement_amount == truth.settlement.amount
             and decision.composition_amount == truth.settlement.amount
+            and decision.bank_amount == truth.settlement.amount
             and set(decision.composition_component_ids) == truth_component_ids
             and set(decision.bank_entry_ids) == truth_bank_ids
         ):

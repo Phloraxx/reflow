@@ -133,6 +133,42 @@ def test_auto_reconciled_with_wrong_bank_identity_is_a_silent_false_match() -> N
     assert report.false_auto_reconciled == 1
     assert report.silent_false_auto_match_rate.numerator == 1
 
+
+def test_auto_reconciled_with_correct_ids_but_wrong_bank_amount_is_false() -> None:
+    world, _ = _clean_observation(327)
+    case = next(case for case in world.cases if case.bank_entries)
+    decision = CandidateDecision(
+        settlement_id=case.settlement.id,
+        status=CandidateStatus.RECONCILED,
+        settlement_amount=case.settlement.amount,
+        composition_amount=case.settlement.amount,
+        bank_amount=domain.Money.zero(case.settlement.amount.currency),
+        composition_component_ids=tuple(
+            sorted((entry.id for entry in case.recon_entries), key=str)
+        ),
+        bank_entry_ids=tuple(sorted((entry.id for entry in case.bank_entries), key=str)),
+        reason_codes=("INTENTIONALLY_WRONG_AUTO_BANK_AMOUNT",),
+    )
+    report = score_candidate_run(world, CandidateRun("wrong_auto_amount", (decision,)))
+    assert report.auto_reconciled == 1
+    assert report.true_auto_reconciled == 0
+    assert report.false_auto_reconciled == 1
+
+
+def test_evaluation_report_rejects_inconsistent_derived_metrics() -> None:
+    from reflow.evaluation.scoring import CountMetric
+
+    world, observed = _clean_observation(328)
+    report = evaluate_observation(world, observed).reports[-1]
+    with pytest.raises(ValueError, match="reconciliation recall"):
+        replace(report, reconciliation_recall=CountMetric(0, report.truth_reconciled))
+    if report.auto_reconciled:
+        with pytest.raises(ValueError, match="silent false-match rate"):
+            replace(
+                report,
+                silent_false_auto_match_rate=CountMetric(1, report.auto_reconciled),
+            )
+
 def test_fuzzy_baseline_can_false_match_amount_time_while_reflow_refuses() -> None:
     world, observed = _clean_observation(331, settlements=20)
     target = next(case for case in world.cases if not case.bank_entries)
