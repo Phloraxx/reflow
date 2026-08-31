@@ -12,8 +12,8 @@ from .compiler import (
 from .contracts import (
     ActivationState,
     AdapterApprovalEvidence,
-    ApprovalEvidenceKind,
     AdapterSpec,
+    ApprovalEvidenceKind,
     CanonicalRecordKind,
     DriftState,
     FieldMapping,
@@ -40,11 +40,11 @@ from .spec_io import AdapterSpecParseError, adapter_spec_json_schema, parse_adap
 __all__ = [
     "ActivationState",
     "AdapterApprovalEvidence",
-    "ApprovalEvidenceKind",
     "AdapterCompileError",
     "AdapterProposalProvider",
     "AdapterSpec",
     "AdapterSpecParseError",
+    "ApprovalEvidenceKind",
     "ApprovedAdapterVersion",
     "CanonicalMigrationDiff",
     "CanonicalRecordKind",

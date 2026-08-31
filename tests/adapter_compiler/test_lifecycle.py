@@ -5,8 +5,8 @@ from dataclasses import replace
 from reflow.adapter_compiler import (
     ActivationState,
     AdapterApprovalEvidence,
-    ApprovalEvidenceKind,
     AdapterSpec,
+    ApprovalEvidenceKind,
     ApprovedAdapterVersion,
     CanonicalRecordKind,
     DriftState,
