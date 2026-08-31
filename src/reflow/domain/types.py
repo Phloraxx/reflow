@@ -73,6 +73,14 @@ class ProofVersionId(EntityId):
     prefix = "proofv_"
 
 
+class ResidualCandidateId(EntityId):
+    prefix = "rcand_"
+
+
+class ResidualExplanationId(EntityId):
+    prefix = "rexp_"
+
+
 class Currency(StrEnum):
     INR = "INR"
 

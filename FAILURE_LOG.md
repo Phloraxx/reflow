@@ -1022,6 +1022,159 @@ Direct replacement/forgery tests cover ruleset metadata, source-union metadata, 
 
 ---
 
+## F-0033 — Residual explanation state was implicit
+
+**Date:** 2026-08-31
+**Area:** Gate 10 safety boundary
+**Severity:** high
+
+### Symptom
+The first residual-solver draft encoded “not proof” only through reason strings. A downstream caller could treat an exact arithmetic result as if it were a stronger financial state.
+
+### Root cause
+The output model lacked a typed state whose only allowed value was `HYPOTHESIS`.
+
+### Fix
+`ResidualExplanationState` now has only `HYPOTHESIS`, and every exact explanation also derives `NOT_FINANCIAL_PROOF`. Gate 10 has no API that promotes an explanation into Gate 7/8/9 truth.
+
+---
+
+## F-0034 — Residual candidate identity did not bind its full target and decision context
+
+**Date:** 2026-08-31
+**Area:** Gate 10 hypothesis integrity
+**Severity:** high
+
+### Symptom
+Early candidate IDs were source-centric. During hardening, the same source candidate could retain identity across different target contexts, proof versions, or a changed blocked/admissible disposition.
+
+### Root cause
+The deterministic candidate hash did not initially include the complete hypothesis context.
+
+### Fix
+`ResidualCandidateId` now binds settlement, exact `ProofVersionId`, residual scope, candidate kind, source entity, amount/currency, disposition, normalized reason codes and raw source envelopes. Direct replacement of proof-version or disposition metadata invalidates the candidate identity.
+
+---
+
+## F-0035 — Bank evidence already identified to another settlement initially looked admissible
+
+**Date:** 2026-08-31
+**Area:** Gate 10 bank candidate enumeration
+**Severity:** safety-critical
+
+### Symptom
+A bank row whose UTR already belonged to another settlement could still be surfaced as an amount-only admissible hypothesis for the current residual.
+
+### Root cause
+The first residual enumerator considered local amount fit but did not reuse batch-global settlement-UTR ownership.
+
+### Fix
+The candidate index records settlement ownership by UTR. A bank row identified to another settlement is retained only as `BLOCKED_EVIDENCE` with `BANK_ENTRY_IDENTIFIED_TO_OTHER_SETTLEMENT`; it cannot silently become an admissible explanation.
+
+---
+
+## F-0036 — Residual enumeration could rescan the full bank feed per target
+
+**Date:** 2026-08-31
+**Area:** Gate 10 scale shape
+**Severity:** high
+
+### Symptom
+The initial candidate enumerator iterated bank/recon collections independently for each residual target, creating an avoidable residual-count × bank-row scan pattern at high volume.
+
+### Root cause
+Candidate discovery was implemented first as a per-target reference path without a reusable batch index.
+
+### Fix
+`ResidualCandidateIndex` now indexes bank amount/currency, settlement-local recon rows, UTR ownership and raw provenance once per canonical batch. `solve_all_residuals()` reuses that one index for the batch.
+
+---
+
+## F-0037 — Solution-cap truncation was not disclosed
+
+**Date:** 2026-08-31
+**Area:** Gate 10 search completeness
+**Severity:** high
+
+### Symptom
+The solver had `max_solutions`, but returning exactly that many explanations did not explicitly tell callers that search had stopped at the configured result cap.
+
+### Root cause
+Only candidate truncation and node-budget exhaustion were represented in the result contract.
+
+### Fix
+`ResidualSolveResult.solution_limit_reached` now makes the result-cap boundary explicit. This is a completeness warning, not a claim that additional solutions definitely exist.
+
+---
+
+## F-0038 — Residual explanation metadata was not self-verifying
+
+**Date:** 2026-08-31
+**Area:** Gate 10 proof-carrying hypotheses
+**Severity:** high
+
+### Symptom
+An explanation originally stored candidate IDs, source-envelope IDs, arithmetic and reason metadata as separate caller-supplied fields. A reconstructed object could keep a valid-looking explanation ID while drifting those fields.
+
+### Root cause
+The explanation carried references to candidates rather than the bounded candidate objects that actually generated it.
+
+### Fix
+`ResidualExplanation` now embeds its small bounded candidate tuple. Candidate IDs, explained amount, remaining residual, raw-envelope union, blocked-evidence flag and reason codes are derived properties. Constructor validation requires exact closure and target/proof-version consistency.
+
+---
+
+## F-0039 — Pre-settlement amount-only bank evidence could appear admissible
+
+**Date:** 2026-08-31
+**Area:** Gate 10 temporal causality
+**Severity:** high
+
+### Symptom
+An unrelated positive bank row with a fitting amount but an occurrence time before settlement processing could be surfaced as an admissible residual hypothesis.
+
+### Root cause
+Gate 10 initially reused amount/currency filtering without applying Gate 8's causal lower bound to diagnostic bank candidates.
+
+### Fix
+Bank candidates occurring before the target settlement's `processed_at` are now `BLOCKED_EVIDENCE` with `BANK_CREDIT_PRECEDES_SETTLEMENT`. No arbitrary upper delay cutoff is introduced.
+
+---
+
+## F-0040 — Residual search could double-count duplicated or overlapping raw evidence
+
+**Date:** 2026-08-31
+**Area:** Gate 10 combination search
+**Severity:** safety-critical
+
+### Symptom
+The public solver accepted duplicate candidate identities, and two distinct candidate objects that cited the same raw source envelope could theoretically be selected together and numerically double-count one piece of evidence.
+
+### Root cause
+The first bounded search assumed candidates came only from the internal enumerator rather than enforcing evidence uniqueness at the public solver boundary.
+
+### Fix
+`solve_residual()` rejects duplicate candidate identities. Combination search skips candidate sets with overlapping raw envelopes, and `ResidualExplanation` independently rejects reused raw evidence.
+
+---
+
+## F-0041 — Public residual solver accepted caller-constructed candidate sets
+
+**Date:** 2026-08-31
+**Area:** Gate 10 API boundary
+**Severity:** high
+
+### Symptom
+The first public `solve_residual(target, candidates)` API allowed a caller to bypass canonical-batch candidate enumeration and submit handcrafted candidate objects directly. The result still could not become financial proof, but a future AI/UI caller could manufacture misleading hypothesis evidence.
+
+### Root cause
+The pure combination-search function was exposed as the supported single-residual API rather than kept as an internal solver seam.
+
+### Fix
+Public `solve_residual()` now requires the immutable `ReconciliationProofVersion`, its exact `CanonicalBatch` and the target. It derives candidates through the audited enumerator before invoking the private `_solve_candidate_set()` test seam. `solve_all_residuals()` uses the same safe path with one reusable batch index.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:

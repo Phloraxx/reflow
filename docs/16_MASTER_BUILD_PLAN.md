@@ -323,27 +323,35 @@ Late bank or recon evidence versions only affected settlement truth and preserve
 
 ## Phase 10 — Residual Solver
 
-Start conservative.
+**Implemented on the Gate 10 checkpoint branch.**
 
-### v1
+Gate 10 derives residual targets from immutable Gate 9 proof versions and produces deterministic arithmetic hypotheses only. It cannot mutate or upgrade Gate 7/8/9 financial truth.
 
-- deterministic candidate enumeration;
-- exact residual amount lookup;
-- typed explanation candidates.
+Implemented:
 
-### v2 if needed
+- typed composition/bank residual targets bound to one `ProofVersionId`;
+- raw-provenance-backed typed candidate explanations;
+- candidate identity bound to settlement, proof version, scope, disposition and reasons;
+- amount-only bank candidates with foreign-settlement and causal blocking;
+- blocked Gate 7 recon components as forensic hypotheses;
+- exact one-to-N bounded combination search;
+- public `solve_residual(proof, batch, target)` path that derives candidates internally;
+- reusable per-batch candidate index and `solve_all_residuals()` path;
+- deterministic candidate/combination/node/solution budgets;
+- explicit truncation/budget/solution-limit flags;
+- explanation outputs whose only state is `HYPOTHESIS`.
 
-- bounded branch-and-bound / DP for small combination sets.
+Deferred intentionally:
 
-### stretch
-
-- CP-SAT solver.
+- CP-SAT;
+- negative bank residual / over-credit hypothesis families;
+- Instant Settlement payout hypotheses;
+- semantic/AI-generated hypotheses;
+- any autonomous proof promotion.
 
 ### Gate 10
 
-Solver never upgrades a hypothesis to proof without required external evidence.
-
-Runtime/time cap is deterministic.
+An exact numerical explanation must remain a hypothesis until new authoritative evidence satisfies the upstream proof rules. Search incompleteness is explicit, repeated raw evidence cannot be double-counted, and the high-volume path reuses one candidate index instead of rescanning the full bank feed per residual.
 
 ---
 
