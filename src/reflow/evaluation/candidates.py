@@ -94,7 +94,9 @@ class _BaselineIndex:
         recon_by_effect: dict[MoneyKey, list[domain.SettlementReconEntry]] = {}
         for recon_row in batch.recon_entries:
             recon_by_settlement.setdefault(recon_row.settlement_id, []).append(recon_row)
-            recon_by_effect.setdefault(_money_key(recon_row.settlement_effect), []).append(recon_row)
+            recon_by_effect.setdefault(
+                _money_key(recon_row.settlement_effect), []
+            ).append(recon_row)
         self.recon_by_settlement = {
             key: tuple(sorted(rows, key=lambda row: str(row.id)))
             for key, rows in recon_by_settlement.items()
