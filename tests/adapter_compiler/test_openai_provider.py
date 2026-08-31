@@ -329,3 +329,14 @@ def test_openai_provider_redacts_obvious_sensitive_sample_values() -> None:
     assert "<ADDRESS_LIKE>" in prompt
     assert "<LONG_NUMBER>" in prompt
     assert "<SECRET_LIKE>" in prompt
+
+
+def test_openai_provider_environment_requires_explicit_model(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.delenv("REFLOW_ADAPTER_MODEL", raising=False)
+    with pytest.raises(ValueError, match="adapter model must be explicit"):
+        OpenAIAdapterProposalProvider.from_environment()
+
+    monkeypatch.setenv("REFLOW_ADAPTER_MODEL", "test-model")
+    provider = OpenAIAdapterProposalProvider.from_environment()
+    assert provider.model == "test-model"
