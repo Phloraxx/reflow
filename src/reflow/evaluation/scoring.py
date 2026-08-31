@@ -23,6 +23,10 @@ class EdgeMetrics:
     false_positive: int
     false_negative: int
 
+    def __post_init__(self) -> None:
+        if min(self.true_positive, self.false_positive, self.false_negative) < 0:
+            raise ValueError("edge metric counts cannot be negative")
+
 
 @dataclass(frozen=True, slots=True)
 class EvaluationReport:
@@ -36,10 +40,23 @@ class EvaluationReport:
     truth_reconciled: int
     reconciliation_recall: CountMetric
     silent_false_auto_match_rate: CountMetric
+    settlement_amount_correct: CountMetric
     composition_amount_correct: CountMetric
     composition_edges: EdgeMetrics
     bank_edges: EdgeMetrics
     absolute_reported_residual_paise: int
+
+    def __post_init__(self) -> None:
+        if self.settlement_count < 0:
+            raise ValueError("settlement count cannot be negative")
+        if self.auto_reconciled != self.true_auto_reconciled + self.false_auto_reconciled:
+            raise ValueError("auto-reconciled count must partition into true and false")
+        if self.unresolved + self.auto_reconciled != self.settlement_count:
+            raise ValueError("every truth settlement must be reconciled or unresolved")
+        if not 0 <= self.missing_decisions <= self.unresolved:
+            raise ValueError("missing decisions must be a subset of unresolved cases")
+        if self.absolute_reported_residual_paise < 0:
+            raise ValueError("absolute residual cannot be negative")
 
 
 type ScoredEdge = tuple[str, str]
@@ -83,12 +100,15 @@ def score_candidate_run(world: HiddenWorld, run: CandidateRun) -> EvaluationRepo
     false_auto = len(predicted_reconciled_ids - truth_reconciled_ids)
     missing_decisions = len(set(truth_by_settlement) - set(decisions))
 
+    settlement_correct = 0
     composition_correct = 0
     reported_residual = 0
     predicted_composition_edges: set[ScoredEdge] = set()
     predicted_bank_edges: set[ScoredEdge] = set()
     for settlement_id, decision in decisions.items():
         truth = truth_by_settlement[settlement_id]
+        if decision.settlement_amount == truth.settlement.amount:
+            settlement_correct += 1
         if decision.composition_amount == truth.settlement.amount:
             composition_correct += 1
         reported_residual += abs(decision.composition_residual.amount_paise)
@@ -114,6 +134,7 @@ def score_candidate_run(world: HiddenWorld, run: CandidateRun) -> EvaluationRepo
         truth_reconciled=truth_count,
         reconciliation_recall=CountMetric(true_auto, truth_count),
         silent_false_auto_match_rate=CountMetric(false_auto, auto_count),
+        settlement_amount_correct=CountMetric(settlement_correct, len(world.cases)),
         composition_amount_correct=CountMetric(composition_correct, len(world.cases)),
         composition_edges=_edge_metrics(predicted_composition_edges, truth_composition_edges),
         bank_edges=_edge_metrics(predicted_bank_edges, truth_bank_edges),

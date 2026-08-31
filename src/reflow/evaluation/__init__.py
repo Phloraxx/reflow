@@ -1,7 +1,12 @@
 """Evaluation-only harness. Candidate systems never receive hidden truth."""
 
 from .candidates import CandidateDecision, CandidateRun, CandidateStatus
-from .harness import EvaluationResult, evaluate_observation
+from .harness import (
+    EvaluationResult,
+    EvaluationSourceRejected,
+    SourceRejection,
+    evaluate_observation,
+)
 from .scoring import CountMetric, EdgeMetrics, EvaluationReport, score_candidate_run
 
 __all__ = [
@@ -12,6 +17,8 @@ __all__ = [
     "EdgeMetrics",
     "EvaluationReport",
     "EvaluationResult",
+    "EvaluationSourceRejected",
     "evaluate_observation",
+    "SourceRejection",
     "score_candidate_run",
 ]

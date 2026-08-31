@@ -4,6 +4,8 @@ import ast
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from reflow import domain
 from reflow.evaluation.candidates import (
     CandidateDecision,
@@ -67,9 +69,9 @@ def test_scorer_catches_intentionally_broken_reconcile_everything_mutation() -> 
             CandidateDecision(
                 settlement_id=case.settlement.id,
                 status=CandidateStatus.RECONCILED,
+                settlement_amount=case.settlement.amount,
                 composition_amount=case.settlement.amount,
-                composition_residual=domain.Money.zero(case.settlement.amount.currency),
-                bank_residual=domain.Money.zero(case.settlement.amount.currency),
+                bank_amount=case.settlement.amount,
                 composition_component_ids=tuple(entry.id for entry in case.recon_entries),
                 bank_entry_ids=bank_ids,
                 reason_codes=("INTENTIONALLY_BROKEN_MUTATION",),
@@ -89,9 +91,9 @@ def test_scorer_catches_wrong_bank_edge_even_when_status_is_unresolved() -> None
     decision = CandidateDecision(
         settlement_id=first.settlement.id,
         status=CandidateStatus.UNRESOLVED,
+        settlement_amount=first.settlement.amount,
         composition_amount=first.settlement.amount,
-        composition_residual=domain.Money.zero(first.settlement.amount.currency),
-        bank_residual=first.settlement.amount,
+        bank_amount=domain.Money.zero(first.settlement.amount.currency),
         composition_component_ids=tuple(entry.id for entry in first.recon_entries),
         bank_entry_ids=(second.bank_entries[0].id,),
         reason_codes=("INTENTIONALLY_WRONG_EDGE",),
@@ -127,3 +129,51 @@ def test_hidden_scenario_position_changes_across_seeds() -> None:
     assert tuple(case.scenario for case in first.cases) != tuple(
         case.scenario for case in second.cases
     )
+
+
+def test_source_schema_failure_is_reported_after_raw_evidence_is_retained() -> None:
+    from reflow.evaluation.harness import EvaluationSourceRejected, evaluate_observation
+    from reflow.simulator import CorruptionKind
+
+    world = generate_world(351, WorldConfig(settlement_count=20))
+    observed = observe_world(
+        world,
+        seed=352,
+        plan=CorruptionPlan(kinds=(CorruptionKind.SCHEMA_RENAME,)),
+    ).observed
+    with pytest.raises(EvaluationSourceRejected) as caught:
+        evaluate_observation(world, observed)
+    assert caught.value.rejection.error_type == "AdapterError"
+    assert caught.value.rejection.retained_raw_envelopes > 0
+
+
+def test_benchmark_payload_is_deterministic_for_same_seed_profile() -> None:
+    from reflow.evaluation.profiles import EvaluationProfile
+    from reflow.evaluation.runner import benchmark_payload
+
+    kwargs = {
+        "world_seed": 361,
+        "observation_seed": 362,
+        "settlement_count": 20,
+        "profile": EvaluationProfile.CLEAN,
+    }
+    first = benchmark_payload(**kwargs)
+    second = benchmark_payload(**kwargs)
+    assert first == second
+    assert first["status"] == "evaluated"
+    assert len(first["runs"]) == 4
+    assert len(first["reports"]) == 4
+
+
+def test_reconciliation_adversarial_profile_remains_canonicalizable() -> None:
+    from reflow.evaluation.profiles import EvaluationProfile
+    from reflow.evaluation.runner import benchmark_payload
+
+    payload = benchmark_payload(
+        world_seed=371,
+        observation_seed=372,
+        settlement_count=20,
+        profile=EvaluationProfile.RECONCILIATION_ADVERSARIAL,
+    )
+    assert payload["status"] == "evaluated"
+    assert payload["corruptions"]
