@@ -7,17 +7,21 @@ from typing import Any
 from reflow import domain
 from reflow.ingestion import RawRecord
 
-from .compiler import CanonicalRecord, compile_adapter, validate_sample
-from .contracts import ActivationState, AdapterSpec, CanonicalRecordKind
-from .profile import profile_rows
-from .provider import AdapterProposalProvider, ProposalContext, propose_and_validate
-from .spec_io import parse_adapter_spec_payload
+from .compiler import CanonicalRecord
+from .contracts import (
+    ActivationState,
+    AdapterSpec,
+    CanonicalRecordKind,
+    FinancialControlTotal,
+)
+from .provider import AdapterProposalProvider, propose_and_validate
 
 ADAPTER_BENCHMARK_SCHEMA_VERSION = "gate12-adapter-benchmark-v1"
 
 
 class AdapterCaseExpectation(StrEnum):
     ACTIVATABLE = "activatable"
+    MUST_REVIEW = "must_review"
     MUST_REJECT = "must_reject"
 
 
@@ -31,47 +35,78 @@ class AdapterBenchmarkCase:
     rows: tuple[RawRecord, ...]
     expected_records: tuple[CanonicalRecord, ...]
     expectation: AdapterCaseExpectation
+    financial_control: FinancialControlTotal | None = None
 
     def __post_init__(self) -> None:
         if not self.case_id or self.case_id != self.case_id.strip():
             raise ValueError("benchmark case id must be non-empty and trimmed")
-        if self.expectation is AdapterCaseExpectation.ACTIVATABLE and not self.expected_records:
-            raise ValueError("activatable benchmark case requires canonical truth")
-        if self.expectation is AdapterCaseExpectation.MUST_REJECT and self.expected_records:
-            raise ValueError("must-reject benchmark case cannot carry canonical truth")
+        if self.expectation is AdapterCaseExpectation.MUST_REJECT:
+            if self.expected_records:
+                raise ValueError("must-reject case cannot carry canonical truth")
+            if self.financial_control is not None:
+                raise ValueError("must-reject case cannot carry an activation control")
+        elif not self.expected_records:
+            raise ValueError("activatable/review benchmark cases require canonical truth")
+        if (
+            self.expectation is AdapterCaseExpectation.ACTIVATABLE
+            and self.financial_control is None
+        ):
+            raise ValueError("activatable benchmark case requires independent financial control")
+        if (
+            self.expectation is AdapterCaseExpectation.MUST_REVIEW
+            and self.financial_control is not None
+        ):
+            raise ValueError("must-review case cannot carry an activation control")
 
 
 @dataclass(frozen=True, slots=True)
 class AdapterCaseResult:
     case_id: str
     proposed_spec: AdapterSpec | None
-    activated: bool
+    state: ActivationState
     canonical_records: tuple[CanonicalRecord, ...]
-    rejection_reason: str | None
+    disposition_reason: str | None
+
+    def __post_init__(self) -> None:
+        if self.state is ActivationState.APPROVED and not self.canonical_records:
+            raise ValueError("approved adapter case must carry canonical records")
+        if self.state is not ActivationState.APPROVED and self.canonical_records:
+            raise ValueError("non-approved adapter case cannot carry canonical records")
 
 
 @dataclass(frozen=True, slots=True)
 class AdapterBenchmarkReport:
     case_count: int
     proposals_returned: int
-    activations: int
+    approved: int
+    needs_review: int
+    rejected: int
     safe_activations: int
     unsafe_activations: int
     expected_activations: int
+    expected_reviews: int
     expected_rejections: int
-    false_rejections: int
+    false_rejections_or_reviews: int
+    correct_reviews: int
     correct_rejections: int
 
     def __post_init__(self) -> None:
         values = tuple(asdict(self).values())
         if any(not isinstance(value, int) or value < 0 for value in values):
             raise ValueError("adapter benchmark report counts must be non-negative integers")
-        if self.safe_activations + self.unsafe_activations != self.activations:
-            raise ValueError("activation counts do not partition")
-        if self.expected_activations + self.expected_rejections != self.case_count:
-            raise ValueError("benchmark expectations do not partition")
-        if self.false_rejections > self.expected_activations:
-            raise ValueError("false rejection count exceeds activatable cases")
+        if self.approved + self.needs_review + self.rejected != self.case_count:
+            raise ValueError("adapter case states do not partition")
+        if self.safe_activations + self.unsafe_activations != self.approved:
+            raise ValueError("activation safety counts do not partition")
+        if (
+            self.expected_activations + self.expected_reviews + self.expected_rejections
+            != self.case_count
+        ):
+            raise ValueError("adapter benchmark expectations do not partition")
+        if self.false_rejections_or_reviews > self.expected_activations:
+            raise ValueError("false non-activation count exceeds activatable cases")
+        if self.correct_reviews > self.expected_reviews:
+            raise ValueError("correct review count exceeds expected-review cases")
         if self.correct_rejections > self.expected_rejections:
             raise ValueError("correct rejection count exceeds must-reject cases")
 
@@ -98,30 +133,37 @@ def run_adapter_case(
             version=case.version,
             source_kind=case.source_kind,
             record_kind=case.record_kind,
+            financial_control=case.financial_control,
         )
     except (TypeError, ValueError) as exc:
         return AdapterCaseResult(
             case_id=case.case_id,
             proposed_spec=None,
-            activated=False,
+            state=ActivationState.REJECTED,
             canonical_records=(),
-            rejection_reason=f"{type(exc).__name__}: {exc}",
+            disposition_reason=f"{type(exc).__name__}: {exc}",
         )
-    if not evaluated.approved or evaluated.compiled is None:
+
+    state = (
+        ActivationState.REJECTED
+        if evaluated.sample_report is None
+        else evaluated.sample_report.state
+    )
+    if state is not ActivationState.APPROVED or evaluated.compiled is None:
         return AdapterCaseResult(
             case_id=case.case_id,
             proposed_spec=evaluated.proposed_spec,
-            activated=False,
+            state=state,
             canonical_records=(),
-            rejection_reason=evaluated.rejection_reason,
+            disposition_reason=evaluated.rejection_reason,
         )
     records = tuple(evaluated.compiled.canonicalize(row) for row in case.rows)
     return AdapterCaseResult(
         case_id=case.case_id,
         proposed_spec=evaluated.proposed_spec,
-        activated=True,
+        state=state,
         canonical_records=_sorted_records(records),
-        rejection_reason=None,
+        disposition_reason=None,
     )
 
 
@@ -138,11 +180,12 @@ def score_adapter_results(
 
     safe_activations = 0
     unsafe_activations = 0
-    false_rejections = 0
+    false_non_activation = 0
+    correct_reviews = 0
     correct_rejections = 0
     for case_id, case in case_index.items():
         result = result_index[case_id]
-        if result.activated:
+        if result.state is ActivationState.APPROVED:
             if (
                 case.expectation is AdapterCaseExpectation.ACTIVATABLE
                 and result.canonical_records == _sorted_records(case.expected_records)
@@ -151,23 +194,37 @@ def score_adapter_results(
             else:
                 unsafe_activations += 1
         elif case.expectation is AdapterCaseExpectation.ACTIVATABLE:
-            false_rejections += 1
-        else:
+            false_non_activation += 1
+        elif (
+            case.expectation is AdapterCaseExpectation.MUST_REVIEW
+            and result.state is ActivationState.NEEDS_REVIEW
+        ):
+            correct_reviews += 1
+        elif (
+            case.expectation is AdapterCaseExpectation.MUST_REJECT
+            and result.state is ActivationState.REJECTED
+        ):
             correct_rejections += 1
 
     return AdapterBenchmarkReport(
         case_count=len(cases),
         proposals_returned=sum(result.proposed_spec is not None for result in results),
-        activations=sum(result.activated for result in results),
+        approved=sum(result.state is ActivationState.APPROVED for result in results),
+        needs_review=sum(result.state is ActivationState.NEEDS_REVIEW for result in results),
+        rejected=sum(result.state is ActivationState.REJECTED for result in results),
         safe_activations=safe_activations,
         unsafe_activations=unsafe_activations,
         expected_activations=sum(
             case.expectation is AdapterCaseExpectation.ACTIVATABLE for case in cases
         ),
+        expected_reviews=sum(
+            case.expectation is AdapterCaseExpectation.MUST_REVIEW for case in cases
+        ),
         expected_rejections=sum(
             case.expectation is AdapterCaseExpectation.MUST_REJECT for case in cases
         ),
-        false_rejections=false_rejections,
+        false_rejections_or_reviews=false_non_activation,
+        correct_reviews=correct_reviews,
         correct_rejections=correct_rejections,
     )
 
@@ -259,6 +316,10 @@ def spec_payload(spec: AdapterSpec) -> dict[str, object]:
     }
 
 
+def control_payload(control: FinancialControlTotal | None) -> dict[str, object] | None:
+    return None if control is None else asdict(control)
+
+
 def benchmark_payload(
     cases: tuple[AdapterBenchmarkCase, ...],
     results: tuple[AdapterCaseResult, ...],
@@ -267,7 +328,6 @@ def benchmark_payload(
     provider_name: str,
     model_name: str | None = None,
 ) -> dict[str, Any]:
-    case_index = {case.case_id: case for case in cases}
     return {
         "schema_version": ADAPTER_BENCHMARK_SCHEMA_VERSION,
         "provider_name": provider_name,
@@ -280,6 +340,7 @@ def benchmark_payload(
                 "source_kind": case.source_kind.value,
                 "record_kind": case.record_kind.value,
                 "expectation": case.expectation.value,
+                "financial_control": control_payload(case.financial_control),
                 "rows": [dict(row) for row in case.rows],
                 "expected_records": [canonical_payload(row) for row in case.expected_records],
             }
@@ -291,10 +352,9 @@ def benchmark_payload(
                 "proposed_spec": (
                     None if result.proposed_spec is None else spec_payload(result.proposed_spec)
                 ),
-                "activated": result.activated,
+                "state": result.state.value,
                 "canonical_records": [canonical_payload(row) for row in result.canonical_records],
-                "rejection_reason": result.rejection_reason,
-                "expectation": case_index[result.case_id].expectation.value,
+                "disposition_reason": result.disposition_reason,
             }
             for result in results
         ],

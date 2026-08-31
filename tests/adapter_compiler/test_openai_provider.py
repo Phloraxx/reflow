@@ -258,3 +258,22 @@ def test_integer_looking_rupees_wrong_unit_fails_independent_control() -> None:
     assert result.sample_report is not None
     assert result.sample_report.state is ActivationState.REJECTED
     assert "financial control total mismatch" in result.sample_report.error_messages
+
+
+def test_integer_looking_money_without_independent_control_stays_review_only() -> None:
+    rows = ({**_rows()[0], "Cr Amt": "100"},)
+    provider = OpenAIAdapterProposalProvider(
+        api_key="test-key",
+        transport=lambda *_: _response(_spec_payload(money_transform="integer_paise")),
+    )
+    result = propose_and_validate(
+        provider,
+        rows,
+        adapter_id="bank_ai_proposal",
+        version=1,
+        source_kind=SourceKind.BANK,
+        record_kind=CanonicalRecordKind.BANK_ENTRY,
+    )
+    assert not result.approved
+    assert result.sample_report is not None
+    assert result.sample_report.state is ActivationState.NEEDS_REVIEW
