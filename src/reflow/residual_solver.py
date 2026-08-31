@@ -85,6 +85,7 @@ class ResidualTarget:
 class ResidualCandidate:
     id: domain.ResidualCandidateId
     settlement_id: domain.SettlementId
+    proof_version_id: domain.ProofVersionId
     scope: ResidualScope
     kind: ResidualCandidateKind
     amount: domain.Money
@@ -98,6 +99,7 @@ class ResidualCandidate:
         cls,
         *,
         settlement_id: domain.SettlementId,
+        proof_version_id: domain.ProofVersionId,
         scope: ResidualScope,
         kind: ResidualCandidateKind,
         amount: domain.Money,
@@ -107,26 +109,33 @@ class ResidualCandidate:
         reason_codes: tuple[str, ...] = (),
     ) -> ResidualCandidate:
         source_ids = tuple(sorted(set(source_envelope_ids), key=str))
+        reasons = tuple(sorted(set(reason_codes)))
         return cls(
             id=_candidate_id(
                 settlement_id,
+                proof_version_id,
                 scope,
                 kind,
                 source_entity_id,
                 amount,
                 source_ids,
+                disposition,
+                reasons,
             ),
             settlement_id=settlement_id,
+            proof_version_id=proof_version_id,
             scope=scope,
             kind=kind,
             amount=amount,
             source_envelope_ids=source_ids,
             source_entity_id=source_entity_id,
             disposition=disposition,
-            reason_codes=tuple(sorted(set(reason_codes))),
+            reason_codes=reasons,
         )
 
     def __post_init__(self) -> None:
+        if not self.source_entity_id or self.source_entity_id != self.source_entity_id.strip():
+            raise ValueError("residual candidate source entity id must be non-empty and trimmed")
         if self.amount.is_zero:
             raise ValueError("residual candidate effect must be non-zero")
         if not self.source_envelope_ids:
@@ -135,13 +144,18 @@ class ResidualCandidate:
             sorted(set(self.source_envelope_ids), key=str)
         ):
             raise ValueError("residual candidate source evidence must be unique and sorted")
+        if self.reason_codes != tuple(sorted(set(self.reason_codes))):
+            raise ValueError("residual candidate reason codes must be unique and sorted")
         expected_id = _candidate_id(
             self.settlement_id,
+            self.proof_version_id,
             self.scope,
             self.kind,
             self.source_entity_id,
             self.amount,
             self.source_envelope_ids,
+            self.disposition,
+            self.reason_codes,
         )
         if self.id != expected_id:
             raise ValueError("residual candidate id does not match its deterministic identity")
@@ -151,32 +165,83 @@ class ResidualCandidate:
 class ResidualExplanation:
     id: domain.ResidualExplanationId
     target: ResidualTarget
-    candidate_ids: tuple[domain.ResidualCandidateId, ...]
-    explained_amount: domain.Money
-    remaining_residual: domain.Money
-    source_envelope_ids: tuple[domain.SourceEnvelopeId, ...]
-    uses_blocked_evidence: bool
-    reason_codes: tuple[str, ...]
+    candidates: tuple[ResidualCandidate, ...]
     state: ResidualExplanationState = ResidualExplanationState.HYPOTHESIS
 
     def __post_init__(self) -> None:
-        if not self.candidate_ids:
+        if not self.candidates:
             raise ValueError("residual explanation requires at least one candidate")
-        if self.explained_amount.currency != self.target.amount.currency:
-            raise ValueError("explanation currency must match target")
-        if self.remaining_residual != self.target.amount - self.explained_amount:
-            raise ValueError("remaining residual must equal target minus explanation")
-        if not self.remaining_residual.is_zero:
-            raise ValueError("published residual explanation must exactly close the target")
-        if not self.source_envelope_ids:
-            raise ValueError("residual explanation must cite raw evidence")
-        if len(set(self.candidate_ids)) != len(self.candidate_ids):
+        if self.candidates != tuple(sorted(self.candidates, key=lambda item: str(item.id))):
+            raise ValueError("residual explanation candidates must be sorted")
+        if len({candidate.id for candidate in self.candidates}) != len(self.candidates):
             raise ValueError("residual explanation candidate ids must be unique")
-        if self.candidate_ids != tuple(sorted(self.candidate_ids, key=str)):
-            raise ValueError("residual explanation candidate ids must be sorted")
+        for candidate in self.candidates:
+            if (
+                candidate.settlement_id != self.target.settlement_id
+                or candidate.proof_version_id != self.target.proof_version_id
+                or candidate.scope is not self.target.scope
+            ):
+                raise ValueError("residual explanation candidate belongs to another target")
+            if candidate.amount.currency != self.target.amount.currency:
+                raise ValueError("residual explanation candidate currency differs from target")
+        source_ids = [
+            source_id
+            for candidate in self.candidates
+            for source_id in candidate.source_envelope_ids
+        ]
+        if len(set(source_ids)) != len(source_ids):
+            raise ValueError("residual explanation cannot reuse the same raw evidence")
+        if self.explained_amount != self.target.amount:
+            raise ValueError("published residual explanation must exactly close the target")
+        if self.state is not ResidualExplanationState.HYPOTHESIS:
+            raise ValueError("residual explanations can only be hypotheses")
         expected_id = _explanation_id_from_ids(self.target, self.candidate_ids)
         if self.id != expected_id:
             raise ValueError("residual explanation id does not match its deterministic identity")
+
+    @property
+    def candidate_ids(self) -> tuple[domain.ResidualCandidateId, ...]:
+        return tuple(candidate.id for candidate in self.candidates)
+
+    @property
+    def explained_amount(self) -> domain.Money:
+        return domain.sum_money(
+            [candidate.amount for candidate in self.candidates],
+            self.target.amount.currency,
+        )
+
+    @property
+    def remaining_residual(self) -> domain.Money:
+        return self.target.amount - self.explained_amount
+
+    @property
+    def source_envelope_ids(self) -> tuple[domain.SourceEnvelopeId, ...]:
+        return tuple(
+            sorted(
+                {
+                    source_id
+                    for candidate in self.candidates
+                    for source_id in candidate.source_envelope_ids
+                },
+                key=str,
+            )
+        )
+
+    @property
+    def uses_blocked_evidence(self) -> bool:
+        return any(
+            candidate.disposition is CandidateDisposition.BLOCKED_EVIDENCE
+            for candidate in self.candidates
+        )
+
+    @property
+    def reason_codes(self) -> tuple[str, ...]:
+        reasons = {"NUMERICALLY_EXACT_HYPOTHESIS", "NOT_FINANCIAL_PROOF"}
+        if self.uses_blocked_evidence:
+            reasons.add("USES_BLOCKED_EVIDENCE")
+        for candidate in self.candidates:
+            reasons.update(candidate.reason_codes)
+        return tuple(sorted(reasons))
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,7 +262,8 @@ class ResidualCandidateIndex:
         if batch.compilation_sha256 is None or not batch.source_links:
             raise ResidualSolverError("residual candidate index requires a journal-backed batch")
         self.batch_compilation_sha256 = batch.compilation_sha256
-        self.source_index = batch.source_index()
+        self._source_index = batch.source_index()
+        self._settlement_by_id = {settlement.id: settlement for settlement in batch.settlements}
 
         bank_by_currency: dict[domain.Currency, list[domain.BankEntry]] = {}
         for bank_entry in batch.bank_entries:
@@ -237,7 +303,7 @@ class ResidualCandidateIndex:
         source_kind: domain.SourceKind,
         source_record_id: str,
     ) -> domain.SourceEnvelopeId:
-        envelope_id = self.source_index.get((source_kind, source_record_id))
+        envelope_id = self._source_index.get((source_kind, source_record_id))
         if envelope_id is None:
             raise ResidualSolverError(
                 "candidate evidence is missing provenance: "
@@ -273,6 +339,12 @@ class ResidualCandidateIndex:
         truncated = len(found) > limit
         return tuple(found[:limit]), truncated
 
+    def settlement(self, settlement_id: domain.SettlementId) -> domain.Settlement:
+        settlement = self._settlement_by_id.get(settlement_id)
+        if settlement is None:
+            raise ResidualSolverError(f"candidate batch is missing settlement {settlement_id}")
+        return settlement
+
     def settlement_owners_for_utr(
         self,
         utr: str | None,
@@ -307,20 +379,26 @@ def residual_targets(proof: ReconciliationProofVersion) -> tuple[ResidualTarget,
 
 def _candidate_id(
     settlement_id: domain.SettlementId,
+    proof_version_id: domain.ProofVersionId,
     scope: ResidualScope,
     kind: ResidualCandidateKind,
     source_entity_id: str,
     amount: domain.Money,
     source_ids: tuple[domain.SourceEnvelopeId, ...],
+    disposition: CandidateDisposition,
+    reason_codes: tuple[str, ...],
 ) -> domain.ResidualCandidateId:
     material = "\0".join(
         (
             str(settlement_id),
+            str(proof_version_id),
             scope.value,
             kind.value,
             source_entity_id,
             str(amount.amount_paise),
             amount.currency.value,
+            disposition.value,
+            *reason_codes,
             *(str(source_id) for source_id in sorted(source_ids, key=str)),
         )
     ).encode()
@@ -362,6 +440,7 @@ def enumerate_residual_candidates(
 
     candidates: list[ResidualCandidate] = []
     index_truncated = False
+    settlement = candidate_index.settlement(proof.settlement_id)
     if target.scope is ResidualScope.BANK:
         excluded = frozenset(
             {
@@ -388,17 +467,21 @@ def enumerate_residual_candidates(
                 claimed_elsewhere = any(
                     owner != proof.settlement_id for owner in owners
                 )
+                precedes_settlement = bank_entry.occurred_at < settlement.processed_at
                 disposition = (
                     CandidateDisposition.BLOCKED_EVIDENCE
-                    if claimed_elsewhere
+                    if claimed_elsewhere or precedes_settlement
                     else CandidateDisposition.ADMISSIBLE_HYPOTHESIS
                 )
                 reasons = {"AMOUNT_ONLY_NOT_IDENTITY"}
                 if claimed_elsewhere:
                     reasons.add("BANK_ENTRY_IDENTIFIED_TO_OTHER_SETTLEMENT")
+                if precedes_settlement:
+                    reasons.add("BANK_CREDIT_PRECEDES_SETTLEMENT")
                 candidates.append(
                     ResidualCandidate.create(
                         settlement_id=proof.settlement_id,
+                        proof_version_id=proof.id,
                         scope=target.scope,
                         kind=ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
                         amount=bank_entry.amount,
@@ -426,6 +509,7 @@ def enumerate_residual_candidates(
             candidates.append(
                 ResidualCandidate.create(
                     settlement_id=proof.settlement_id,
+                    proof_version_id=proof.id,
                     scope=target.scope,
                     kind=ResidualCandidateKind.BLOCKED_RECON_COMPONENT,
                     amount=recon_entry.settlement_effect,
@@ -469,38 +553,11 @@ def _make_explanation(
     target: ResidualTarget,
     candidates: tuple[ResidualCandidate, ...],
 ) -> ResidualExplanation:
-    explained = domain.sum_money(
-        [candidate.amount for candidate in candidates],
-        target.amount.currency,
-    )
-    source_ids = tuple(
-        sorted(
-            {
-                source_id
-                for candidate in candidates
-                for source_id in candidate.source_envelope_ids
-            },
-            key=str,
-        )
-    )
-    blocked = any(
-        candidate.disposition is CandidateDisposition.BLOCKED_EVIDENCE
-        for candidate in candidates
-    )
-    reasons = {"NUMERICALLY_EXACT_HYPOTHESIS", "NOT_FINANCIAL_PROOF"}
-    if blocked:
-        reasons.add("USES_BLOCKED_EVIDENCE")
-    for candidate in candidates:
-        reasons.update(candidate.reason_codes)
+    ordered = tuple(sorted(candidates, key=lambda candidate: str(candidate.id)))
     return ResidualExplanation(
-        id=_explanation_id(target, candidates),
+        id=_explanation_id(target, ordered),
         target=target,
-        candidate_ids=tuple(sorted((candidate.id for candidate in candidates), key=str)),
-        explained_amount=explained,
-        remaining_residual=target.amount - explained,
-        source_envelope_ids=source_ids,
-        uses_blocked_evidence=blocked,
-        reason_codes=tuple(sorted(reasons)),
+        candidates=ordered,
     )
 
 
@@ -512,8 +569,15 @@ def solve_residual(
     candidate_space_truncated: bool = False,
 ) -> ResidualSolveResult:
     cfg = limits or ResidualSolverLimits()
+    candidate_ids = [candidate.id for candidate in candidates]
+    if len(set(candidate_ids)) != len(candidate_ids):
+        raise ResidualSolverError("residual candidate input contains duplicate identities")
     for candidate in candidates:
-        if candidate.settlement_id != target.settlement_id or candidate.scope is not target.scope:
+        if (
+            candidate.settlement_id != target.settlement_id
+            or candidate.proof_version_id != target.proof_version_id
+            or candidate.scope is not target.scope
+        ):
             raise ResidualSolverError("candidate belongs to another residual target")
         if candidate.amount.currency != target.amount.currency:
             raise ResidualSolverError("candidate currency differs from residual target")
@@ -546,6 +610,13 @@ def solve_residual(
             if exhausted or len(solutions) >= cfg.max_solutions:
                 return
             candidate = ordered[index]
+            chosen_source_ids = {
+                source_id
+                for chosen_candidate in chosen
+                for source_id in chosen_candidate.source_envelope_ids
+            }
+            if chosen_source_ids.intersection(candidate.source_envelope_ids):
+                continue
             search(
                 index + 1,
                 (*chosen, candidate),

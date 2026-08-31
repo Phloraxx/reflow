@@ -168,6 +168,7 @@ def _candidate(suffix: str, amount: int) -> ResidualCandidate:
     money = Money(amount, Currency.INR)
     return ResidualCandidate.create(
         settlement_id=SettlementId("setl_manual"),
+        proof_version_id=ProofVersionId("proofv_manual"),
         scope=ResidualScope.BANK,
         kind=ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
         amount=money,
@@ -218,6 +219,7 @@ def test_candidate_enumeration_rejects_wrong_canonical_batch() -> None:
     assert first_batch.compilation_sha256 != second_batch.compilation_sha256
     with pytest.raises(ResidualSolverError, match="proof's canonical batch"):
         enumerate_residual_candidates(proof, second_batch, target)
+
 
 def test_bank_candidate_identified_to_other_settlement_is_blocked() -> None:
     world = generate_world(241)
@@ -301,6 +303,7 @@ def test_candidate_index_rejects_unbound_batch() -> None:
             )
         )
 
+
 def test_solution_cap_is_reported_as_incomplete_search() -> None:
     target = ResidualTarget(
         settlement_id=SettlementId("setl_manual"),
@@ -341,3 +344,101 @@ def test_batch_solver_rejects_duplicate_proof_versions() -> None:
     batch, proofs = _prove(_clean(world, 272))
     with pytest.raises(ResidualSolverError, match="duplicate proof version"):
         solve_all_residuals((*proofs, proofs[0]), batch)
+
+
+def test_candidate_identity_binds_proof_version_and_disposition() -> None:
+    candidate = _candidate("identity_binding", 100)
+    with pytest.raises(ValueError, match="deterministic identity"):
+        replace(candidate, proof_version_id=ProofVersionId("proofv_other"))
+    with pytest.raises(ValueError, match="deterministic identity"):
+        replace(candidate, disposition=CandidateDisposition.BLOCKED_EVIDENCE)
+
+
+def test_residual_explanation_derives_metadata_from_embedded_candidates() -> None:
+    target = ResidualTarget(
+        settlement_id=SettlementId("setl_manual"),
+        proof_version_id=ProofVersionId("proofv_manual"),
+        scope=ResidualScope.BANK,
+        amount=Money(300, Currency.INR),
+    )
+    result = solve_residual(target, (_candidate("self_a", 100), _candidate("self_b", 200)))
+    explanation = result.explanations[0]
+    assert explanation.candidate_ids == tuple(candidate.id for candidate in explanation.candidates)
+    assert explanation.remaining_residual.is_zero
+    assert explanation.source_envelope_ids
+    assert "NOT_FINANCIAL_PROOF" in explanation.reason_codes
+    with pytest.raises(ValueError, match="exactly close"):
+        replace(explanation, candidates=(explanation.candidates[0],))
+
+
+def test_pre_settlement_bank_amount_candidate_is_blocked() -> None:
+    world = generate_world(281)
+    target_case = next(
+        case for case in world.cases if case.bank_expectation is BankExpectation.MISSING
+    )
+    observed = _clean(world, 282)
+    template = dict(observed.bank_rows[0])
+    template["bank_entry_id"] = "bank_pre_settlement_candidate"
+    template["amount_paise"] = 1
+    template["utr"] = "UTR_PRE_SETTLEMENT_AMOUNT_ONLY"
+    template["occurred_at"] = (
+        target_case.settlement.processed_at - timedelta(minutes=1)
+    ).isoformat()
+    template["narration"] = "amount-only credit before settlement processing"
+    changed = replace(observed, bank_rows=(*observed.bank_rows, template))
+    batch, proofs = _prove(changed)
+    proof = _proof_for(proofs, target_case.settlement.id)
+    target = next(
+        item for item in residual_targets(proof) if item.scope is ResidualScope.BANK
+    )
+    candidates, _ = enumerate_residual_candidates(proof, batch, target)
+    candidate = next(
+        item for item in candidates if item.source_entity_id == "bank_pre_settlement_candidate"
+    )
+    assert candidate.disposition is CandidateDisposition.BLOCKED_EVIDENCE
+    assert "BANK_CREDIT_PRECEDES_SETTLEMENT" in candidate.reason_codes
+
+def test_solver_rejects_duplicate_candidate_identity() -> None:
+    target = ResidualTarget(
+        settlement_id=SettlementId("setl_manual"),
+        proof_version_id=ProofVersionId("proofv_manual"),
+        scope=ResidualScope.BANK,
+        amount=Money(200, Currency.INR),
+    )
+    candidate = _candidate("duplicate_identity", 100)
+    with pytest.raises(ResidualSolverError, match="duplicate identities"):
+        solve_residual(target, (candidate, candidate))
+
+
+def test_solver_never_double_counts_one_raw_envelope() -> None:
+    target = ResidualTarget(
+        settlement_id=SettlementId("setl_manual"),
+        proof_version_id=ProofVersionId("proofv_manual"),
+        scope=ResidualScope.BANK,
+        amount=Money(300, Currency.INR),
+    )
+    shared = SourceEnvelopeId("src_shared_raw_evidence")
+    first = ResidualCandidate.create(
+        settlement_id=target.settlement_id,
+        proof_version_id=target.proof_version_id,
+        scope=target.scope,
+        kind=ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
+        amount=Money(100, Currency.INR),
+        source_envelope_ids=(shared,),
+        source_entity_id="bank_shared_a",
+        disposition=CandidateDisposition.ADMISSIBLE_HYPOTHESIS,
+        reason_codes=("AMOUNT_ONLY_NOT_IDENTITY",),
+    )
+    second = ResidualCandidate.create(
+        settlement_id=target.settlement_id,
+        proof_version_id=target.proof_version_id,
+        scope=target.scope,
+        kind=ResidualCandidateKind.UNMATCHED_BANK_CREDIT,
+        amount=Money(200, Currency.INR),
+        source_envelope_ids=(shared,),
+        source_entity_id="bank_shared_b",
+        disposition=CandidateDisposition.ADMISSIBLE_HYPOTHESIS,
+        reason_codes=("AMOUNT_ONLY_NOT_IDENTITY",),
+    )
+    result = solve_residual(target, (first, second))
+    assert result.explanations == ()
