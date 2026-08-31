@@ -21,8 +21,8 @@ from reflow.adapter_compiler import (
     profile_rows,
     validate_sample,
 )
-from reflow.domain import SourceKind
 from reflow.adapter_compiler.provider import _propose_and_validate_rows
+from reflow.domain import SourceKind
 
 
 def _rows() -> tuple[dict[str, object], ...]:
@@ -250,6 +250,9 @@ def test_same_schema_newer_version_routes_latest_without_losing_history() -> Non
         )
         store.activate(approved)
         approved_versions.append(approved)
-    assert store.resolve_schema("merchant_unknown", profile.schema_fingerprint) == approved_versions[-1]
+    assert (
+        store.resolve_schema("merchant_unknown", profile.schema_fingerprint)
+        == approved_versions[-1]
+    )
     assert store.get_version("merchant_unknown", 1) == approved_versions[0]
     assert store.get_version("merchant_unknown", 2) == approved_versions[1]

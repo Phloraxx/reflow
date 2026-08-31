@@ -12,8 +12,8 @@ from reflow.adapter_compiler import (
     OpenAIAdapterProposalProvider,
     OpenAIProposalError,
 )
-from reflow.domain import SourceKind
 from reflow.adapter_compiler.provider import _propose_and_validate_rows
+from reflow.domain import SourceKind
 
 
 def _rows() -> tuple[dict[str, object], ...]:
