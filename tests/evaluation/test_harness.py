@@ -243,3 +243,48 @@ def test_reconciliation_adversarial_profile_remains_canonicalizable() -> None:
     )
     assert payload["status"] == "evaluated"
     assert payload["corruptions"]
+
+
+def test_reflow_core_stays_fail_closed_across_development_seed_matrix() -> None:
+    from reflow.evaluation.profiles import EvaluationProfile, corruption_plan
+
+    seed_pairs = ((401, 1401), (402, 1402), (403, 1403), (404, 1404), (405, 1405))
+    for world_seed, observation_seed in seed_pairs:
+        world = generate_world(world_seed, WorldConfig(settlement_count=12))
+        observed = observe_world(
+            world,
+            seed=observation_seed,
+            plan=corruption_plan(EvaluationProfile.RECONCILIATION_ADVERSARIAL),
+        ).observed
+        reports = {
+            report.system_name: report
+            for report in evaluate_observation(world, observed).reports
+        }
+        reflow = reports["ReFlow_Core"]
+        assert reflow.false_auto_reconciled == 0
+        assert reflow.missing_decisions == 0
+        assert reflow.auto_reconciled + reflow.unresolved == len(world.cases)
+
+
+def test_evaluation_is_invariant_to_source_row_permutation() -> None:
+    world, observed = _clean_observation(411, settlements=20)
+    permuted = replace(
+        observed,
+        merchant_rows=tuple(reversed(observed.merchant_rows)),
+        razorpay_events=tuple(reversed(observed.razorpay_events)),
+        recon_rows=tuple(reversed(observed.recon_rows)),
+        settlement_rows=tuple(reversed(observed.settlement_rows)),
+        bank_rows=tuple(reversed(observed.bank_rows)),
+    )
+    assert evaluate_observation(world, observed) == evaluate_observation(world, permuted)
+
+
+def test_evaluation_is_invariant_to_exact_source_replay() -> None:
+    world, observed = _clean_observation(421, settlements=20)
+    replayed = replace(
+        observed,
+        razorpay_events=(*observed.razorpay_events, observed.razorpay_events[0]),
+        recon_rows=(*observed.recon_rows, observed.recon_rows[0]),
+        bank_rows=(*observed.bank_rows, observed.bank_rows[0]),
+    )
+    assert evaluate_observation(world, observed) == evaluate_observation(world, replayed)
