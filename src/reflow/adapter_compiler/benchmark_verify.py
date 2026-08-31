@@ -12,7 +12,12 @@ from .benchmark import (
     AdapterCaseExpectation,
     canonical_payload,
 )
-from .contracts import ActivationState, CanonicalRecordKind, FinancialControlTotal
+from .contracts import (
+    ActivationState,
+    AdapterSpec,
+    CanonicalRecordKind,
+    FinancialControlTotal,
+)
 from .provider import AdapterProposalProvider, ProposalContext, propose_and_validate
 from .spec_io import parse_adapter_spec_payload
 
@@ -25,7 +30,7 @@ class _StoredSpecProvider(AdapterProposalProvider):
     def __init__(self, spec_payload: object) -> None:
         self.spec = parse_adapter_spec_payload(spec_payload)
 
-    def propose(self, context: ProposalContext):
+    def propose(self, context: ProposalContext) -> AdapterSpec:
         return self.spec
 
 

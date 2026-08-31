@@ -155,6 +155,23 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
     negative_id = "bench_bank_negative_credit"
     missing_id = "bench_bank_missing_amount"
     bad_date_id = "bench_bank_bad_date"
+    case_ids = (
+        bank_controlled_id,
+        bank_review_id,
+        bank_prompt_id,
+        merchant_id,
+        payment_id,
+        settlement_id,
+        recon_id,
+        duplicate_id,
+        negative_id,
+        missing_id,
+        bad_date_id,
+    )
+    adapter_ids = {
+        case_id: f"gate12_adapter_{index:03d}"
+        for index, case_id in enumerate(case_ids, start=1)
+    }
 
     bank_time = datetime.fromisoformat("2026-08-31T00:00:00+05:30")
     merchant_time = datetime.fromisoformat("2026-08-31T10:00:00+05:30")
@@ -164,7 +181,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
     cases = (
         AdapterBenchmarkCase(
             case_id=bank_controlled_id,
-            adapter_id=bank_controlled_id,
+            adapter_id=adapter_ids[bank_controlled_id],
             version=1,
             source_kind=domain.SourceKind.BANK,
             record_kind=CanonicalRecordKind.BANK_ENTRY,
@@ -196,7 +213,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=bank_review_id,
-            adapter_id=bank_review_id,
+            adapter_id=adapter_ids[bank_review_id],
             version=1,
             source_kind=domain.SourceKind.BANK,
             record_kind=CanonicalRecordKind.BANK_ENTRY,
@@ -222,7 +239,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=bank_prompt_id,
-            adapter_id=bank_prompt_id,
+            adapter_id=adapter_ids[bank_prompt_id],
             version=1,
             source_kind=domain.SourceKind.BANK,
             record_kind=CanonicalRecordKind.BANK_ENTRY,
@@ -254,7 +271,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=merchant_id,
-            adapter_id=merchant_id,
+            adapter_id=adapter_ids[merchant_id],
             version=1,
             source_kind=domain.SourceKind.MERCHANT,
             record_kind=CanonicalRecordKind.MERCHANT_ORDER,
@@ -284,7 +301,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=payment_id,
-            adapter_id=payment_id,
+            adapter_id=adapter_ids[payment_id],
             version=1,
             source_kind=domain.SourceKind.RAZORPAY_EVENT,
             record_kind=CanonicalRecordKind.PAYMENT_EVENT,
@@ -320,7 +337,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=settlement_id,
-            adapter_id=settlement_id,
+            adapter_id=adapter_ids[settlement_id],
             version=1,
             source_kind=domain.SourceKind.RAZORPAY_SETTLEMENT,
             record_kind=CanonicalRecordKind.SETTLEMENT,
@@ -350,7 +367,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=recon_id,
-            adapter_id=recon_id,
+            adapter_id=adapter_ids[recon_id],
             version=1,
             source_kind=domain.SourceKind.RAZORPAY_RECON,
             record_kind=CanonicalRecordKind.SETTLEMENT_RECON,
@@ -390,7 +407,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=duplicate_id,
-            adapter_id=duplicate_id,
+            adapter_id=adapter_ids[duplicate_id],
             version=1,
             source_kind=domain.SourceKind.BANK,
             record_kind=CanonicalRecordKind.BANK_ENTRY,
@@ -415,7 +432,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=negative_id,
-            adapter_id=negative_id,
+            adapter_id=adapter_ids[negative_id],
             version=1,
             source_kind=domain.SourceKind.BANK,
             record_kind=CanonicalRecordKind.BANK_ENTRY,
@@ -433,7 +450,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=missing_id,
-            adapter_id=missing_id,
+            adapter_id=adapter_ids[missing_id],
             version=1,
             source_kind=domain.SourceKind.BANK,
             record_kind=CanonicalRecordKind.BANK_ENTRY,
@@ -450,7 +467,7 @@ def development_adapter_cases() -> tuple[AdapterBenchmarkCase, ...]:
         ),
         AdapterBenchmarkCase(
             case_id=bad_date_id,
-            adapter_id=bad_date_id,
+            adapter_id=adapter_ids[bad_date_id],
             version=1,
             source_kind=domain.SourceKind.BANK,
             record_kind=CanonicalRecordKind.BANK_ENTRY,

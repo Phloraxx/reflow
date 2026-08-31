@@ -39,9 +39,12 @@ def test_development_adapter_benchmark_has_zero_unsafe_activations() -> None:
 
 def test_known_wrong_integer_unit_proposal_cannot_activate() -> None:
     cases = development_adapter_cases()
+    target_case = next(
+        item for item in cases if item.case_id == "bench_bank_integer_rupees"
+    )
     provider = WrongUnitMutationProvider(
         development_reference_provider(),
-        "bench_bank_integer_rupees",
+        target_case.adapter_id,
     )
     results, report = run_adapter_benchmark(provider, cases)
     target = next(result for result in results if result.case_id == "bench_bank_integer_rupees")

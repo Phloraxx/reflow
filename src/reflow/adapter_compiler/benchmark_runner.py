@@ -13,6 +13,7 @@ from .benchmark_fixtures import (
 )
 from .benchmark_verify import verify_adapter_benchmark_payload
 from .openai_provider import OpenAIAdapterProposalProvider
+from .provider import AdapterProposalProvider
 
 
 def main() -> None:
@@ -29,12 +30,18 @@ def main() -> None:
     cases = development_adapter_cases()
     provider_name = args.provider
     model_name: str | None = None
+    provider: AdapterProposalProvider
     if args.provider == "development":
         provider = development_reference_provider()
     elif args.provider == "wrong-unit-mutation":
+        target_adapter = next(
+            case.adapter_id
+            for case in cases
+            if case.case_id == "bench_bank_integer_rupees"
+        )
         provider = WrongUnitMutationProvider(
             development_reference_provider(),
-            "bench_bank_integer_rupees",
+            target_adapter,
         )
     else:
         api_key = os.environ.get("OPENAI_API_KEY")
