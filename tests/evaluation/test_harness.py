@@ -72,8 +72,10 @@ def test_scorer_catches_intentionally_broken_reconcile_everything_mutation() -> 
                 settlement_amount=case.settlement.amount,
                 composition_amount=case.settlement.amount,
                 bank_amount=case.settlement.amount,
-                composition_component_ids=tuple(entry.id for entry in case.recon_entries),
-                bank_entry_ids=bank_ids,
+                composition_component_ids=tuple(
+                    sorted((entry.id for entry in case.recon_entries), key=str)
+                ),
+                bank_entry_ids=tuple(sorted(bank_ids, key=str)),
                 reason_codes=("INTENTIONALLY_BROKEN_MUTATION",),
             )
         )
