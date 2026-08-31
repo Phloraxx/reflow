@@ -6,7 +6,9 @@ from collections.abc import Mapping
 import pytest
 
 from reflow.adapter_compiler import (
+    ActivationState,
     CanonicalRecordKind,
+    FinancialControlTotal,
     OpenAIAdapterProposalProvider,
     OpenAIProposalError,
     propose_and_validate,
@@ -118,7 +120,9 @@ def test_openai_provider_uses_strict_schema_bounded_data_and_store_false() -> No
         record_kind=CanonicalRecordKind.BANK_ENTRY,
         sample_limit=1,
     )
-    assert result.approved
+    assert not result.approved
+    assert result.sample_report is not None
+    assert result.sample_report.state is ActivationState.NEEDS_REVIEW
     request = captured["payload"]
     assert isinstance(request, Mapping)
     assert request["store"] is False
@@ -206,3 +210,51 @@ def test_openai_provider_rejects_missing_output_and_refusal() -> None:
             source_kind=SourceKind.BANK,
             record_kind=CanonicalRecordKind.BANK_ENTRY,
         )
+
+
+def test_verified_financial_control_can_activate_correct_model_proposal() -> None:
+    provider = OpenAIAdapterProposalProvider(
+        api_key="test-key",
+        transport=lambda *_: _response(_spec_payload()),
+    )
+    result = propose_and_validate(
+        provider,
+        _rows(),
+        adapter_id="bank_ai_proposal",
+        version=1,
+        source_kind=SourceKind.BANK,
+        record_kind=CanonicalRecordKind.BANK_ENTRY,
+        financial_control=FinancialControlTotal(
+            target_field="amount_paise",
+            expected_total_paise=10000,
+            expected_row_count=1,
+            evidence_label="synthetic bank statement control total",
+        ),
+    )
+    assert result.approved
+
+
+def test_integer_looking_rupees_wrong_unit_fails_independent_control() -> None:
+    rows = ({**_rows()[0], "Cr Amt": "100"},)
+    provider = OpenAIAdapterProposalProvider(
+        api_key="test-key",
+        transport=lambda *_: _response(_spec_payload(money_transform="integer_paise")),
+    )
+    result = propose_and_validate(
+        provider,
+        rows,
+        adapter_id="bank_ai_proposal",
+        version=1,
+        source_kind=SourceKind.BANK,
+        record_kind=CanonicalRecordKind.BANK_ENTRY,
+        financial_control=FinancialControlTotal(
+            target_field="amount_paise",
+            expected_total_paise=10000,
+            expected_row_count=1,
+            evidence_label="synthetic bank statement control total",
+        ),
+    )
+    assert not result.approved
+    assert result.sample_report is not None
+    assert result.sample_report.state is ActivationState.REJECTED
+    assert "financial control total mismatch" in result.sample_report.error_messages

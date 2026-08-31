@@ -39,6 +39,24 @@ class DriftState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
+class FinancialControlTotal:
+    target_field: str
+    expected_total_paise: int
+    expected_row_count: int
+    evidence_label: str
+
+    def __post_init__(self) -> None:
+        if not self.target_field or self.target_field != self.target_field.strip():
+            raise ValueError("control target field must be non-empty and trimmed")
+        if isinstance(self.expected_total_paise, bool):
+            raise TypeError("control total must be integer paise")
+        if self.expected_row_count < 1:
+            raise ValueError("control row count must be positive")
+        if not self.evidence_label or self.evidence_label != self.evidence_label.strip():
+            raise ValueError("control evidence label must be non-empty and trimmed")
+
+
+@dataclass(frozen=True, slots=True)
 class FieldMapping:
     target_field: str
     transform: TransformKind

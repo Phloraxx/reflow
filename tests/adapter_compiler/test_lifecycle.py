@@ -9,6 +9,7 @@ from reflow.adapter_compiler import (
     CanonicalRecordKind,
     DriftState,
     FieldMapping,
+    FinancialControlTotal,
     InMemoryAdapterStore,
     TransformKind,
     compile_adapter,
@@ -67,8 +68,26 @@ def test_provider_proposal_cannot_bypass_deterministic_validation() -> None:
         source_kind=SourceKind.MERCHANT,
         record_kind=CanonicalRecordKind.MERCHANT_ORDER,
     )
-    assert result.approved
+    assert not result.approved
+    assert result.sample_report is not None
+    assert result.sample_report.state is ActivationState.NEEDS_REVIEW
     assert "amount_paise" in provider.seen_target_fields
+
+    controlled = propose_and_validate(
+        provider,
+        _rows(),
+        adapter_id="merchant_unknown",
+        version=1,
+        source_kind=SourceKind.MERCHANT,
+        record_kind=CanonicalRecordKind.MERCHANT_ORDER,
+        financial_control=FinancialControlTotal(
+            target_field="amount_paise",
+            expected_total_paise=15050,
+            expected_row_count=2,
+            evidence_label="synthetic merchant control total",
+        ),
+    )
+    assert controlled.approved
 
     wrong_unit = FixedProvider(
         replace(

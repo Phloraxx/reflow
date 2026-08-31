@@ -15,6 +15,7 @@ from .contracts import (
     CanonicalRecordKind,
     DriftState,
     FieldMapping,
+    FinancialControlTotal,
     TransformKind,
 )
 from .lifecycle import ApprovedAdapterVersion, InMemoryAdapterStore, detect_drift
@@ -42,6 +43,7 @@ __all__ = [
     "CompiledAdapter",
     "DriftState",
     "FieldMapping",
+    "FinancialControlTotal",
     "InMemoryAdapterStore",
     "MigrationEvaluation",
     "OpenAIAdapterProposalProvider",

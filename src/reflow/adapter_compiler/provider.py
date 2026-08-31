@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from reflow.domain import SourceKind
@@ -13,7 +13,13 @@ from .compiler import (
     target_fields,
     validate_sample,
 )
-from .contracts import AdapterSpec, CanonicalRecordKind, TransformKind
+from .contracts import (
+    ActivationState,
+    AdapterSpec,
+    CanonicalRecordKind,
+    FinancialControlTotal,
+    TransformKind,
+)
 from .profile import StructuralProfile, profile_rows
 
 
@@ -45,6 +51,43 @@ class ProposalEvaluation:
         return self.sample_report is not None and self.sample_report.state.value == "approved"
 
 
+def _apply_financial_control(
+    compiled: CompiledAdapter,
+    rows: tuple[RawRecord, ...],
+    report: SampleValidationReport,
+    control: FinancialControlTotal | None,
+) -> SampleValidationReport:
+    if control is None:
+        return replace(report, state=ActivationState.NEEDS_REVIEW)
+    if control.expected_row_count != len(rows):
+        return replace(
+            report,
+            state=ActivationState.REJECTED,
+            error_messages=(*report.error_messages, "financial control row count mismatch"),
+        )
+    total = 0
+    for row in rows:
+        normalized = compiled.normalize(row)
+        value = normalized.get(control.target_field)
+        if isinstance(value, bool) or not isinstance(value, int):
+            return replace(
+                report,
+                state=ActivationState.REJECTED,
+                error_messages=(
+                    *report.error_messages,
+                    "financial control target is not exact integer paise",
+                ),
+            )
+        total += value
+    if total != control.expected_total_paise:
+        return replace(
+            report,
+            state=ActivationState.REJECTED,
+            error_messages=(*report.error_messages, "financial control total mismatch"),
+        )
+    return report
+
+
 def propose_and_validate(
     provider: AdapterProposalProvider,
     rows: tuple[RawRecord, ...],
@@ -54,6 +97,7 @@ def propose_and_validate(
     source_kind: SourceKind,
     record_kind: CanonicalRecordKind,
     sample_limit: int = 5,
+    financial_control: FinancialControlTotal | None = None,
 ) -> ProposalEvaluation:
     profile = profile_rows(rows, sample_limit=sample_limit)
     if not adapter_id or adapter_id != adapter_id.strip():
@@ -86,6 +130,8 @@ def propose_and_validate(
     try:
         compiled = compile_adapter(spec, profile)
         report = validate_sample(compiled, rows)
+        if report.state is ActivationState.APPROVED:
+            report = _apply_financial_control(compiled, rows, report, financial_control)
     except (TypeError, ValueError) as exc:
         return ProposalEvaluation(
             context=context,
@@ -100,6 +146,12 @@ def propose_and_validate(
         compiled=compiled,
         sample_report=report,
         rejection_reason=(
-            None if report.state.value == "approved" else "sample validation rejected spec"
+            None
+            if report.state is ActivationState.APPROVED
+            else (
+                "independent financial control required before activation"
+                if report.state is ActivationState.NEEDS_REVIEW
+                else "sample or financial-control validation rejected spec"
+            )
         ),
     )
