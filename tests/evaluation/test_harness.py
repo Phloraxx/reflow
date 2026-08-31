@@ -299,3 +299,58 @@ def test_evaluation_is_invariant_to_exact_source_replay() -> None:
         bank_rows=(*observed.bank_rows, observed.bank_rows[0]),
     )
     assert evaluate_observation(world, observed) == evaluate_observation(world, replayed)
+
+
+def test_benchmark_artifact_recomputes_reports_from_truth_and_raw_decisions() -> None:
+    from reflow.evaluation.artifact import verify_benchmark_payload
+    from reflow.evaluation.profiles import EvaluationProfile
+    from reflow.evaluation.runner import benchmark_payload
+
+    payload = benchmark_payload(
+        world_seed=431,
+        observation_seed=432,
+        settlement_count=20,
+        profile=EvaluationProfile.RECONCILIATION_ADVERSARIAL,
+    )
+    recomputed = verify_benchmark_payload(payload)
+    assert len(recomputed) == 4
+
+
+def test_benchmark_artifact_verifier_rejects_tampered_report() -> None:
+    from copy import deepcopy
+
+    from reflow.evaluation.artifact import ArtifactVerificationError, verify_benchmark_payload
+    from reflow.evaluation.profiles import EvaluationProfile
+    from reflow.evaluation.runner import benchmark_payload
+
+    payload = benchmark_payload(
+        world_seed=441,
+        observation_seed=442,
+        settlement_count=20,
+        profile=EvaluationProfile.CLEAN,
+    )
+    tampered = deepcopy(payload)
+    tampered["reports"][0]["false_auto_reconciled"] += 1
+    with pytest.raises(ArtifactVerificationError, match="recomputed score"):
+        verify_benchmark_payload(tampered)
+
+
+def test_benchmark_artifact_verifier_rejects_tampered_raw_decision() -> None:
+    from copy import deepcopy
+
+    from reflow.evaluation.artifact import ArtifactVerificationError, verify_benchmark_payload
+    from reflow.evaluation.profiles import EvaluationProfile
+    from reflow.evaluation.runner import benchmark_payload
+
+    payload = benchmark_payload(
+        world_seed=451,
+        observation_seed=452,
+        settlement_count=20,
+        profile=EvaluationProfile.CLEAN,
+    )
+    tampered = deepcopy(payload)
+    run = next(item for item in tampered["runs"] if item["system_name"] == "ReFlow_Core")
+    decision = next(item for item in run["decisions"] if item["bank_entry_ids"])
+    decision["bank_entry_ids"] = []
+    with pytest.raises(ArtifactVerificationError, match="recomputed score"):
+        verify_benchmark_payload(tampered)

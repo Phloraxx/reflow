@@ -7,92 +7,15 @@ from typing import Any
 
 from reflow.simulator import WorldConfig, generate_world, observe_world
 
-from .candidates import CandidateRun
+from .artifact import (
+    EVALUATION_SCHEMA_VERSION,
+    decision_payload,
+    report_payload,
+    truth_payload,
+    verify_benchmark_payload,
+)
 from .harness import EvaluationSourceRejected, evaluate_observation
 from .profiles import EvaluationProfile, corruption_plan
-from .scoring import EvaluationReport, EvaluationTruth
-
-EVALUATION_SCHEMA_VERSION = "gate11-evaluation-v1"
-
-
-def _decision_payload(run: CandidateRun) -> dict[str, Any]:
-    return {
-        "system_name": run.system_name,
-        "decisions": [
-            {
-                "settlement_id": str(item.settlement_id),
-                "status": item.status.value,
-                "settlement_amount_paise": item.settlement_amount.amount_paise,
-                "composition_amount_paise": item.composition_amount.amount_paise,
-                "bank_amount_paise": item.bank_amount.amount_paise,
-                "currency": item.settlement_amount.currency.value,
-                "composition_component_ids": [
-                    str(value) for value in item.composition_component_ids
-                ],
-                "bank_entry_ids": [str(value) for value in item.bank_entry_ids],
-                "reason_codes": list(item.reason_codes),
-            }
-            for item in run.decisions
-        ],
-    }
-
-
-def _truth_payload(truth: EvaluationTruth) -> dict[str, Any]:
-    return {
-        "settlements": [
-            {
-                "settlement_id": str(item.settlement_id),
-                "settlement_amount_paise": item.settlement_amount.amount_paise,
-                "currency": item.settlement_amount.currency.value,
-                "composition_component_ids": [
-                    str(value) for value in item.composition_component_ids
-                ],
-                "bank_entry_ids": [str(value) for value in item.bank_entry_ids],
-                "bank_expectation": item.bank_expectation.value,
-            }
-            for item in truth.settlements
-        ]
-    }
-
-
-def _report_payload(report: EvaluationReport) -> dict[str, Any]:
-    return {
-        "system_name": report.system_name,
-        "settlement_count": report.settlement_count,
-        "auto_reconciled": report.auto_reconciled,
-        "true_auto_reconciled": report.true_auto_reconciled,
-        "false_auto_reconciled": report.false_auto_reconciled,
-        "unresolved": report.unresolved,
-        "missing_decisions": report.missing_decisions,
-        "truth_reconciled": report.truth_reconciled,
-        "reconciliation_recall": {
-            "numerator": report.reconciliation_recall.numerator,
-            "denominator": report.reconciliation_recall.denominator,
-        },
-        "silent_false_auto_match_rate": {
-            "numerator": report.silent_false_auto_match_rate.numerator,
-            "denominator": report.silent_false_auto_match_rate.denominator,
-        },
-        "settlement_amount_correct": {
-            "numerator": report.settlement_amount_correct.numerator,
-            "denominator": report.settlement_amount_correct.denominator,
-        },
-        "composition_amount_correct": {
-            "numerator": report.composition_amount_correct.numerator,
-            "denominator": report.composition_amount_correct.denominator,
-        },
-        "composition_edges": {
-            "tp": report.composition_edges.true_positive,
-            "fp": report.composition_edges.false_positive,
-            "fn": report.composition_edges.false_negative,
-        },
-        "bank_edges": {
-            "tp": report.bank_edges.true_positive,
-            "fp": report.bank_edges.false_positive,
-            "fn": report.bank_edges.false_negative,
-        },
-        "absolute_reported_residual_paise": report.absolute_reported_residual_paise,
-    }
 
 
 def benchmark_payload(
@@ -127,7 +50,7 @@ def benchmark_payload(
     try:
         result = evaluate_observation(world, bundle.observed)
     except EvaluationSourceRejected as exc:
-        return {
+        payload = {
             **metadata,
             "status": "source_rejected",
             "source_rejection": {
@@ -139,13 +62,18 @@ def benchmark_payload(
             "runs": [],
             "reports": [],
         }
-    return {
+        verify_benchmark_payload(payload)
+        return payload
+
+    payload = {
         **metadata,
         "status": "evaluated",
-        "truth": _truth_payload(result.truth),
-        "runs": [_decision_payload(run) for run in result.runs],
-        "reports": [_report_payload(report) for report in result.reports],
+        "truth": truth_payload(result.truth),
+        "runs": [decision_payload(run) for run in result.runs],
+        "reports": [report_payload(report) for report in result.reports],
     }
+    verify_benchmark_payload(payload)
+    return payload
 
 
 def main() -> None:

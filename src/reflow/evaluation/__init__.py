@@ -1,5 +1,6 @@
 """Evaluation-only harness. Candidate systems never receive hidden truth."""
 
+from .artifact import ArtifactVerificationError, verify_benchmark_payload
 from .candidates import CandidateDecision, CandidateRun, CandidateStatus
 from .harness import (
     EvaluationResult,
@@ -18,6 +19,7 @@ from .scoring import (
 )
 
 __all__ = [
+    "ArtifactVerificationError",
     "CandidateDecision",
     "CandidateRun",
     "CandidateStatus",
@@ -32,4 +34,5 @@ __all__ = [
     "evaluate_observation",
     "project_hidden_truth",
     "score_candidate_run",
+    "verify_benchmark_payload",
 ]
