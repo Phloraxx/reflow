@@ -78,6 +78,47 @@ class CandidateRun:
             raise ValueError("candidate decisions must be sorted by settlement id")
 
 
+
+type MoneyKey = tuple[int, domain.Currency]
+
+
+def _money_key(value: domain.Money) -> MoneyKey:
+    return (value.amount_paise, value.currency)
+
+
+class _BaselineIndex:
+    def __init__(self, batch: CanonicalBatch) -> None:
+        recon_by_settlement: dict[
+            domain.SettlementId, list[domain.SettlementReconEntry]
+        ] = {}
+        recon_by_effect: dict[MoneyKey, list[domain.SettlementReconEntry]] = {}
+        for row in batch.recon_entries:
+            recon_by_settlement.setdefault(row.settlement_id, []).append(row)
+            recon_by_effect.setdefault(_money_key(row.settlement_effect), []).append(row)
+        self.recon_by_settlement = {
+            key: tuple(sorted(rows, key=lambda row: str(row.id)))
+            for key, rows in recon_by_settlement.items()
+        }
+        self.recon_by_effect = {
+            key: tuple(sorted(rows, key=lambda row: str(row.id)))
+            for key, rows in recon_by_effect.items()
+        }
+
+        bank_by_amount: dict[MoneyKey, list[domain.BankEntry]] = {}
+        bank_by_utr: dict[str, list[domain.BankEntry]] = {}
+        for row in batch.bank_entries:
+            bank_by_amount.setdefault(_money_key(row.amount), []).append(row)
+            if row.utr is not None:
+                bank_by_utr.setdefault(row.utr, []).append(row)
+        self.bank_by_amount = {
+            key: tuple(sorted(rows, key=lambda row: str(row.id)))
+            for key, rows in bank_by_amount.items()
+        }
+        self.bank_by_utr = {
+            key: tuple(sorted(rows, key=lambda row: str(row.id)))
+            for key, rows in bank_by_utr.items()
+        }
+
 def _sum_recon(
     rows: tuple[domain.SettlementReconEntry, ...],
     currency: domain.Currency,
@@ -86,14 +127,11 @@ def _sum_recon(
 
 
 def run_naive_one_to_one(batch: CanonicalBatch) -> CandidateRun:
+    index = _BaselineIndex(batch)
     decisions: list[CandidateDecision] = []
     for settlement in sorted(batch.settlements, key=lambda item: str(item.id)):
-        recon = tuple(
-            row
-            for row in batch.recon_entries
-            if row.settlement_effect == settlement.amount
-        )
-        bank = tuple(row for row in batch.bank_entries if row.amount == settlement.amount)
+        recon = index.recon_by_effect.get(_money_key(settlement.amount), ())
+        bank = index.bank_by_amount.get(_money_key(settlement.amount), ())
         chosen_recon = recon if len(recon) == 1 else ()
         chosen_bank = bank if len(bank) == 1 else ()
         composition_amount = _sum_recon(chosen_recon, settlement.amount.currency)
@@ -117,28 +155,22 @@ def run_naive_one_to_one(batch: CanonicalBatch) -> CandidateRun:
 
 
 def _grouped_recon(
-    batch: CanonicalBatch,
+    index: _BaselineIndex,
     settlement_id: domain.SettlementId,
 ) -> tuple[domain.SettlementReconEntry, ...]:
-    return tuple(
-        sorted(
-            (row for row in batch.recon_entries if row.settlement_id == settlement_id),
-            key=lambda row: str(row.id),
-        )
-    )
+    return index.recon_by_settlement.get(settlement_id, ())
 
 
 def run_grouped_exact(batch: CanonicalBatch) -> CandidateRun:
+    index = _BaselineIndex(batch)
     decisions: list[CandidateDecision] = []
     for settlement in sorted(batch.settlements, key=lambda item: str(item.id)):
-        recon = _grouped_recon(batch, settlement.id)
+        recon = _grouped_recon(index, settlement.id)
         composition_amount = _sum_recon(recon, settlement.amount.currency)
         exact_bank = tuple(
             row
-            for row in batch.bank_entries
-            if settlement.utr is not None
-            and row.utr == settlement.utr
-            and row.occurred_at >= settlement.processed_at
+            for row in (() if settlement.utr is None else index.bank_by_utr.get(settlement.utr, ()))
+            if row.occurred_at >= settlement.processed_at
         )
         accepted_bank = exact_bank if len(exact_bank) == 1 else ()
         bank_amount = domain.sum_money(
@@ -182,15 +214,22 @@ def _fuzzy_bank_score(settlement: domain.Settlement, row: domain.BankEntry) -> i
 
 
 def run_fuzzy_threshold(batch: CanonicalBatch, *, threshold: int = 6) -> CandidateRun:
+    index = _BaselineIndex(batch)
     decisions: list[CandidateDecision] = []
     for settlement in sorted(batch.settlements, key=lambda item: str(item.id)):
-        recon = _grouped_recon(batch, settlement.id)
+        recon = _grouped_recon(index, settlement.id)
         composition_amount = _sum_recon(recon, settlement.amount.currency)
+        blocked: dict[domain.BankEntryId, domain.BankEntry] = {
+            row.id: row
+            for row in index.bank_by_amount.get(_money_key(settlement.amount), ())
+        }
+        if settlement.utr is not None:
+            for row in index.bank_by_utr.get(settlement.utr, ()):
+                blocked[row.id] = row
         ranked = sorted(
             (
                 (_fuzzy_bank_score(settlement, row), str(row.id), row)
-                for row in batch.bank_entries
-                if row.amount.currency == settlement.amount.currency
+                for row in blocked.values()
             ),
             key=lambda item: (-item[0], item[1]),
         )
