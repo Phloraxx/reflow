@@ -19,7 +19,10 @@ from reflow.domain import SourceKind
 from reflow.ingestion import merge_canonical_batches
 from reflow.journal import InMemoryJournal
 from reflow.money_graph import build_money_graph
-from reflow.settlement_proof import CompositionStatus, prove_all_settlement_compositions
+from reflow.settlement_proof import (
+    CompositionStatus,
+    prove_all_settlement_compositions,
+)
 
 
 _RECEIVED_AT = datetime.fromisoformat("2026-08-31T13:00:00+05:30")
