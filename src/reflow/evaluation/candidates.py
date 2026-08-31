@@ -40,11 +40,11 @@ class CandidateDecision:
         bank_ids = tuple(row.id for row in self.bank_entries)
         if bank_ids != tuple(sorted(set(bank_ids), key=str)):
             raise ValueError("candidate bank evidence must be unique and sorted")
-        for row in self.composition_components:
-            if row.settlement_effect.currency != self.settlement_amount.currency:
+        for recon_row in self.composition_components:
+            if recon_row.settlement_effect.currency != self.settlement_amount.currency:
                 raise ValueError("candidate composition currency differs from settlement")
-        for row in self.bank_entries:
-            if row.amount.currency != self.settlement_amount.currency:
+        for bank_row in self.bank_entries:
+            if bank_row.amount.currency != self.settlement_amount.currency:
                 raise ValueError("candidate bank currency differs from settlement")
         if self.reason_codes != tuple(sorted(set(self.reason_codes))):
             raise ValueError("candidate reason codes must be unique and sorted")
