@@ -141,6 +141,7 @@ def test_openai_provider_uses_strict_schema_bounded_data_and_store_false() -> No
 def test_unsafe_model_unit_proposal_is_rejected_after_structured_output() -> None:
     provider = OpenAIAdapterProposalProvider(
         api_key="test-key",
+        model="test-model",
         transport=lambda *_: _response(_spec_payload(money_transform="integer_paise")),
     )
     result = propose_and_validate(
@@ -160,6 +161,7 @@ def test_model_cannot_change_requested_adapter_identity() -> None:
     payload = {**_spec_payload(), "adapter_id": "different_adapter"}
     provider = OpenAIAdapterProposalProvider(
         api_key="test-key",
+        model="test-model",
         transport=lambda *_: _response(payload),
     )
     result = propose_and_validate(
@@ -178,6 +180,7 @@ def test_model_cannot_change_requested_adapter_identity() -> None:
 def test_openai_provider_rejects_missing_output_and_refusal() -> None:
     missing = OpenAIAdapterProposalProvider(
         api_key="test-key",
+        model="test-model",
         transport=lambda *_: {"output": []},
     )
     with pytest.raises(OpenAIProposalError, match="no structured output"):
@@ -192,6 +195,7 @@ def test_openai_provider_rejects_missing_output_and_refusal() -> None:
 
     refusing = OpenAIAdapterProposalProvider(
         api_key="test-key",
+        model="test-model",
         transport=lambda *_: {
             "output": [
                 {
@@ -215,6 +219,7 @@ def test_openai_provider_rejects_missing_output_and_refusal() -> None:
 def test_verified_financial_control_still_requires_explicit_review() -> None:
     provider = OpenAIAdapterProposalProvider(
         api_key="test-key",
+        model="test-model",
         transport=lambda *_: _response(_spec_payload()),
     )
     result = propose_and_validate(
@@ -241,6 +246,7 @@ def test_integer_looking_rupees_wrong_unit_fails_independent_control() -> None:
     rows = ({**_rows()[0], "Cr Amt": "100"},)
     provider = OpenAIAdapterProposalProvider(
         api_key="test-key",
+        model="test-model",
         transport=lambda *_: _response(_spec_payload(money_transform="integer_paise")),
     )
     result = propose_and_validate(
@@ -267,6 +273,7 @@ def test_integer_looking_money_without_independent_control_stays_review_only() -
     rows = ({**_rows()[0], "Cr Amt": "100"},)
     provider = OpenAIAdapterProposalProvider(
         api_key="test-key",
+        model="test-model",
         transport=lambda *_: _response(_spec_payload(money_transform="integer_paise")),
     )
     result = propose_and_validate(

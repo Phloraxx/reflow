@@ -96,7 +96,7 @@ def _proposal_input(context: ProposalContext) -> str:
 @dataclass(frozen=True, slots=True)
 class OpenAIAdapterProposalProvider(AdapterProposalProvider):
     api_key: str
-    model: str = "gpt-5.6-luna"
+    model: str
     base_url: str = "https://api.openai.com/v1/responses"
     timeout_seconds: float = 30.0
     transport: JsonTransport = _default_transport
@@ -112,7 +112,9 @@ class OpenAIAdapterProposalProvider(AdapterProposalProvider):
     @classmethod
     def from_environment(cls, *, model: str | None = None) -> OpenAIAdapterProposalProvider:
         api_key = os.environ.get("OPENAI_API_KEY", "")
-        selected_model = model or os.environ.get("REFLOW_ADAPTER_MODEL", "gpt-5.6-luna")
+        selected_model = model or os.environ.get("REFLOW_ADAPTER_MODEL", "")
+        if not selected_model:
+            raise ValueError("adapter model must be explicit via argument or REFLOW_ADAPTER_MODEL")
         return cls(api_key=api_key, model=selected_model)
 
     def propose(self, context: ProposalContext) -> AdapterSpec:
