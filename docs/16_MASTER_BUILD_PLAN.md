@@ -357,7 +357,11 @@ An exact numerical explanation must remain a hypothesis until new authoritative 
 
 ## Phase 11 — Baseline evaluation harness
 
-Implement baselines before AI:
+**Implemented and checkpointed in Gate 11.**
+
+The current harness compares every arm after the same journal-first canonicalization boundary. Candidate decisions carry selected canonical financial facts; hidden truth is projected only after candidate execution for semantic scoring and artifact verification.
+
+Implemented baselines before AI:
 
 - B0 naive 1:1;
 - B1 strong grouped exact baseline;
@@ -372,15 +376,18 @@ Implement baselines before AI:
 - exception accuracy;
 - false auto-match rate;
 - contradiction acceptance rate;
-- throughput;
-- peak memory;
-- incremental latency.
+- exact decision-state counts;
+- absolute reported residual paise.
+
+Throughput, peak memory and incremental latency remain Phase 15 scale-benchmark metrics and are not Gate 11 result claims.
 
 ### Gate 11
 
-The harness catches at least one intentionally injected bad implementation or mutation.
+The harness must catch intentionally injected bad implementations and evidence mutations, including wrong bank identity and stable row IDs whose financial meaning changed.
 
-If it cannot distinguish a known-wrong engine, the benchmark is not trustworthy.
+Benchmark artifacts must contain enough post-run truth and raw candidate evidence for `python -m reflow.evaluation.verify` to recompute every stored report. Source-row permutation and exact replay must not change results. B0/B1/B2 must use reasonable indexes so later runtime comparisons are not biased by avoidable baseline scans.
+
+Development seed results are regression evidence only. The final held-out seed set remains unseen until policy/scorer/baseline freeze. If the harness cannot distinguish a known-wrong engine, the benchmark is not trustworthy.
 
 ---
 

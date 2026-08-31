@@ -8,6 +8,14 @@ Source: https://razorpay.com/blog/?p=27428
 
 No model or policy is allowed to see evaluation ground truth.
 
+## Current Gate 11 implementation contract
+
+Gate 11 is implemented on its checkpoint branch with B0 naive 1:1, B1 strong grouped exact, B2 fuzzy threshold and ReFlow Core. All arms receive the same journal-backed canonical evidence. Candidate modules have no hidden-truth import.
+
+A candidate decision carries the canonical recon and bank facts it selected. Amounts, IDs and residuals are derived from those facts. The scorer compares financial semantics rather than row IDs alone, so a stable ID with changed entity/value meaning cannot pass. Bank narration is non-authoritative presentation text; later-but-causal bank timing remains valid.
+
+The `gate11-evaluation-v2` artifact serializes minimal post-run truth, raw selected financial evidence and reports. `python -m reflow.evaluation.verify <artifact.json>` reconstructs and re-scores the artifact. Fixed development seeds are regression tests only; no held-out headline metric is claimed yet.
+
 ## Evaluation questions
 
 ReFlow must answer five separate questions:
@@ -240,7 +248,10 @@ If it does not, report that. A negative result can still demonstrate sound engin
 - no per-arm corruption differences;
 - no baseline denied evidence that ReFlow receives unless the experiment explicitly studies that evidence;
 - raw decisions persisted;
-- evaluation scripts recompute metrics from raw outputs rather than trusting precomputed totals.
+- evaluation scripts recompute metrics from raw outputs rather than trusting precomputed totals;
+- selected evidence is scored by financially relevant semantics, not stable row IDs alone;
+- benchmark artifacts carry a minimal post-run truth projection and are independently verifiable;
+- baselines use indexed candidate lookup so throughput comparisons are not intentionally handicapped.
 
 ## Statistical reporting
 

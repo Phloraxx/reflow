@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow has implemented the deterministic foundation through **Gate 9** on `main`, with Gate 10 residual solving implemented on its checkpoint branch:
+ReFlow implementation scope now reaches **Gate 11**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -18,9 +18,10 @@ ReFlow has implemented the deterministic foundation through **Gate 9** on `main`
 - deterministic Settlement Composition Proofs with identity, provenance and temporal contradiction checks;
 - conservative standard-settlement Bank Receipt Proofs using exact UTR identity, exact amount and causal bank timing;
 - immutable versioned full-reconciliation proofs with knowledge cutoffs and reopening;
-- bounded deterministic residual explanation hypotheses that never promote themselves to proof.
+- bounded deterministic residual explanation hypotheses that never promote themselves to proof;
+- a hidden-truth baseline evaluation harness with B0/B1/B2/ReFlow Core arms, semantic evidence scoring and independently verifiable benchmark artifacts.
 
-Gate 10 residual solving is implemented on its checkpoint branch. The final evaluation harness, AI layers, production Razorpay integration and operator UI are **not complete yet**.
+Gate 11 fixed development-seed results are regression evidence only. The final held-out benchmark, scale benchmark, AI layers, production Razorpay integration and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 

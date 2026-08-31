@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 10 deterministic residual solver implemented and under checkpoint validation. Baseline evaluation is next; the deterministic core remains AI-free.**
+> **Current phase: Gate 11 baseline evaluation harness implemented and checkpointed. Final held-out metrics have not been run or published; next is the Source Adapter Compiler, and the deterministic financial core remains AI-free.**
 
 ReFlow is an evidence-first **financial truth compiler** for payment settlement reconciliation.
 
@@ -199,7 +199,11 @@ See:
 - [`docs/18_IMPLEMENTATION_AUDIT.md`](docs/18_IMPLEMENTATION_AUDIT.md) — first implementation audit;
 - [`docs/19_SECOND_IMPLEMENTATION_AUDIT.md`](docs/19_SECOND_IMPLEMENTATION_AUDIT.md) — independent second audit;
 - [`docs/20_GATE_7_CHECKPOINT.md`](docs/20_GATE_7_CHECKPOINT.md) — Gate 7 checkpoint;
-- [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md) — Gate 8 checkpoint;
+- [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md)
+- [`docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md)
+- [`docs/23_GATE_9_CHECKPOINT.md`](docs/23_GATE_9_CHECKPOINT.md)
+- [`docs/24_GATE_10_CHECKPOINT.md`](docs/24_GATE_10_CHECKPOINT.md)
+- [`docs/25_GATE_11_CHECKPOINT.md`](docs/25_GATE_11_CHECKPOINT.md) — current evaluation checkpoint — Gate 8 checkpoint;
 - [`docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — current line-by-line logic and architecture audit;
 - [`LIMITATIONS.md`](LIMITATIONS.md) — current non-claims and unresolved scope.
 
@@ -314,7 +318,11 @@ Late authoritative evidence creates a new version; a previously proven settlemen
 
 Gate 10 now derives non-zero residual targets from immutable Gate 9 proofs and returns bounded, deterministic explanation hypotheses. Exact arithmetic is never promoted to financial proof. Candidate identities bind the settlement, exact proof version, scope, disposition, reason codes and raw evidence; blocked or pre-settlement evidence stays visibly blocked.
 
-After the Gate 10 checkpoint merges, Phase 11 is the baseline evaluation harness. AI remains later.
+### Gate 11 — Baseline Evaluation Harness
+
+Gate 11 compares B0 naive 1:1, B1 strong grouped exact, B2 fuzzy threshold and ReFlow Core on the same journal-backed canonical evidence. Candidate decisions carry the selected canonical financial facts themselves; the scorer checks semantic evidence identity rather than trusting row IDs or caller-supplied totals.
+
+Benchmark JSON uses the `gate11-evaluation-v2` schema and includes a minimal post-run truth projection plus raw candidate decisions so `python -m reflow.evaluation.verify <artifact.json>` can recompute every stored report. Checked-in development seeds are regression evidence only; the final held-out benchmark remains unrun. AI remains later.
 
 ---
 
@@ -323,6 +331,10 @@ After the Gate 10 checkpoint merges, Phase 11 is the baseline evaluation harness
 ```bash
 python -m pip install -e '.[dev]'
 make check
+
+# Development-only deterministic evaluation artifact
+python -m reflow.evaluation.runner --world-seed 401 --observation-seed 1401 --settlements 50 --profile reconciliation_adversarial --output /tmp/reflow-gate11.json
+python -m reflow.evaluation.verify /tmp/reflow-gate11.json
 ```
 
 Equivalent explicit checks:
@@ -365,6 +377,10 @@ CI runs the same validation path.
 - [`docs/19_SECOND_IMPLEMENTATION_AUDIT.md`](docs/19_SECOND_IMPLEMENTATION_AUDIT.md)
 - [`docs/20_GATE_7_CHECKPOINT.md`](docs/20_GATE_7_CHECKPOINT.md)
 - [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md)
+- [`docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md)
+- [`docs/23_GATE_9_CHECKPOINT.md`](docs/23_GATE_9_CHECKPOINT.md)
+- [`docs/24_GATE_10_CHECKPOINT.md`](docs/24_GATE_10_CHECKPOINT.md)
+- [`docs/25_GATE_11_CHECKPOINT.md`](docs/25_GATE_11_CHECKPOINT.md) — current evaluation checkpoint
 
 ---
 
@@ -397,7 +413,7 @@ CI runs the same validation path.
 - [x] Bank Receipt Proof
 - [x] full proof versioning
 - [x] residual solver
-- [ ] baseline evaluation harness
+- [x] baseline evaluation harness
 - [ ] exception fingerprinting
 - [ ] scale benchmark
 - [ ] real Razorpay Test Mode / Settlement Recon adapter evidence
