@@ -365,3 +365,28 @@ def test_evaluation_report_exposes_exact_exception_status_counts() -> None:
     assert counts.unresolved + counts.residual + counts.incomplete + counts.contradicted == (
         report.unresolved
     )
+
+
+def test_verifier_cli_accepts_fresh_benchmark_artifact(tmp_path) -> None:
+    import json
+    import subprocess
+    import sys
+
+    from reflow.evaluation.profiles import EvaluationProfile
+    from reflow.evaluation.runner import benchmark_payload
+
+    payload = benchmark_payload(
+        world_seed=471,
+        observation_seed=472,
+        settlement_count=12,
+        profile=EvaluationProfile.CLEAN,
+    )
+    artifact = tmp_path / "benchmark.json"
+    artifact.write_text(json.dumps(payload))
+    completed = subprocess.run(
+        [sys.executable, "-m", "reflow.evaluation.verify", str(artifact)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "verified 4 evaluation reports" in completed.stdout
