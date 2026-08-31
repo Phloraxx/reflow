@@ -561,7 +561,7 @@ def _make_explanation(
     )
 
 
-def solve_residual(
+def _solve_candidate_set(
     target: ResidualTarget,
     candidates: tuple[ResidualCandidate, ...],
     *,
@@ -635,6 +635,31 @@ def solve_residual(
         solution_limit_reached=len(solutions) >= cfg.max_solutions,
     )
 
+def solve_residual(
+    proof: ReconciliationProofVersion,
+    batch: CanonicalBatch,
+    target: ResidualTarget,
+    *,
+    limits: ResidualSolverLimits | None = None,
+    index: ResidualCandidateIndex | None = None,
+) -> ResidualSolveResult:
+    """Safely solve one residual from candidates derived from its canonical proof batch."""
+    cfg = limits or ResidualSolverLimits()
+    candidates, truncated = enumerate_residual_candidates(
+        proof,
+        batch,
+        target,
+        limits=cfg,
+        index=index,
+    )
+    return _solve_candidate_set(
+        target,
+        candidates,
+        limits=cfg,
+        candidate_space_truncated=truncated,
+    )
+
+
 def solve_all_residuals(
     proofs: tuple[ReconciliationProofVersion, ...],
     batch: CanonicalBatch,
@@ -653,19 +678,13 @@ def solve_all_residuals(
         if proof.batch_compilation_sha256 != index.batch_compilation_sha256:
             raise ResidualSolverError("proof set contains a version from another canonical batch")
         for target in residual_targets(proof):
-            candidates, truncated = enumerate_residual_candidates(
-                proof,
-                batch,
-                target,
-                limits=cfg,
-                index=index,
-            )
             results.append(
                 solve_residual(
+                    proof,
+                    batch,
                     target,
-                    candidates,
                     limits=cfg,
-                    candidate_space_truncated=truncated,
+                    index=index,
                 )
             )
     return tuple(results)

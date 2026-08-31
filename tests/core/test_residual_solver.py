@@ -27,6 +27,7 @@ from reflow.residual_solver import (
     ResidualTarget,
     enumerate_residual_candidates,
     residual_targets,
+    _solve_candidate_set,
     solve_all_residuals,
     solve_residual,
 )
@@ -118,8 +119,7 @@ def test_amount_only_bank_candidate_is_hypothesis_not_proof() -> None:
     target = next(
         target for target in residual_targets(proof) if target.scope is ResidualScope.BANK
     )
-    candidates, truncated = enumerate_residual_candidates(proof, batch, target)
-    result = solve_residual(target, candidates, candidate_space_truncated=truncated)
+    result = solve_residual(proof, batch, target)
 
     target_candidate = next(
         candidate
@@ -150,8 +150,7 @@ def test_blocked_late_recon_row_can_only_form_blocked_hypothesis() -> None:
     target = next(
         target for target in residual_targets(proof) if target.scope is ResidualScope.COMPOSITION
     )
-    candidates, truncated = enumerate_residual_candidates(proof, batch, target)
-    result = solve_residual(target, candidates, candidate_space_truncated=truncated)
+    result = solve_residual(proof, batch, target)
 
     exact = next(
         explanation
@@ -186,7 +185,7 @@ def test_bounded_solver_finds_exact_two_candidate_combination() -> None:
         scope=ResidualScope.BANK,
         amount=Money(300, Currency.INR),
     )
-    result = solve_residual(target, (_candidate("a", 100), _candidate("b", 200)))
+    result = _solve_candidate_set(target, (_candidate("a", 100), _candidate("b", 200)))
     assert len(result.explanations) == 1
     assert len(result.explanations[0].candidate_ids) == 2
     assert result.explanations[0].remaining_residual.is_zero
@@ -202,8 +201,8 @@ def test_node_budget_is_deterministic_and_fail_closed() -> None:
     )
     candidates = tuple(_candidate(str(index), 10 + index) for index in range(10))
     limits = ResidualSolverLimits(max_candidates=10, max_combination_size=3, max_nodes=3)
-    first = solve_residual(target, candidates, limits=limits)
-    second = solve_residual(target, tuple(reversed(candidates)), limits=limits)
+    first = _solve_candidate_set(target, candidates, limits=limits)
+    second = _solve_candidate_set(target, tuple(reversed(candidates)), limits=limits)
     assert first.search_budget_exhausted
     assert first.nodes_visited == 3
     assert first == second
@@ -316,7 +315,7 @@ def test_solution_cap_is_reported_as_incomplete_search() -> None:
         _candidate("cap_b", 300),
         _candidate("cap_c", 300),
     )
-    result = solve_residual(
+    result = _solve_candidate_set(
         target,
         candidates,
         limits=ResidualSolverLimits(max_solutions=1),
@@ -361,7 +360,7 @@ def test_residual_explanation_derives_metadata_from_embedded_candidates() -> Non
         scope=ResidualScope.BANK,
         amount=Money(300, Currency.INR),
     )
-    result = solve_residual(target, (_candidate("self_a", 100), _candidate("self_b", 200)))
+    result = _solve_candidate_set(target, (_candidate("self_a", 100), _candidate("self_b", 200)))
     explanation = result.explanations[0]
     assert explanation.candidate_ids == tuple(candidate.id for candidate in explanation.candidates)
     assert explanation.remaining_residual.is_zero
@@ -407,7 +406,7 @@ def test_solver_rejects_duplicate_candidate_identity() -> None:
     )
     candidate = _candidate("duplicate_identity", 100)
     with pytest.raises(ResidualSolverError, match="duplicate identities"):
-        solve_residual(target, (candidate, candidate))
+        _solve_candidate_set(target, (candidate, candidate))
 
 
 def test_solver_never_double_counts_one_raw_envelope() -> None:
@@ -440,5 +439,5 @@ def test_solver_never_double_counts_one_raw_envelope() -> None:
         disposition=CandidateDisposition.ADMISSIBLE_HYPOTHESIS,
         reason_codes=("AMOUNT_ONLY_NOT_IDENTITY",),
     )
-    result = solve_residual(target, (first, second))
+    result = _solve_candidate_set(target, (first, second))
     assert result.explanations == ()
