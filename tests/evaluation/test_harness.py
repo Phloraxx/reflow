@@ -220,7 +220,11 @@ def test_bank_narration_noise_and_causal_delay_do_not_invalidate_truth() -> None
     from datetime import timedelta
 
     world, _ = _clean_observation(330)
-    case = next(case for case in world.cases if case.bank_entries)
+    case = next(
+        case
+        for case in world.cases
+        if case.bank_entries and case.bank_entries[0].amount == case.settlement.amount
+    )
     noisy_delayed = replace(
         case.bank_entries[0],
         narration="NOISY PRESENTATION TEXT ONLY",
