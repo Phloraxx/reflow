@@ -7,11 +7,14 @@ from reflow.ingestion import RawRecord
 
 from .compiler import compile_adapter, validate_sample
 from .contracts import (
-    AdapterApprovalEvidence,
     AdapterSpec,
     ApprovalEvidenceKind,
 )
-from .lifecycle import ApprovedAdapterVersion, InMemoryAdapterStore
+from .lifecycle import (
+    ApprovedAdapterVersion,
+    InMemoryAdapterStore,
+    approval_evidence_for_adapter,
+)
 from .migration import CanonicalMigrationDiff, evaluate_migration, migration_approval_evidence
 from .profile import profile_rows
 
@@ -90,7 +93,8 @@ def run_migration_case(case: MigrationBenchmarkCase) -> MigrationCaseResult:
         current,
         old_profile,
         current_report,
-        AdapterApprovalEvidence(
+        approval_evidence_for_adapter(
+            current,
             kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
             reference=f"benchmark-bootstrap:{case.case_id}",
         ),
@@ -121,6 +125,7 @@ def run_migration_case(case: MigrationBenchmarkCase) -> MigrationCaseResult:
         proposed_report,
         migration_approval_evidence(
             evaluation,
+            proposed,
             reference=f"benchmark-migration:{case.case_id}",
         ),
     )

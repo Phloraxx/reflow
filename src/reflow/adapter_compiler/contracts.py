@@ -47,12 +47,25 @@ class ApprovalEvidenceKind(StrEnum):
 class AdapterApprovalEvidence:
     kind: ApprovalEvidenceKind
     reference: str
+    adapter_id: str
+    adapter_version: int
+    schema_fingerprint: str
 
     def __post_init__(self) -> None:
         if not isinstance(self.kind, ApprovalEvidenceKind):
             raise TypeError("approval evidence kind must be typed")
         if not self.reference or self.reference != self.reference.strip():
             raise ValueError("approval evidence reference must be non-empty and trimmed")
+        if not self.adapter_id or self.adapter_id != self.adapter_id.strip():
+            raise ValueError("approval evidence adapter id must be non-empty and trimmed")
+        if isinstance(self.adapter_version, bool) or not isinstance(self.adapter_version, int):
+            raise TypeError("approval evidence adapter version must be an integer")
+        if self.adapter_version < 1:
+            raise ValueError("approval evidence adapter version must be positive")
+        if len(self.schema_fingerprint) != 64 or any(
+            char not in "0123456789abcdef" for char in self.schema_fingerprint
+        ):
+            raise ValueError("approval evidence schema fingerprint must be lowercase SHA-256")
 
 
 @dataclass(frozen=True, slots=True)

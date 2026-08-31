@@ -7,13 +7,8 @@ from reflow.domain import SourceEnvelopeId, SourceKind
 from reflow.ingestion import RawRecord
 from reflow.journal import InMemoryJournal, make_source_envelope
 
-from .contracts import (
-    AdapterApprovalEvidence,
-    ApprovalEvidenceKind,
-    CanonicalRecordKind,
-    FinancialControlTotal,
-)
-from .lifecycle import ApprovedAdapterVersion
+from .contracts import ApprovalEvidenceKind, CanonicalRecordKind, FinancialControlTotal
+from .lifecycle import ApprovedAdapterVersion, approval_evidence_for_adapter
 from .provider import (
     AdapterProposalProvider,
     ProposalEvaluation,
@@ -108,7 +103,8 @@ def approve_reviewed_proposal(
         proposal.compiled,
         proposal.context.profile,
         proposal.sample_report,
-        AdapterApprovalEvidence(
+        approval_evidence_for_adapter(
+            proposal.compiled,
             kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
             reference=reference,
         ),

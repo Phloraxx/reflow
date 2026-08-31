@@ -24,7 +24,6 @@ from reflow.settlement_proof import (
     prove_all_settlement_compositions,
 )
 
-
 _RECEIVED_AT = datetime.fromisoformat("2026-08-31T13:00:00+05:30")
 
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from reflow.adapter_compiler import (
-    AdapterApprovalEvidence,
     AdapterSpec,
     ApprovalEvidenceKind,
     ApprovedAdapterVersion,
@@ -15,6 +14,7 @@ from reflow.adapter_compiler import (
     profile_rows,
     validate_sample,
 )
+from reflow.adapter_compiler.lifecycle import approval_evidence_for_adapter
 from reflow.domain import SourceKind
 
 
@@ -105,7 +105,8 @@ def test_activating_new_version_keeps_old_schema_fingerprint_resolvable() -> Non
         current,
         old_profile,
         validate_sample(current, _old_rows()),
-        AdapterApprovalEvidence(
+        approval_evidence_for_adapter(
+            current,
             kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
             reference="initial-reviewed-adapter",
         ),
@@ -123,7 +124,9 @@ def test_activating_new_version_keeps_old_schema_fingerprint_resolvable() -> Non
         proposed,
         new_profile,
         validate_sample(proposed, _new_rows()),
-        migration_approval_evidence(migration, reference="migration-v1-to-v2"),
+        migration_approval_evidence(
+            migration, proposed, reference="migration-v1-to-v2"
+        ),
     )
     store.activate(second)
     assert store.resolve_schema("bank_migrating", old_profile.schema_fingerprint).spec.version == 1

@@ -13,6 +13,21 @@ from .contracts import (
 from .profile import StructuralProfile
 
 
+def approval_evidence_for_adapter(
+    adapter: CompiledAdapter,
+    *,
+    kind: ApprovalEvidenceKind,
+    reference: str,
+) -> AdapterApprovalEvidence:
+    return AdapterApprovalEvidence(
+        kind=kind,
+        reference=reference,
+        adapter_id=adapter.spec.adapter_id,
+        adapter_version=adapter.spec.version,
+        schema_fingerprint=adapter.schema_fingerprint,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class ApprovedAdapterVersion:
     spec: AdapterSpec
@@ -38,6 +53,12 @@ class ApprovedAdapterVersion:
             char not in "0123456789abcdef" for char in self.schema_fingerprint
         ):
             raise ValueError("approved adapter schema fingerprint must be lowercase SHA-256")
+        if (
+            self.approval_evidence.adapter_id != self.spec.adapter_id
+            or self.approval_evidence.adapter_version != self.spec.version
+            or self.approval_evidence.schema_fingerprint != self.schema_fingerprint
+        ):
+            raise ValueError("approval evidence does not bind to this adapter version/schema")
 
     @classmethod
     def from_compiled(
@@ -47,6 +68,21 @@ class ApprovedAdapterVersion:
         report: SampleValidationReport,
         approval_evidence: AdapterApprovalEvidence,
     ) -> ApprovedAdapterVersion:
+        if profile.schema_fingerprint != adapter.schema_fingerprint:
+            raise ValueError("approval profile does not match compiled adapter schema")
+        if (
+            report.adapter_id != adapter.spec.adapter_id
+            or report.adapter_version != adapter.spec.version
+            or report.record_kind is not adapter.spec.record_kind
+            or report.schema_fingerprint != adapter.schema_fingerprint
+        ):
+            raise ValueError("sample validation report does not bind to compiled adapter")
+        if (
+            approval_evidence.adapter_id != adapter.spec.adapter_id
+            or approval_evidence.adapter_version != adapter.spec.version
+            or approval_evidence.schema_fingerprint != adapter.schema_fingerprint
+        ):
+            raise ValueError("approval evidence does not bind to compiled adapter")
         if approval_evidence.kind is ApprovalEvidenceKind.OPERATOR_REVIEW:
             if report.state not in {ActivationState.APPROVED, ActivationState.NEEDS_REVIEW}:
                 raise ValueError("operator review cannot authorize a rejected adapter")

@@ -6,7 +6,6 @@ import pytest
 
 from reflow.adapter_compiler import (
     ActivationState,
-    AdapterApprovalEvidence,
     AdapterSpec,
     ApprovalEvidenceKind,
     ApprovedAdapterVersion,
@@ -21,6 +20,7 @@ from reflow.adapter_compiler import (
     profile_rows,
     validate_sample,
 )
+from reflow.adapter_compiler.lifecycle import approval_evidence_for_adapter
 from reflow.adapter_compiler.provider import _propose_and_validate_rows
 from reflow.domain import SourceKind
 
@@ -144,7 +144,8 @@ def test_approved_adapter_store_and_drift_states() -> None:
         compiled,
         profile,
         report,
-        AdapterApprovalEvidence(
+        approval_evidence_for_adapter(
+            compiled,
             kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
             reference="test-review-1",
         ),
@@ -189,7 +190,8 @@ def test_adapter_store_requires_monotonic_versions() -> None:
             compiled,
             profile,
             validate_sample(compiled, rows),
-            AdapterApprovalEvidence(
+            approval_evidence_for_adapter(
+                compiled,
                 kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
                 reference=f"test-review-{version}",
             ),
@@ -207,7 +209,8 @@ def test_approved_adapter_version_self_verifies_and_store_preserves_contract() -
         compiled,
         profile,
         report,
-        AdapterApprovalEvidence(
+        approval_evidence_for_adapter(
+            compiled,
             kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
             reference="self-verification-test",
         ),
@@ -223,9 +226,10 @@ def test_approved_adapter_version_self_verifies_and_store_preserves_contract() -
     changed = replace(
         approved,
         spec=replace(approved.spec, version=2, source_kind=SourceKind.BANK),
-        approval_evidence=AdapterApprovalEvidence(
-            kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+        approval_evidence=replace(
+            approved.approval_evidence,
             reference="wrong-contract-test",
+            adapter_version=2,
         ),
     )
     with pytest.raises(ValueError, match="source kind"):
@@ -243,7 +247,8 @@ def test_same_schema_newer_version_routes_latest_without_losing_history() -> Non
             compiled,
             profile,
             validate_sample(compiled, rows),
-            AdapterApprovalEvidence(
+            approval_evidence_for_adapter(
+                compiled,
                 kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
                 reference=f"same-schema-review-{version}",
             ),
@@ -256,3 +261,35 @@ def test_same_schema_newer_version_routes_latest_without_losing_history() -> Non
     )
     assert store.get_version("merchant_unknown", 1) == approved_versions[0]
     assert store.get_version("merchant_unknown", 2) == approved_versions[1]
+
+
+def test_validation_report_cannot_authorize_a_different_adapter_version() -> None:
+    rows = _rows()
+    profile = profile_rows(rows)
+    v1 = compile_adapter(_spec(1), profile)
+    v2 = compile_adapter(_spec(2), profile)
+    report_v1 = validate_sample(v1, rows)
+    evidence_v2 = approval_evidence_for_adapter(
+        v2,
+        kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+        reference="reviewed-v2",
+    )
+    with pytest.raises(ValueError, match="sample validation report"):
+        ApprovedAdapterVersion.from_compiled(v2, profile, report_v1, evidence_v2)
+
+
+def test_approval_evidence_cannot_authorize_a_different_schema() -> None:
+    rows = _rows()
+    profile = profile_rows(rows)
+    compiled = compile_adapter(_spec(), profile)
+    report = validate_sample(compiled, rows)
+    foreign = replace(
+        approval_evidence_for_adapter(
+            compiled,
+            kind=ApprovalEvidenceKind.OPERATOR_REVIEW,
+            reference="reviewed-original-schema",
+        ),
+        schema_fingerprint="0" * 64,
+    )
+    with pytest.raises(ValueError, match="approval evidence"):
+        ApprovedAdapterVersion.from_compiled(compiled, profile, report, foreign)

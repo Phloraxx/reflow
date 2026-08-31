@@ -290,12 +290,30 @@ def compile_adapter(spec: AdapterSpec, profile: StructuralProfile) -> CompiledAd
 
 @dataclass(frozen=True, slots=True)
 class SampleValidationReport:
+    adapter_id: str
+    adapter_version: int
+    record_kind: CanonicalRecordKind
+    schema_fingerprint: str
     state: ActivationState
     row_count: int
     parsed_rows: int
     duplicate_identity_count: int
     error_messages: tuple[str, ...]
     financial_control_verified: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.adapter_id or self.adapter_id != self.adapter_id.strip():
+            raise ValueError("sample report adapter id must be non-empty and trimmed")
+        if self.adapter_version < 1:
+            raise ValueError("sample report adapter version must be positive")
+        if len(self.schema_fingerprint) != 64 or any(
+            char not in "0123456789abcdef" for char in self.schema_fingerprint
+        ):
+            raise ValueError("sample report schema fingerprint must be lowercase SHA-256")
+        if self.row_count < 0 or not 0 <= self.parsed_rows <= self.row_count:
+            raise ValueError("sample report row counts are inconsistent")
+        if not 0 <= self.duplicate_identity_count <= self.parsed_rows:
+            raise ValueError("sample report duplicate count is inconsistent")
 
     @property
     def parse_rate_numerator(self) -> int:
@@ -329,6 +347,10 @@ def validate_sample(
     else:
         state = ActivationState.APPROVED
     return SampleValidationReport(
+        adapter_id=adapter.spec.adapter_id,
+        adapter_version=adapter.spec.version,
+        record_kind=adapter.spec.record_kind,
+        schema_fingerprint=adapter.schema_fingerprint,
         state=state,
         row_count=len(rows),
         parsed_rows=len(parsed),
