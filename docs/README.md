@@ -6,21 +6,21 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — **implemented deterministic reconciliation control plane: scope, delivery/completeness, policy, run identity, no-orphan coverage, balance control and close readiness.**
-2. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative post-Gate-12 architecture review and revised Gates 13–19.
-3. [`26_GATE_12_CHECKPOINT.md`](26_GATE_12_CHECKPOINT.md) — AI-assisted source-compiler, approval, migration and runtime-lineage checkpoint.
-4. [`25_GATE_11_CHECKPOINT.md`](25_GATE_11_CHECKPOINT.md) — baseline evaluation/scorer/artifact contract and benchmark-safety checkpoint.
-5. [`24_GATE_10_CHECKPOINT.md`](24_GATE_10_CHECKPOINT.md) — bounded residual-hypothesis contract, scale shape and safety checkpoint.
-6. [`23_GATE_9_CHECKPOINT.md`](23_GATE_9_CHECKPOINT.md) — immutable versioned full-proof contract and Gate 9 checkpoint.
-7. [`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — pre-Gate-9 foundation audit and admission criteria.
-8. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — comprehensive pre-review roadmap; docs 27–28 supersede its post-Gate-12 sequence/status.
-9. [`15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — exactly what Razorpay asks for and how ReFlow will prove it.
-10. [`11_NOVEL_PRODUCT_THESIS.md`](11_NOVEL_PRODUCT_THESIS.md) — why deterministic financial truth remains the authority.
-11. [`12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md) — core deterministic financial model.
-12. [`13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](13_MESSY_DATA_AND_CONNECTOR_COMPILER.md) — safe AI use for unfamiliar financial sources and schema drift.
-13. [`14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](14_SCALE_PERFORMANCE_AND_RESILIENCE.md) — scale/performance plan.
-14. [`18_CREATIVE_FEATURE_CATALOG.md`](18_CREATIVE_FEATURE_CATALOG.md) — ranked differentiators and scope controls.
-15. [`17_RESEARCH_SOURCEBOOK.md`](17_RESEARCH_SOURCEBOOK.md) — primary sources and design implications.
+1. [`30_GATE_14_CHECKPOINT.md`](30_GATE_14_CHECKPOINT.md) — **implemented deterministic ExceptionCase lifecycle, dispositions, supersession and incident fingerprints/clusters.**
+2. [`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 14 contract and acceptance plan.
+3. [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — deterministic reconciliation control plane: scope, delivery/completeness, policy, run identity, no-orphan coverage, balance control and close readiness.
+4. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative post-Gate-12 architecture review and revised Gates 13–19.
+5. [`26_GATE_12_CHECKPOINT.md`](26_GATE_12_CHECKPOINT.md) — AI-assisted source-compiler, approval, migration and runtime-lineage checkpoint.
+6. [`25_GATE_11_CHECKPOINT.md`](25_GATE_11_CHECKPOINT.md) — baseline evaluation/scorer/artifact contract and benchmark-safety checkpoint.
+7. [`24_GATE_10_CHECKPOINT.md`](24_GATE_10_CHECKPOINT.md) — bounded residual-hypothesis contract, scale shape and safety checkpoint.
+8. [`23_GATE_9_CHECKPOINT.md`](23_GATE_9_CHECKPOINT.md) — immutable versioned full-proof contract and Gate 9 checkpoint.
+9. [`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — pre-Gate-9 foundation audit and admission criteria.
+10. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — pre-review roadmap; docs 27–30 supersede its post-Gate-12 sequence/status.
+11. [`15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`](15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md) — Razorpay alignment and judging strategy.
+12. [`11_NOVEL_PRODUCT_THESIS.md`](11_NOVEL_PRODUCT_THESIS.md) — why deterministic financial truth remains authoritative.
+13. [`12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md`](12_MONEY_GRAPH_AND_RECONCILIATION_PROOFS.md) — core deterministic financial model.
+14. [`13_MESSY_DATA_AND_CONNECTOR_COMPILER.md`](13_MESSY_DATA_AND_CONNECTOR_COMPILER.md) — safe AI use for unfamiliar sources/schema drift.
+15. [`14_SCALE_PERFORMANCE_AND_RESILIENCE.md`](14_SCALE_PERFORMANCE_AND_RESILIENCE.md) — scale/performance plan.
 
 ---
 
@@ -54,6 +54,8 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`25_GATE_11_CHECKPOINT.md`](25_GATE_11_CHECKPOINT.md) — Gate 11 baselines, semantic scorer, verifiable artifacts, failure findings and checkpoint evidence.
 - [`26_GATE_12_CHECKPOINT.md`](26_GATE_12_CHECKPOINT.md) — Gate 12 journal-first source compiler, approval lifecycle, adapter benchmarks and end-to-end runtime lineage.
 - [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — Gate 13 scope/run/source-completeness, evidence-coverage, balance-control and close-readiness checkpoint.
+- [`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Gate 14 frozen contract/acceptance plan.
+- [`30_GATE_14_CHECKPOINT.md`](30_GATE_14_CHECKPOINT.md) — Gate 14 case lifecycle, workflow separation, supersession and incident-grouping checkpoint.
 
 ## Execution and submission
 
@@ -68,14 +70,15 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. latest implemented checkpoint (`28_GATE_13_CHECKPOINT.md`)
-3. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
-4. `26_GATE_12_CHECKPOINT.md` and earlier implemented checkpoints
-5. `16_MASTER_BUILD_PLAN.md`
-6. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
-7. `11`–`14` and `18`
-8. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
-9. `04`–`09` as earlier planning history
+2. latest implemented checkpoint (`30_GATE_14_CHECKPOINT.md`)
+3. frozen gate contract where applicable (`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`)
+4. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
+5. `28_GATE_13_CHECKPOINT.md` and earlier implemented checkpoints
+6. `16_MASTER_BUILD_PLAN.md`
+7. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
+8. `11`–`14` and `18`
+9. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
+10. `04`–`09` as earlier planning history
 
 If implementation/evaluation contradicts any document, update the plan and preserve the finding in `FAILURE_LOG.md` where appropriate.
 
