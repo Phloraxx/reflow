@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in verified `main` through Gate 16. Gate 17 is in progress; F-0081 is preserved below as a resolved scale regression on the Gate 17 branch and is not yet merged.
+None currently known through Gate 17. PR #19 merged as `ccd24497caac407034bc6b7fdd8132d310cb27de`, and merge-triggered `main` CI run `33534839864` passed. F-0081 remains preserved below as the resolved Gate 17 scale regression.
 
 ---
 

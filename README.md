@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 17 — measured scale + PostgreSQL durability/application state is implemented and Oracle-validated on `build/gate-17-scale-durability-application` at `3fa4dd1`; PR/merge CI is pending. Gate 18 (Operator Control Tower) begins only after Gate 17 merges green. See `docs/36_GATE_17_CHECKPOINT.md`.**
+> **Current phase: Gate 17 — measured scale + PostgreSQL durability/application state is merged and green on `main` (PR #19, merge `ccd2449`, CI `33534839864`). Gate 18 — Operator Control Tower is next. See `docs/36_GATE_17_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
