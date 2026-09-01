@@ -1790,6 +1790,59 @@ Resolved in Gate 15.
 
 ---
 
+
+## F-0076 — Gate 16 case-snapshot trace emitted noncanonical returned-reference order
+
+**Date:** 2026-09-01
+**Area:** Gate 16 tool-trace integrity
+**Severity:** high
+
+### Symptom
+The first Gate 16 behavioral run caused a valid `CASE_SNAPSHOT` call to fail its own immutable `ToolTraceEntry` validation. The trace returned the observation ID and case ID in construction order rather than canonical lexical order.
+
+### Root cause
+The trace contract correctly required unique canonical-sorted returned references, but the case tool constructed its tuple without applying the same canonical ordering rule.
+
+### Why it matters
+Every valid provider investigation that touched the case snapshot was misclassified as a provider failure, and the trace could not serve as independently reproducible evidence.
+
+### Fix
+`CASE_SNAPSHOT` now canonical-sorts its returned immutable references before trace construction.
+
+### Regression protection
+`test_case_snapshot_is_bounded_and_traced`, deterministic result-identity tests, and trace reproducibility tests.
+
+### Status
+Resolved in Gate 16.
+
+---
+
+## F-0077 — Denied Gate 16 tool access was misclassified as provider outage
+
+**Date:** 2026-09-01
+**Area:** Gate 16 safety classification
+**Severity:** high
+
+### Symptom
+A provider requesting a `SourceEnvelopeId` outside the bound Gate 9 proof produced `PROVIDER_ERROR` even though the read-only tool correctly denied and traced the request.
+
+### Root cause
+`run_investigation()` caught all provider-side exceptions in one generic provider-error branch, including `InvestigationToolError` raised by the deterministic capability boundary.
+
+### Why it matters
+A hallucinated or adversarial tool request would be reported as infrastructure failure instead of an explicit deterministic safety rejection, weakening independent evaluation of the agent.
+
+### Fix
+`InvestigationToolError` is now handled separately as `REJECTED` + `ABSTAIN`; genuine provider/transport exceptions remain `PROVIDER_ERROR` + `ABSTAIN`.
+
+### Regression protection
+`test_denied_tool_call_returns_rejected_not_provider_outage` and the denied-tool trace tests.
+
+### Status
+Resolved in Gate 16.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
