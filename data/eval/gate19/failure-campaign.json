@@ -1,0 +1,111 @@
+{
+  "artifact_sha256": "75ae650eacd98c062d4cd944594c07c322b3a55b7613491ae776067e17d7bb38",
+  "check_count": 12,
+  "checks": [
+    {
+      "check_id": "source-late-vs-complete",
+      "elapsed_seconds": 0.767663,
+      "node_id": "tests/core/test_reconciliation_control_plane.py::test_missing_bank_delivery_differs_from_complete_delivery_missing_credit",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/core/test_reconciliation_control_plane.py::test_missing_bank_delivery_differs_from_complete_delivery_missing_credit",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "case-auto-close-history",
+      "elapsed_seconds": 0.877746,
+      "node_id": "tests/core/test_exception_cases.py::test_later_green_proof_auto_closes_without_rewriting_history",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/core/test_exception_cases.py::test_later_green_proof_auto_closes_without_rewriting_history",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "case-economic-supersession",
+      "elapsed_seconds": 0.987861,
+      "node_id": "tests/core/test_exception_cases.py::test_changed_settlement_amount_creates_new_case_and_supersedes_old",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/core/test_exception_cases.py::test_changed_settlement_amount_creates_new_case_and_supersedes_old",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "agent-provider-outage",
+      "elapsed_seconds": 0.934624,
+      "node_id": "tests/core/test_investigation.py::test_provider_outage_abstains_and_cannot_mutate_case_history",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/core/test_investigation.py::test_provider_outage_abstains_and_cannot_mutate_case_history",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "agent-prompt-injection",
+      "elapsed_seconds": 0.957848,
+      "node_id": "tests/core/test_investigation.py::test_prompt_like_source_text_cannot_authorize_hallucinated_number_or_evidence",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/core/test_investigation.py::test_prompt_like_source_text_cannot_authorize_hallucinated_number_or_evidence",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "agent-hallucinated-citation",
+      "elapsed_seconds": 0.806513,
+      "node_id": "tests/core/test_investigation.py::test_hallucinated_citation_is_rejected",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/core/test_investigation.py::test_hallucinated_citation_is_rejected",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "agent-out-of-proof-tool",
+      "elapsed_seconds": 0.978196,
+      "node_id": "tests/core/test_openai_investigation_provider.py::test_openai_out_of_proof_source_request_is_traced_safety_rejection",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/core/test_openai_investigation_provider.py::test_openai_out_of_proof_source_request_is_traced_safety_rejection",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "postgres-journal-conflict",
+      "elapsed_seconds": 1.397584,
+      "node_id": "tests/persistence/test_postgres_persistence.py::test_postgres_journal_matches_append_duplicate_and_conflict_semantics",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/persistence/test_postgres_persistence.py::test_postgres_journal_matches_append_duplicate_and_conflict_semantics",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "postgres-restart-idempotency",
+      "elapsed_seconds": 1.475673,
+      "node_id": "tests/persistence/test_postgres_persistence.py::test_artifact_write_is_immutable_idempotent_and_restart_safe",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/persistence/test_postgres_persistence.py::test_artifact_write_is_immutable_idempotent_and_restart_safe",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "postgres-pointer-cas",
+      "elapsed_seconds": 1.804178,
+      "node_id": "tests/persistence/test_postgres_persistence.py::test_current_pointer_compare_and_swap_is_idempotent_and_stale_safe",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/persistence/test_postgres_persistence.py::test_current_pointer_compare_and_swap_is_idempotent_and_stale_safe",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "ui-spa-api-boundary",
+      "elapsed_seconds": 1.793314,
+      "node_id": "tests/control_tower/test_control_tower.py::test_fastapi_can_serve_built_spa_without_changing_api_authority",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/control_tower/test_control_tower.py::test_fastapi_can_serve_built_spa_without_changing_api_authority",
+      "returncode": 0,
+      "status": "passed"
+    },
+    {
+      "check_id": "ui-source-payload-minimization",
+      "elapsed_seconds": 1.067167,
+      "node_id": "tests/control_tower/test_control_tower.py::test_source_lab_contains_metadata_but_no_raw_payload",
+      "output": ".                                                                        [100%]\n==================================== PASSES ====================================\n=========================== short test summary info ============================\nPASSED tests/control_tower/test_control_tower.py::test_source_lab_contains_metadata_but_no_raw_payload",
+      "returncode": 0,
+      "status": "passed"
+    }
+  ],
+  "failed_count": 0,
+  "passed_count": 12,
+  "runtime": {
+    "cpu_count": 4,
+    "machine": "aarch64",
+    "platform": "Linux-6.17.0-1020-oracle-aarch64-with-glibc2.39",
+    "python": "3.12.3"
+  },
+  "schema_version": "gate19-failure-campaign-v1"
+}

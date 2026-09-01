@@ -1997,3 +1997,25 @@ These are test targets, not claimed failures:
 - **Fix:** the Makefile now prefers `.venv/bin/python` when present and otherwise falls back to `python3`; README explicitly creates/activates `.venv` before installation.
 - **Regression:** the exact `make check` reviewer command is rerun on Oracle as the final Gate 18 documented-state validation.
 - **Financial truth impact:** none; build/reproducibility tooling only.
+
+## F-0084 — Gate 19 regression campaign treated quiet pytest success as failure
+
+**Date:** 2026-09-01
+**Area:** final evaluation harness
+**Severity:** medium
+
+### Symptom
+
+The first Gate 19 failure-campaign execution stopped at `source-late-vs-complete` even though the selected regression test itself returned exit code 0.
+
+### Root cause
+
+The campaign required the literal text `1 passed` in pytest output. This repository's quiet pytest configuration emits only the progress dot under `-q`, so a successful selector was incorrectly classified as failed.
+
+### Fix
+
+The campaign now invokes pytest with `-q -rA` and requires both exit code 0 and the exact `PASSED <node-id>` marker. A skipped or wrong selector therefore cannot be promoted to campaign success. The direct reproducer passed before this harness fix.
+
+### Financial truth impact
+
+None. The defect was in final regression-campaign result detection only; no proof, scorer, candidate or held-out v1 artifact changed.
