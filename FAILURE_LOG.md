@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known through Gate 17. PR #19 merged as `ccd24497caac407034bc6b7fdd8132d310cb27de`, and merge-triggered `main` CI run `33534839864` passed. F-0081 remains preserved below as the resolved Gate 17 scale regression.
+None currently known through the Gate 18 implementation checkpoint. Gate 18 PR/merge CI is pending; F-0082 and F-0083 are preserved below as resolved Gate 18 product/reviewer-workflow regressions. Final verified Gate 17 `main` remains `95164be82a149419b936c529b57510eb17b6c317` with CI run `33535214302` green.
 
 ---
 
@@ -1977,3 +1977,23 @@ These are test targets, not claimed failures:
 - production webhook signature/authenticity validation.
 
 ---
+### F-0082 — Gate 18 same-origin SPA direct navigation returned 404
+
+- **Gate:** 18 — Operator Control Tower
+- **Severity:** medium
+- **Type:** product routing / deployment integration
+- **Observed:** the built React UI loaded at `/`, but direct navigation to a client route such as `/exceptions?scope=...` returned HTTP 404 when served by FastAPI.
+- **Cause:** Starlette `StaticFiles(..., html=True)` serves directory index files but is not a generic SPA history fallback for arbitrary non-file client routes.
+- **Fix:** mount only built `/assets`, serve `/` explicitly, and add a non-API catch-all that returns the built `index.html`; unknown `/api/*` routes continue to return 404 rather than being masked by the SPA.
+- **Regression:** Gate 18 API tests assert a direct client route returns the SPA shell while an unknown API route remains 404.
+- **Financial truth impact:** none; read-only web routing only.
+### F-0083 — Gate 18 documented `make check` assumed a `python` executable
+
+- **Gate:** 18 — Operator Control Tower
+- **Severity:** low
+- **Type:** repository packaging / reviewer reproducibility
+- **Observed:** the final documented-state validation failed immediately on Oracle with `make: python: No such file or directory`, even though Python 3.12 and the project venv were healthy.
+- **Cause:** the Makefile hard-coded `python`; this Oracle image exposes `python3` globally and `.venv/bin/python` inside the project environment, with no global `python` alias.
+- **Fix:** the Makefile now prefers `.venv/bin/python` when present and otherwise falls back to `python3`; README explicitly creates/activates `.venv` before installation.
+- **Regression:** the exact `make check` reviewer command is rerun on Oracle as the final Gate 18 documented-state validation.
+- **Financial truth impact:** none; build/reproducibility tooling only.

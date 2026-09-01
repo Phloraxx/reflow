@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import platform
@@ -20,52 +19,14 @@ from reflow.reconciliation_proof import InMemoryProofLedger, ReconciliationStatu
 from reflow.settlement_proof import prove_all_settlement_compositions
 from reflow.simulator import WorldConfig, generate_world, observe_world
 
+from .benchmark_artifacts import (
+    SCALE_BENCHMARK_SCHEMA_VERSION,
+    artifact_digest,
+    verify_scale_benchmark_payload,
+)
 from .profiles import EvaluationProfile, corruption_plan
 
-SCALE_BENCHMARK_SCHEMA_VERSION = "gate17-scale-benchmark-v1"
 DEFAULT_RECEIVED_AT = datetime(2027, 1, 1, tzinfo=UTC)
-
-
-def _canonical_bytes(value: object) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode()
-
-
-def _artifact_digest(payload: dict[str, Any]) -> str:
-    material = dict(payload)
-    material.pop("artifact_sha256", None)
-    return hashlib.sha256(_canonical_bytes(material)).hexdigest()
-
-
-def verify_scale_benchmark_payload(payload: object) -> None:
-    if not isinstance(payload, dict):
-        raise ValueError("scale benchmark artifact root must be an object")
-    if payload.get("schema_version") != SCALE_BENCHMARK_SCHEMA_VERSION:
-        raise ValueError("scale benchmark schema version mismatch")
-    digest = payload.get("artifact_sha256")
-    if not isinstance(digest, str) or len(digest) != 64:
-        raise ValueError("scale benchmark artifact digest is invalid")
-    if digest != _artifact_digest(payload):
-        raise ValueError("scale benchmark artifact digest does not match payload")
-    config = payload.get("config")
-    hardware = payload.get("hardware")
-    metrics = payload.get("metrics")
-    if (
-        not isinstance(config, dict)
-        or not isinstance(hardware, dict)
-        or not isinstance(metrics, dict)
-    ):
-        raise ValueError("scale benchmark artifact sections are invalid")
-    if config.get("worker_count") != 1:
-        raise ValueError("Gate 17 benchmark must disclose one-process execution")
-    if config.get("database_mode") != "in_memory_core":
-        raise ValueError("Gate 17 core benchmark database mode is invalid")
-
 
 def _observed_row_count(observed: object) -> int:
     required = (
@@ -204,7 +165,7 @@ def run_scale_benchmark(
         "source_rejection": source_rejection,
         "artifact_sha256": "",
     }
-    payload["artifact_sha256"] = _artifact_digest(payload)
+    payload["artifact_sha256"] = artifact_digest(payload)
     verify_scale_benchmark_payload(payload)
     return payload
 

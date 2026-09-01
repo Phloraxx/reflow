@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import platform
@@ -19,54 +18,13 @@ from reflow.persistence import (
     PostgresApplicationStore,
 )
 
-PERSISTENCE_BENCHMARK_SCHEMA_VERSION = "gate17-persistence-benchmark-v1"
+from .benchmark_artifacts import (
+    PERSISTENCE_BENCHMARK_SCHEMA_VERSION,
+    artifact_digest,
+    verify_persistence_benchmark_payload,
+)
+
 _BASE_TIME = datetime(2026, 9, 1, 16, 0, tzinfo=UTC)
-
-
-def _canonical_bytes(value: object) -> bytes:
-    return json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    ).encode()
-
-
-def _artifact_digest(payload: dict[str, Any]) -> str:
-    material = dict(payload)
-    material.pop("artifact_sha256", None)
-    return hashlib.sha256(_canonical_bytes(material)).hexdigest()
-
-
-def verify_persistence_benchmark_payload(payload: object) -> None:
-    if not isinstance(payload, dict):
-        raise ValueError("persistence benchmark artifact root must be an object")
-    if payload.get("schema_version") != PERSISTENCE_BENCHMARK_SCHEMA_VERSION:
-        raise ValueError("persistence benchmark schema version mismatch")
-    digest = payload.get("artifact_sha256")
-    if not isinstance(digest, str) or len(digest) != 64:
-        raise ValueError("persistence benchmark artifact digest is invalid")
-    if digest != _artifact_digest(payload):
-        raise ValueError("persistence benchmark artifact digest does not match payload")
-    config = payload.get("config")
-    metrics = payload.get("metrics")
-    if not isinstance(config, dict) or not isinstance(metrics, dict):
-        raise ValueError("persistence benchmark artifact sections are invalid")
-    if config.get("database_mode") != "postgresql":
-        raise ValueError("persistence benchmark database mode is invalid")
-    record_count = config.get("record_count")
-    if isinstance(record_count, bool) or not isinstance(record_count, int) or record_count < 1:
-        raise ValueError("persistence benchmark record count is invalid")
-    for name in (
-        "source_cold_stored",
-        "source_warm_duplicates",
-        "artifact_cold_stored",
-        "artifact_warm_duplicates",
-    ):
-        if metrics.get(name) != record_count:
-            raise ValueError(f"persistence benchmark {name} count is invalid")
-
 
 def _rate(count: int, seconds: float) -> float | None:
     return None if seconds <= 0 else round(count / seconds, 2)
@@ -197,7 +155,7 @@ def run_persistence_benchmark(
         "metrics": metrics,
         "artifact_sha256": "",
     }
-    payload["artifact_sha256"] = _artifact_digest(payload)
+    payload["artifact_sha256"] = artifact_digest(payload)
     verify_persistence_benchmark_payload(payload)
     return payload
 
