@@ -7,7 +7,7 @@ from . import domain, ingestion
 from .ingestion import CanonicalBatch
 from .money_graph import MoneyGraph
 
-COMPOSITION_RULESET_VERSION = "gate7-composition-v1"
+COMPOSITION_RULESET_VERSION = "gate7-composition-v2"
 
 __all__ = [
     "COMPOSITION_RULESET_VERSION",
@@ -62,6 +62,7 @@ class SettlementCompositionProof:
     conflicting_groups: tuple[ConflictingEconomicGroup, ...]
     late_component_ids: tuple[domain.ReconEntryId, ...]
     cross_settlement_conflict_ids: tuple[domain.ReconEntryId, ...]
+    utr_mismatch_component_ids: tuple[domain.ReconEntryId, ...]
     reason_codes: tuple[str, ...]
 
     def __post_init__(self) -> None:
@@ -78,15 +79,19 @@ class SettlementCompositionProof:
                 raise ValueError("proven composition must have zero residual")
             if self.duplicate_groups or self.conflicting_groups:
                 raise ValueError("proven composition cannot contain economic identity conflicts")
-            if self.late_component_ids or self.cross_settlement_conflict_ids:
-                raise ValueError("proven composition cannot contain causal/ownership conflicts")
+            if (
+                self.late_component_ids
+                or self.cross_settlement_conflict_ids
+                or self.utr_mismatch_component_ids
+            ):
+                raise ValueError("proven composition cannot contain causal/ownership/UTR conflicts")
             if self.reason_codes:
                 raise ValueError("proven composition cannot carry failure reason codes")
 
 
 type EconomicIdentity = tuple[domain.ReconEntityKind, domain.EntityId]
 type EconomicClaim = tuple[domain.ReconEntityKind, str]
-type EconomicPayload = tuple[int, int, int, int, str, str]
+type EconomicPayload = tuple[int, int, int, int, str, str, str | None]
 
 
 def _economic_identity(entry: domain.SettlementReconEntry) -> EconomicIdentity:
@@ -106,6 +111,7 @@ def _economic_payload(entry: domain.SettlementReconEntry) -> EconomicPayload:
         entry.settlement_effect.amount_paise,
         entry.settlement_effect.currency.value,
         entry.occurred_at.isoformat(),
+        entry.settlement_utr,
     )
 
 
@@ -217,9 +223,7 @@ def _required_provenance_edges(
         and edge.evidence_ids == required_evidence
         and "EXACT_SOURCE_IDENTIFIER" in edge.reason_codes
     ]
-    matched_keys = {
-        (edge.relationship, str(edge.from_id), str(edge.to_id)) for edge in matches
-    }
+    matched_keys = {(edge.relationship, str(edge.from_id), str(edge.to_id)) for edge in matches}
     if matched_keys != expected:
         return None
     return tuple(sorted((edge.id for edge in matches), key=str))
@@ -232,9 +236,8 @@ def _prove_settlement_composition(
     *,
     source_index: dict[ingestion.SourceIdentity, domain.SourceEnvelopeId],
     cross_settlement_claims: frozenset[EconomicClaim],
-    cross_settlement_evidence: dict[
-        EconomicClaim, tuple[domain.SettlementReconEntry, ...]
-    ] | None = None,
+    cross_settlement_evidence: dict[EconomicClaim, tuple[domain.SettlementReconEntry, ...]]
+    | None = None,
 ) -> SettlementCompositionProof:
     if any(entry.settlement_id != settlement.id for entry in entries):
         raise CompositionProofError("composition call contains rows for another settlement")
@@ -259,26 +262,32 @@ def _prove_settlement_composition(
     own_cross_settlement_ids = {
         entry.id for entry in entries if _economic_claim(entry) in cross_settlement_claims
     }
-    conflict_evidence_by_id: dict[
-        domain.ReconEntryId, domain.SettlementReconEntry
-    ] = {}
+    conflict_evidence_by_id: dict[domain.ReconEntryId, domain.SettlementReconEntry] = {}
     if cross_settlement_evidence is not None:
         for entry in entries:
-            for conflict_entry in cross_settlement_evidence.get(
-                _economic_claim(entry), ()
-            ):
+            for conflict_entry in cross_settlement_evidence.get(_economic_claim(entry), ()):
                 conflict_evidence_by_id[conflict_entry.id] = conflict_entry
     else:
         for entry in entries:
             if entry.id in own_cross_settlement_ids:
                 conflict_evidence_by_id[entry.id] = entry
-    cross_settlement_conflict_ids = tuple(
-        sorted(conflict_evidence_by_id, key=str)
+    cross_settlement_conflict_ids = tuple(sorted(conflict_evidence_by_id, key=str))
+    utr_mismatch_component_ids = tuple(
+        sorted(
+            (
+                entry.id
+                for entry in entries
+                if entry.settlement_utr is not None
+                and settlement.utr is not None
+                and entry.settlement_utr != settlement.utr
+            ),
+            key=str,
+        )
     )
-    blocked_ids = set(late_component_ids) | own_cross_settlement_ids
-    arithmetic_entries = tuple(
-        entry for entry in unique_entries if entry.id not in blocked_ids
+    blocked_ids = (
+        set(late_component_ids) | own_cross_settlement_ids | set(utr_mismatch_component_ids)
     )
+    arithmetic_entries = tuple(entry for entry in unique_entries if entry.id not in blocked_ids)
 
     observed = domain.sum_money(
         [entry.settlement_effect for entry in arithmetic_entries],
@@ -300,6 +309,8 @@ def _prove_settlement_composition(
         reason_codes.add("RECON_AFTER_SETTLEMENT")
     if cross_settlement_conflict_ids:
         reason_codes.add("ECONOMIC_ENTITY_IN_MULTIPLE_SETTLEMENTS")
+    if utr_mismatch_component_ids:
+        reason_codes.add("SETTLEMENT_UTR_MISMATCH")
 
     proof_evidence_rows = {entry.id: entry for entry in entries}
     proof_evidence_rows.update(conflict_evidence_by_id)
@@ -321,6 +332,7 @@ def _prove_settlement_composition(
         or conflicting_groups
         or late_component_ids
         or cross_settlement_conflict_ids
+        or utr_mismatch_component_ids
     )
     if has_contradiction:
         status = CompositionStatus.CONTRADICTED
@@ -345,6 +357,7 @@ def _prove_settlement_composition(
         conflicting_groups=conflicting_groups,
         late_component_ids=late_component_ids,
         cross_settlement_conflict_ids=cross_settlement_conflict_ids,
+        utr_mismatch_component_ids=utr_mismatch_component_ids,
         reason_codes=tuple(sorted(reason_codes)),
     )
 
@@ -363,9 +376,9 @@ def prove_all_settlement_compositions(
             raise CompositionProofError(f"duplicate settlement id {settlement.id}")
         settlements[settlement.id] = settlement
 
-    rows_by_settlement: dict[
-        domain.SettlementId, list[domain.SettlementReconEntry]
-    ] = {settlement_id: [] for settlement_id in settlements}
+    rows_by_settlement: dict[domain.SettlementId, list[domain.SettlementReconEntry]] = {
+        settlement_id: [] for settlement_id in settlements
+    }
     claim_entries: dict[EconomicClaim, list[domain.SettlementReconEntry]] = {}
     for entry in batch.recon_entries:
         if entry.settlement_id not in settlements:

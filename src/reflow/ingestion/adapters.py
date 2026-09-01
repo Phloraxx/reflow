@@ -39,7 +39,7 @@ class AdapterError(ValueError):
 
 type SourceIdentity = tuple[SourceKind, str]
 
-_CANONICAL_CONTRACT_VERSION = "canonical-source-link-v2"
+_CANONICAL_CONTRACT_VERSION = "canonical-source-link-v3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,15 +117,9 @@ def _canonical_compilation_sha256(
         "payment_events",
         sorted(payment_events, key=lambda row: row.source_event_id),
     )
-    _feed_digest_rows(
-        digest, "recon_entries", sorted(recon_entries, key=lambda row: str(row.id))
-    )
-    _feed_digest_rows(
-        digest, "settlements", sorted(settlements, key=lambda row: str(row.id))
-    )
-    _feed_digest_rows(
-        digest, "bank_entries", sorted(bank_entries, key=lambda row: str(row.id))
-    )
+    _feed_digest_rows(digest, "recon_entries", sorted(recon_entries, key=lambda row: str(row.id)))
+    _feed_digest_rows(digest, "settlements", sorted(settlements, key=lambda row: str(row.id)))
+    _feed_digest_rows(digest, "bank_entries", sorted(bank_entries, key=lambda row: str(row.id)))
     _feed_digest_rows(
         digest,
         "source_links",
@@ -178,15 +172,10 @@ class CanonicalBatch:
         expected: set[SourceIdentity] = set()
         expected.update((SourceKind.MERCHANT, str(row.id)) for row in self.orders)
         expected.update(
-            (SourceKind.RAZORPAY_EVENT, row.source_event_id)
-            for row in self.payment_events
+            (SourceKind.RAZORPAY_EVENT, row.source_event_id) for row in self.payment_events
         )
-        expected.update(
-            (SourceKind.RAZORPAY_RECON, str(row.id)) for row in self.recon_entries
-        )
-        expected.update(
-            (SourceKind.RAZORPAY_SETTLEMENT, str(row.id)) for row in self.settlements
-        )
+        expected.update((SourceKind.RAZORPAY_RECON, str(row.id)) for row in self.recon_entries)
+        expected.update((SourceKind.RAZORPAY_SETTLEMENT, str(row.id)) for row in self.settlements)
         expected.update((SourceKind.BANK, str(row.id)) for row in self.bank_entries)
 
         canonical_count = (

@@ -260,6 +260,7 @@ class SettlementReconEntry:
     tax: Money
     settlement_effect: Money
     occurred_at: datetime
+    settlement_utr: str | None = None
 
     def __post_init__(self) -> None:
         _aware(self.occurred_at, "occurred_at")
@@ -273,6 +274,8 @@ class SettlementReconEntry:
             raise ValueError("all recon money fields must use one currency")
         _non_negative(self.fee.amount_paise, "fee")
         _non_negative(self.tax.amount_paise, "tax")
+        if self.settlement_utr is not None and not self.settlement_utr.strip():
+            raise ValueError("settlement_utr cannot be blank")
         expected_types: dict[ReconEntityKind, type[EntityId]] = {
             ReconEntityKind.PAYMENT: PaymentId,
             ReconEntityKind.REFUND: RefundId,

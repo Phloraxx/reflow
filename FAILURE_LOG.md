@@ -1656,6 +1656,32 @@ Resolved in Gate 14.
 
 ---
 
+## F-0071 — Provider recon UTR identity was discarded before Gate 7 proof
+
+**Date:** 2026-09-01
+**Area:** Gate 15 provider integration / Gate 7 identity proof
+**Severity:** safety-critical
+
+### Symptom
+A provider-shaped settlement recon row could carry a `settlement_utr` different from the signed `settlement.processed` entity UTR while Gate 7 still returned `COMPOSITION_PROVEN` when the amounts summed exactly.
+
+### Root cause
+The pre-Gate-15 canonical `SettlementReconEntry` model was built for normalized synthetic fixtures and did not retain provider `settlement_utr`. Gate 7 therefore had no way to compare two authoritative Razorpay settlement identities and relied only on `settlement_id` plus arithmetic.
+
+### Why it matters
+Exact arithmetic under a contradictory provider payout identity is not proof. A real integration could otherwise present a settlement as composition-proven while its recon evidence names a different bank-transfer UTR.
+
+### Fix
+`SettlementReconEntry` now retains optional `settlement_utr`; the canonical compilation contract is bumped to `canonical-source-link-v3`; Gate 7 is bumped to `gate7-composition-v2`; and UTR-mismatched recon components are excluded from arithmetic and produce `SETTLEMENT_UTR_MISMATCH` with `COMPOSITION_CONTRADICTED`. Provider normalization preserves the raw UTR rather than discarding it.
+
+### Regression protection
+`test_recon_settlement_utr_mismatch_contradicts_existing_gate7_proof`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
 # Failure categories still targeted deliberately
 
 These are test targets, not claimed failures:
