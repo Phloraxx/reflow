@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through Gate 14. PR #13 merged as `5118d36dcceb7c56bf0b1e784fa68264e0f113cf`, and the merge-triggered `main` CI passed. F-0068 through F-0070 remain preserved as resolved regressions.
+None currently known in the deterministic implementation through the current Gate 15 Oracle checkpoint. Gate 15 PR/merge CI is still pending; F-0071 through F-0073 are resolved with regressions.
 
 ---
 
@@ -1676,6 +1676,61 @@ Exact arithmetic under a contradictory provider payout identity is not proof. A 
 
 ### Regression protection
 `test_recon_settlement_utr_mismatch_contradicts_existing_gate7_proof`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
+
+## F-0072 — Standard settlement compiler required a provider field Razorpay does not expose
+
+**Date:** 2026-09-01
+**Area:** Gate 15 provider integration
+**Severity:** high
+
+### Symptom
+The first Gate 15 `settlement.processed` compiler required `currency` inside the embedded standard settlement entity. The checked-in provider-shaped fixture had silently added `"currency": "INR"`, so the test passed even though Razorpay's documented standard settlement entity/webhook sample does not expose that field.
+
+### Root cause
+The implementation reused the intuition that every money-bearing provider entity carries its own currency. For standard settlements, the current Razorpay API/webhook contract instead exposes amount/status/fees/tax/UTR/timestamps without a settlement `currency` field.
+
+### Why it matters
+Gate 15's admission rule explicitly forbids presenting synthetic field semantics as Razorpay production semantics. A real documented settlement webhook would have failed canonicalization even though the provider evidence was valid.
+
+### Fix
+`RazorpayAccountContext` now carries the explicitly trusted settlement currency (currently INR). Standard settlement webhook/API normalization uses that account context when the provider entity omits currency and rejects a supplied currency that conflicts with context. The provider fixture no longer invents a settlement `currency` field.
+
+For processed settlement API entities, ReFlow uses the observation `received_at` as the safe `Settlement.processed_at` fact: the API proves the entity is processed when observed, while Razorpay's `created_at` is retained/validated as provider entity timing rather than misrepresented as processing time.
+
+### Regression protection
+`test_processed_settlement_webhook_normalizes_amount_utr_and_event_time` and `test_processed_settlement_api_entity_uses_observation_time_and_retains_created_at`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
+## F-0073 — Provider timestamp validation could bypass raw-evidence retention
+
+**Date:** 2026-09-01
+**Area:** Gate 15 raw provider provenance
+**Severity:** high
+
+### Symptom
+An identity-recoverable recon item with an out-of-range integer `settled_at` failed while deriving journal metadata, before the raw provider payload was appended. The same pre-journal timestamp parsing pattern existed for signed webhook event time.
+
+### Root cause
+Optional `SourceEnvelope.occurred_at` metadata was being treated as a normalization prerequisite. That inverted Gate 15's raw-before-interpretation contract: malformed semantic time data could prevent retention of evidence whose provider identity/authenticity was already known.
+
+### Why it matters
+Malformed provider rows are often exactly the evidence an operator needs to investigate. Dropping them before the journal weakens auditability and can turn an explicit schema/provider defect into unexplained absence.
+
+### Fix
+Provider paths now derive envelope `occurred_at` with a fail-soft timestamp helper: valid timestamps become journal metadata, while malformed/out-of-range values produce `occurred_at=None`. After raw append, canonical normalization re-validates required timestamps and fails closed. Processed settlement API entities follow the same rule for provider `created_at`.
+
+### Regression protection
+`test_out_of_range_webhook_timestamp_is_retained_raw_then_rejected`, `test_out_of_range_recon_timestamp_is_retained_raw_then_rejected`, and `test_malformed_settlement_api_created_at_is_retained_then_rejected`.
 
 ### Status
 Resolved in Gate 15.

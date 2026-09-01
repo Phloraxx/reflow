@@ -46,7 +46,8 @@ A semantically invalid provider item is still retained as raw evidence before no
 `RazorpayAccountContext` binds:
 
 - expected Razorpay `account_id` / merchant account identity;
-- evidence origin.
+- evidence origin;
+- standard-settlement account currency (currently INR).
 
 For signed webhooks, the body-level `account_id` must equal the expected context.
 
@@ -140,7 +141,8 @@ For `settlement.processed` webhook:
 
 - settlement ID must be `setl_...`;
 - entity must be `settlement`;
-- amount/currency and UTR are normalized from the embedded entity;
+- amount and UTR are normalized from the embedded entity;
+- Razorpay's documented standard settlement shape omits `currency`, so currency comes from explicit account context (and any supplied provider currency must agree);
 - canonical `processed_at` uses the signed webhook event timestamp.
 
 The resulting `Settlement` does **not** prove bank receipt. Gate 8 remains the independent bank-evidence authority.
@@ -149,7 +151,7 @@ Instant Settlement IDs (`setlod_...` / payout `setlodp_...`) are not coerced int
 
 ## Provider API settlement entity
 
-A fetched standard settlement entity with status `processed` may be normalized when no webhook is being consumed. Its provider timestamp is retained and explicitly labelled as API entity timing; the integration must not claim that an API entity's creation timestamp is a separately observed bank-credit timestamp.
+A fetched standard settlement entity with status `processed` may be normalized when no webhook is being consumed. The raw provider `created_at` is retained and schema-validated as API entity timing, but canonical `processed_at` is the ReFlow `received_at` observation time: that is the earliest fact this API read actually proves the entity was already processed. The integration must not reinterpret provider `created_at` as processing time or bank-credit time.
 
 The preferred Gate 15 causal fixture for a processing transition remains the signed `settlement.processed` webhook.
 
@@ -207,6 +209,15 @@ Gate 15 therefore makes no real Test Mode settlement accuracy claim at this chec
 28. direct canonical output remains journal-backed; bypassing raw evidence is not exposed by the public provider API;
 29. production Gate 15 module imports no simulator truth;
 30. fixture/source labels never claim `REAL_TEST_MODE` unless explicitly supplied by a real test-mode context.
+
+Hardened implementation coverage added after the frozen first pass:
+
+31. documented standard settlement webhook shape without `currency` uses explicit account currency;
+32. processed settlement API entity is journal-first and uses observation time as canonical processed-state time;
+33. unprocessed settlement API entity is retained raw then rejected;
+34. malformed settlement API `created_at` is retained raw then rejected;
+35. malformed/out-of-range webhook and recon timestamps cannot bypass raw journal retention;
+36. Gate 15's public compile surface remains journal-first after adding the API settlement compiler.
 
 ## Deferred from Gate 15
 

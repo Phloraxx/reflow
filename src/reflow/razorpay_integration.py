@@ -19,6 +19,7 @@ __all__ = [
     "RazorpayIntegrationError",
     "compile_payment_webhook",
     "compile_recon_items",
+    "compile_settlement_api_entity",
     "compile_settlement_webhook",
 ]
 
@@ -38,6 +39,7 @@ class RazorpayEvidenceOrigin(StrEnum):
 class RazorpayAccountContext:
     account_id: str
     evidence_origin: RazorpayEvidenceOrigin
+    settlement_currency: domain.Currency = domain.Currency.INR
 
     def __post_init__(self) -> None:
         if not isinstance(self.account_id, str) or not self.account_id.strip():
@@ -50,6 +52,8 @@ class RazorpayAccountContext:
             raise RazorpayIntegrationError(
                 "synthetic evidence belongs to normalized ingestion, not the provider integration"
             )
+        if not isinstance(self.settlement_currency, domain.Currency):
+            raise TypeError("settlement_currency must be Currency")
 
 
 def _aware(value: datetime, label: str) -> None:
@@ -98,6 +102,29 @@ def _currency(value: object) -> domain.Currency:
         return domain.Currency(text)
     except ValueError as exc:
         raise RazorpayIntegrationError(f"unsupported currency {text!r}") from exc
+
+
+def _safe_timestamp(value: object, label: str) -> datetime | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    try:
+        return _timestamp(value, label)
+    except RazorpayIntegrationError:
+        return None
+
+
+def _settlement_currency(
+    entity: Mapping[str, object], context: RazorpayAccountContext
+) -> domain.Currency:
+    supplied = entity.get("currency")
+    if supplied is None:
+        return context.settlement_currency
+    parsed = _currency(supplied)
+    if parsed is not context.settlement_currency:
+        raise RazorpayIntegrationError(
+            "settlement payload currency does not match Razorpay account context"
+        )
+    return parsed
 
 
 def _header(headers: Mapping[str, str], name: str) -> str | None:
@@ -158,6 +185,7 @@ def _webhook_payload(
         "provider": "razorpay",
         "evidence_origin": context.evidence_origin.value,
         "account_id": context.account_id,
+        "settlement_currency": context.settlement_currency.value,
         "x_razorpay_event_id": event_id,
         "x_razorpay_signature": signature,
         "raw_body_base64": base64.b64encode(raw_body).decode("ascii"),
@@ -176,7 +204,7 @@ def _append_webhook(
     journal: InMemoryJournal,
     received_at: datetime,
 ) -> AppendResult:
-    occurred_at = _timestamp(event.get("created_at"), "webhook created_at")
+    occurred_at = _safe_timestamp(event.get("created_at"), "webhook created_at")
     return journal.append(
         make_source_envelope(
             source_kind=source_kind,
@@ -444,9 +472,7 @@ def compile_recon_items(
         raw_identity = _recon_raw_identity(supplied, context)
         source_record_id, _, _, _ = raw_identity
         settled_raw = supplied.get("settled_at")
-        occurred_at = None
-        if isinstance(settled_raw, int) and not isinstance(settled_raw, bool):
-            occurred_at = _timestamp(settled_raw, "recon settled_at")
+        occurred_at = _safe_timestamp(settled_raw, "recon settled_at")
         result = journal.append(
             make_source_envelope(
                 source_kind=domain.SourceKind.RAZORPAY_RECON,
@@ -485,6 +511,105 @@ def compile_recon_items(
         settlements=(),
         bank_entries=(),
     )._bind_source_links(tuple(links[value] for value in ordered_ids))
+
+
+def _normalize_standard_settlement(
+    *,
+    entity: Mapping[str, object],
+    context: RazorpayAccountContext,
+    processed_at: datetime,
+) -> domain.Settlement:
+    if entity.get("entity") != "settlement":
+        raise RazorpayIntegrationError("settlement entity must identify a settlement")
+    if entity.get("status") != "processed":
+        raise RazorpayIntegrationError(
+            "settlement entity must be processed before canonicalization"
+        )
+    settlement_text = _non_empty_text(entity.get("id"), "settlement id")
+    try:
+        settlement_id = domain.SettlementId(settlement_text)
+    except (TypeError, ValueError) as exc:
+        raise RazorpayIntegrationError("standard settlement compiler requires setl_ id") from exc
+    amount = _integer(entity.get("amount"), "settlement amount")
+    if amount <= 0:
+        raise RazorpayIntegrationError("settlement amount must be positive")
+    # Razorpay's standard settlement entity exposes created_at but not a processed_at field.
+    # Validate the provider timestamp without pretending it is the processing observation time.
+    _timestamp(entity.get("created_at"), "settlement created_at")
+    return domain.Settlement(
+        id=settlement_id,
+        amount=domain.Money(amount, _settlement_currency(entity, context)),
+        processed_at=processed_at,
+        utr=_optional_text(entity.get("utr"), "settlement UTR"),
+    )
+
+
+def _settlement_api_payload(
+    entity: Mapping[str, object], context: RazorpayAccountContext
+) -> dict[str, object]:
+    return {
+        "provider": "razorpay",
+        "evidence_origin": context.evidence_origin.value,
+        "account_id": context.account_id,
+        "settlement_currency": context.settlement_currency.value,
+        "entity": dict(entity),
+    }
+
+
+def _retained_settlement_api_entity(
+    envelope: domain.SourceEnvelope,
+) -> Mapping[str, object]:
+    entity = envelope.payload.get("entity")
+    if not isinstance(entity, Mapping):
+        raise AssertionError("Gate 15 settlement API envelope lost provider entity")
+    return entity
+
+
+def compile_settlement_api_entity(
+    *,
+    entity: Mapping[str, object],
+    context: RazorpayAccountContext,
+    journal: InMemoryJournal,
+    received_at: datetime,
+) -> CanonicalBatch:
+    if not isinstance(context, RazorpayAccountContext):
+        raise TypeError("context must be RazorpayAccountContext")
+    if not isinstance(journal, InMemoryJournal):
+        raise TypeError("journal must be InMemoryJournal")
+    if not isinstance(entity, Mapping):
+        raise TypeError("settlement API entity must be a provider object")
+    _aware(received_at, "received_at")
+    settlement_text = _non_empty_text(entity.get("id"), "settlement id")
+    source_record_id = f"{context.account_id}:api:{settlement_text}"
+    result = journal.append(
+        make_source_envelope(
+            source_kind=domain.SourceKind.RAZORPAY_SETTLEMENT,
+            source_record_id=source_record_id,
+            occurred_at=_safe_timestamp(entity.get("created_at"), "settlement created_at"),
+            received_at=received_at,
+            schema_version="razorpay-settlement-api-entity-v1",
+            payload=_settlement_api_payload(entity, context),
+        )
+    )
+    retained = _retained_settlement_api_entity(result.envelope)
+    settlement = _normalize_standard_settlement(
+        entity=retained,
+        context=context,
+        processed_at=result.envelope.received_at,
+    )
+    link = SourceLink(
+        source_kind=domain.SourceKind.RAZORPAY_SETTLEMENT,
+        source_record_id=source_record_id,
+        envelope_id=result.envelope.id,
+        canonical_record_id=str(settlement.id),
+    )
+    return CanonicalBatch(
+        orders=(),
+        payment_events=(),
+        recon_entries=(),
+        settlements=(settlement,),
+        bank_entries=(),
+    )._bind_source_links((link,))
 
 
 def compile_settlement_webhook(
@@ -526,25 +651,10 @@ def compile_settlement_webhook(
             f"unsupported settlement webhook {event_name!r}; only processed is canonicalized"
         )
     entity = _payload_entity(event, "settlement")
-    if entity.get("entity") != "settlement":
-        raise RazorpayIntegrationError("settlement webhook entity must identify a settlement")
-    if entity.get("status") != "processed":
-        raise RazorpayIntegrationError(
-            "settlement entity must be processed before canonicalization"
-        )
-    settlement_text = _non_empty_text(entity.get("id"), "settlement id")
-    try:
-        settlement_id = domain.SettlementId(settlement_text)
-    except (TypeError, ValueError) as exc:
-        raise RazorpayIntegrationError("standard settlement compiler requires setl_ id") from exc
-    amount = _integer(entity.get("amount"), "settlement amount")
-    if amount <= 0:
-        raise RazorpayIntegrationError("settlement amount must be positive")
-    settlement = domain.Settlement(
-        id=settlement_id,
-        amount=domain.Money(amount, _currency(entity.get("currency"))),
+    settlement = _normalize_standard_settlement(
+        entity=entity,
+        context=context,
         processed_at=_timestamp(event.get("created_at"), "webhook created_at"),
-        utr=_optional_text(entity.get("utr"), "settlement UTR"),
     )
     link = SourceLink(
         source_kind=domain.SourceKind.RAZORPAY_SETTLEMENT,

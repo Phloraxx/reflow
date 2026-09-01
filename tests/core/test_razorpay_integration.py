@@ -11,7 +11,7 @@ import pytest
 
 import reflow.razorpay_integration as razorpay_module
 from reflow.bank_proof import BankReceiptStatus, prove_all_bank_receipts
-from reflow.domain import PaymentEventKind, ReconEntityKind, SourceKind
+from reflow.domain import Currency, PaymentEventKind, ReconEntityKind, SourceKind
 from reflow.ingestion import merge_canonical_batches
 from reflow.journal import InMemoryJournal, JournalConflictError
 from reflow.money_graph import build_money_graph
@@ -22,6 +22,7 @@ from reflow.razorpay_integration import (
     RazorpayIntegrationError,
     compile_payment_webhook,
     compile_recon_items,
+    compile_settlement_api_entity,
     compile_settlement_webhook,
 )
 from reflow.settlement_proof import CompositionStatus, prove_all_settlement_compositions
@@ -77,7 +78,6 @@ def _settlement(*, settlement_id: str = "setl_gate15demo", status: str = "proces
         "id": settlement_id,
         "entity": "settlement",
         "amount": 97100,
-        "currency": "INR",
         "status": status,
         "utr": "UTR-GATE15-1",
         "created_at": 1788263600,
@@ -282,6 +282,27 @@ def test_out_of_order_failed_and_captured_delivery_reduces_deterministically() -
     assert state.status.value == "captured"
 
 
+def test_out_of_range_webhook_timestamp_is_retained_raw_then_rejected() -> None:
+    raw = _body(
+        "payment.captured",
+        "payment",
+        _payment(status="captured"),
+        created_at=10**30,
+    )
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="timestamp"):
+        compile_payment_webhook(
+            raw_body=raw,
+            headers=_headers(raw, event_id="evt_bad_timestamp"),
+            webhook_secret=SECRET,
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 1
+    assert journal.entries()[0].occurred_at is None
+
+
 def test_payment_webhook_uses_top_level_event_time() -> None:
     raw = _body("payment.captured", "payment", _payment(), created_at=1788263900)
     batch = compile_payment_webhook(
@@ -396,6 +417,18 @@ def test_unsettled_recon_item_is_retained_raw_then_rejected() -> None:
     assert len(journal) == 1
 
 
+def test_out_of_range_recon_timestamp_is_retained_raw_then_rejected() -> None:
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="timestamp"):
+        compile_recon_items(
+            items=(_recon(settled_at=10**30),),
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 1
+
+
 def test_provider_recon_raw_identity_binds_to_deterministic_canonical_id() -> None:
     item = _recon()
     journal = InMemoryJournal()
@@ -430,8 +463,57 @@ def test_processed_settlement_webhook_normalizes_amount_utr_and_event_time() -> 
     )
     settlement = batch.settlements[0]
     assert settlement.amount.amount_paise == 97100
+    assert settlement.amount.currency is Currency.INR
     assert settlement.utr == "UTR-GATE15-1"
     assert int(settlement.processed_at.timestamp()) == 1788264000
+
+
+def test_processed_settlement_api_entity_uses_observation_time_and_retains_created_at() -> None:
+    entity = _settlement()
+    journal = InMemoryJournal()
+    batch = compile_settlement_api_entity(
+        entity=entity,
+        context=_context(),
+        journal=journal,
+        received_at=RECEIVED,
+    )
+    settlement = batch.settlements[0]
+    assert settlement.amount.currency is Currency.INR
+    assert settlement.processed_at == RECEIVED
+    assert settlement.processed_at != datetime.fromtimestamp(entity["created_at"], tz=UTC)
+    envelope = journal.entries()[0]
+    assert int(envelope.occurred_at.timestamp()) == entity["created_at"]
+    retained = envelope.payload["entity"]
+    assert "currency" not in retained
+    assert envelope.payload["evidence_origin"] == "provider_doc_fixture"
+    assert batch.source_links[0].canonical_record_id == str(settlement.id)
+
+
+def test_unprocessed_settlement_api_entity_is_retained_then_rejected() -> None:
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="processed"):
+        compile_settlement_api_entity(
+            entity=_settlement(status="created"),
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 1
+
+
+def test_malformed_settlement_api_created_at_is_retained_then_rejected() -> None:
+    entity = _settlement()
+    entity["created_at"] = 10**30
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="timestamp"):
+        compile_settlement_api_entity(
+            entity=entity,
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 1
+    assert journal.entries()[0].occurred_at is None
 
 
 def test_settlement_webhook_account_mismatch_fails() -> None:
@@ -637,6 +719,7 @@ def test_gate15_public_compile_surface_is_journal_first() -> None:
         "RazorpayIntegrationError",
         "compile_payment_webhook",
         "compile_recon_items",
+        "compile_settlement_api_entity",
         "compile_settlement_webhook",
     }
     for name in (
