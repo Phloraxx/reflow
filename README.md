@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 15 — real Razorpay provider-shaped integration is implemented and Oracle-validated on `build/gate-15-real-razorpay-integration` at code checkpoint `190dd2a`. PR/merge CI is pending. Gate 16 (bounded exception investigation) begins only after Gate 15 is merged green. See `docs/32_GATE_15_CHECKPOINT.md`.**
+> **Current phase: Gate 15 — real Razorpay provider-shaped integration is merged and green on `main` (PR #15, merge `5396f5d`, CI `33522206484`). Gate 16 is next: bounded exception investigation over deterministic proof/case packets only. See `docs/32_GATE_15_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 

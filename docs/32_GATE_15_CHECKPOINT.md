@@ -10,6 +10,12 @@ Code/test checkpoint:
 
 `190dd2a08f39b85f1da870d3a5a896ea6d49dd47`
 
+Merged checkpoint:
+
+- PR #15: `https://github.com/Phloraxx/reflow/pull/15`;
+- merge commit: `5396f5d884012f05975a751e35fc3fdf5cd40cc8`;
+- merge-triggered `main` CI run: `33522206484` — passed.
+
 Oracle VM validation on 2026-09-01:
 
 - Ruff: passed;
@@ -252,4 +258,4 @@ New Gate 16 is the **Bounded Exception Investigation Agent**.
 
 It may only operate on deterministic proof/case packets with read-only evidence tools. It cannot mark money reconciled, approve adapters, mutate ledgers, attach arbitrary evidence, issue refunds/payouts or execute arbitrary SQL.
 
-Gate 16 should begin only after Gate 15 PR CI and merge-triggered `main` CI are green.
+Gate 15 PR CI and merge-triggered `main` CI are green. Gate 16 may now begin from the verified merge checkpoint above.

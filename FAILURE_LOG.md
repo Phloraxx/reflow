@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through the current Gate 15 Oracle checkpoint. Gate 15 PR/merge CI is still pending; F-0071 through F-0075 are resolved with regressions.
+None currently known in the deterministic implementation through Gate 15. PR #15 merged as `5396f5d884012f05975a751e35fc3fdf5cd40cc8`, and merge-triggered `main` CI run `33522206484` passed. F-0071 through F-0075 remain preserved as resolved Gate 15 regressions.
 
 ---
 
