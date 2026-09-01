@@ -8,6 +8,15 @@ from reflow.simulator import CorruptionKind, CorruptionPlan
 class EvaluationProfile(StrEnum):
     CLEAN = "clean"
     RECONCILIATION_ADVERSARIAL = "reconciliation_adversarial"
+    SOURCE_SCHEMA_ADVERSARIAL = "source_schema_adversarial"
+
+
+_SOURCE_SCHEMA_CORRUPTIONS = (
+    CorruptionKind.MALFORMED_DATE,
+    CorruptionKind.SCHEMA_RENAME,
+    CorruptionKind.RUPEE_PAISE_TRAP,
+    CorruptionKind.SIGN_TRAP,
+)
 
 
 _RECONCILIATION_CORRUPTIONS = (
@@ -33,4 +42,6 @@ def corruption_plan(profile: EvaluationProfile) -> CorruptionPlan:
         return CorruptionPlan(kinds=())
     if profile is EvaluationProfile.RECONCILIATION_ADVERSARIAL:
         return CorruptionPlan(kinds=_RECONCILIATION_CORRUPTIONS)
+    if profile is EvaluationProfile.SOURCE_SCHEMA_ADVERSARIAL:
+        return CorruptionPlan(kinds=_SOURCE_SCHEMA_CORRUPTIONS)
     raise AssertionError(f"unhandled evaluation profile {profile}")
