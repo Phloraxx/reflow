@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 14 — deterministic ExceptionCase lifecycle + fingerprints is merged and green on `main` (PR #13, merge `5118d36`). Gate 15 is next: validate real Razorpay-shaped integration before any investigation agent. See `docs/30_GATE_14_CHECKPOINT.md`.**
+> **Current phase: Gate 15 — real Razorpay provider-shaped integration is implemented and Oracle-validated on `build/gate-15-real-razorpay-integration` at code checkpoint `190dd2a`. PR/merge CI is pending. Gate 16 (bounded exception investigation) begins only after Gate 15 is merged green. See `docs/32_GATE_15_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -38,11 +38,13 @@ It is:
 ```mermaid
 flowchart LR
   A[Merchant / ERP evidence] --> J[(Append-only Raw Evidence Journal)]
-  B[Razorpay evidence] --> J
+  B[Razorpay webhook / API evidence] --> RZP[Gate 15 Raw-first Razorpay Boundary]
+  RZP --> J
   C[Bank evidence] --> J
 
   J --> D[Deterministic Source Adapters]
   D --> E[Canonical Financial Objects + Raw SourceLinks]
+  RZP --> E
   E --> T[Temporal Payment Reducer]
   E --> G[Money Graph]
   T --> G
@@ -234,15 +236,13 @@ tax_paise
 settlement_effect_paise
 ```
 
-It is **not** the final production Razorpay Settlement Recon adapter.
-
-The real integration must normalize Razorpay's authoritative Recon fields such as `debit`, `credit`, `amount`, `fee` and `tax` using source-specific fixtures and Test Mode/API evidence. Synthetic formulas are not allowed to masquerade as production semantics.
+It remains the **normalized fixture adapter**, not the Gate 15 provider parser. Gate 15 separately normalizes Razorpay's authoritative `debit`, `credit`, `amount`, `fee`, `tax`, settlement identity and UTR fields from raw provider-shaped evidence. Synthetic formulas are not allowed to masquerade as provider semantics. Authenticated settlement Test Mode fixtures remain unavailable in the connected account, so provider-document fixtures are labelled accordingly.
 
 Likewise, the current bank adapter is a normalized positive settlement-credit feed contract, not a universal bank-statement parser.
 
 ### Payment state and refund lifecycle are distinct
 
-Refunds remain first-class economic evidence. The current normalized payment-event reducer does not invent refund amount from a generic payment event. A real Razorpay integration must preserve the provider distinction between payment entity state and refund-specific evidence.
+Refunds remain first-class economic evidence. The normalized payment-event reducer does not invent refund amount from a generic payment event. Gate 15 preserves the provider distinction by deriving payment transitions from signed payment webhook names while refund economics enter through refund-specific Settlement Recon evidence. A dedicated refund-webhook ingestion path remains optional later work rather than being synthesized from payment state.
 
 ---
 
@@ -360,6 +360,16 @@ Run-specific incident clusters preserve exact case count and integer-paise affec
 
 See [`docs/30_GATE_14_CHECKPOINT.md`](docs/30_GATE_14_CHECKPOINT.md).
 
+### Gate 15 — Real Razorpay Integration
+
+Gate 15 adds a journal-first provider boundary for signed Razorpay payment/settlement webhooks, Settlement Recon API items and processed standard settlement API entities. Webhook HMAC is verified over exact raw bytes; source event identity/replay conflicts are explicit; signed schema drift fails closed after raw retention.
+
+Settlement Recon uses the provider's authoritative `credit - debit` effect rather than synthetic `gross - fee - tax` assumptions. Payment/refund/transfer/adjustment type identity is validated, provider settlement UTR reaches Gate 7, and contradictory recon-vs-settlement UTR produces `COMPOSITION_CONTRADICTED`. Standard settlement payloads use explicit account currency because Razorpay's documented settlement entity omits a currency field.
+
+A processed settlement still does not prove bank credit. Provider-shaped recon + signed settlement + independent bank evidence passes through the unchanged Gate 7/8/9 proof kernel and becomes `PROVEN_RECONCILED` only when all exact evidence agrees. The connected account had no settlement/recon records to freeze, so no real Test Mode settlement accuracy claim is made.
+
+See [`docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) and [`docs/32_GATE_15_CHECKPOINT.md`](docs/32_GATE_15_CHECKPOINT.md).
+
 ---
 
 ## Commands
@@ -421,7 +431,9 @@ CI runs the same validation path.
 - [`docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative revised roadmap
 - [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md) — deterministic control-plane checkpoint
 - [`docs/29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 14 contract/acceptance plan
-- [`docs/30_GATE_14_CHECKPOINT.md`](docs/30_GATE_14_CHECKPOINT.md) — current exception case/fingerprint checkpoint
+- [`docs/30_GATE_14_CHECKPOINT.md`](docs/30_GATE_14_CHECKPOINT.md) — exception case/fingerprint checkpoint
+- [`docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 15 provider contract/acceptance plan
+- [`docs/32_GATE_15_CHECKPOINT.md`](docs/32_GATE_15_CHECKPOINT.md) — current Razorpay provider-integration checkpoint
 
 ---
 
@@ -461,7 +473,8 @@ CI runs the same validation path.
 - [x] exact balance/clearing-position control + close readiness
 - [x] deterministic ExceptionCase lifecycle / fingerprinting
 - [ ] scale benchmark
-- [ ] real Razorpay Test Mode / Settlement Recon adapter evidence
+- [x] provider-shaped Razorpay webhook / Settlement Recon / standard-settlement integration
+- [ ] authenticated real Test Mode settlement/recon corpus (none currently available in connected account)
 - [ ] Instant Settlement `setlod` / `setlodp` proof support
 
 ### AI / product surface
