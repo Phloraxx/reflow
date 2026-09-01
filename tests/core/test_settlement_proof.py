@@ -386,3 +386,24 @@ def test_single_composition_call_rejects_rows_for_another_settlement() -> None:
             source_index=batch.source_index(),
         cross_settlement_claims=frozenset(),
         )
+
+
+def test_batch_composition_builds_one_provenance_index_per_batch(monkeypatch) -> None:
+    import reflow.settlement_proof as module
+
+    first_batch = _batch(37)
+    second_batch = _batch(38)
+    calls = 0
+    original = module._provenance_edge_index
+
+    def counted(graph_value):
+        nonlocal calls
+        calls += 1
+        return original(graph_value)
+
+    monkeypatch.setattr(module, "_provenance_edge_index", counted)
+    first = module.prove_all_settlement_compositions(first_batch, build_money_graph(first_batch))
+    second = module.prove_all_settlement_compositions(second_batch, build_money_graph(second_batch))
+    assert len(first) == len(first_batch.settlements)
+    assert len(second) == len(second_batch.settlements)
+    assert calls == 2

@@ -5,7 +5,7 @@ from datetime import datetime
 
 from reflow.domain import SourceEnvelopeId, SourceKind
 from reflow.ingestion import RawRecord
-from reflow.journal import InMemoryJournal, make_source_envelope
+from reflow.journal import Journal, make_source_envelope
 
 from .contracts import ApprovalEvidenceKind, CanonicalRecordKind, FinancialControlTotal
 from .lifecycle import ApprovedAdapterVersion, approval_evidence_for_adapter
@@ -38,7 +38,7 @@ def _aware(value: datetime) -> None:
 def propose_and_validate_journaled(
     provider: AdapterProposalProvider,
     rows: tuple[RawRecord, ...],
-    journal: InMemoryJournal,
+    journal: Journal,
     *,
     batch_id: str,
     received_at: datetime,

@@ -10,7 +10,7 @@ from enum import StrEnum
 from . import domain
 from .bank_proof import BANK_RULESET_VERSION, BankReceiptProof, BankReceiptStatus
 from .ingestion import CanonicalBatch
-from .journal import InMemoryJournal
+from .journal import Journal
 from .settlement_proof import (
     COMPOSITION_RULESET_VERSION,
     CompositionStatus,
@@ -269,9 +269,7 @@ class InMemoryProofLedger:
     """Append-only reference ledger for immutable settlement proof versions."""
 
     def __init__(self) -> None:
-        self._history: dict[
-            domain.SettlementId, list[ReconciliationProofVersion]
-        ] = {}
+        self._history: dict[domain.SettlementId, list[ReconciliationProofVersion]] = {}
 
     def history(
         self,
@@ -289,7 +287,7 @@ class InMemoryProofLedger:
     def apply_batch(
         self,
         batch: CanonicalBatch,
-        journal: InMemoryJournal,
+        journal: Journal,
         composition_proofs: tuple[SettlementCompositionProof, ...],
         bank_proofs: tuple[BankReceiptProof, ...],
         *,
@@ -299,13 +297,9 @@ class InMemoryProofLedger:
         _require_aware(knowledge_cutoff, "knowledge cutoff")
         _require_aware(generated_at, "generated at")
         if generated_at < knowledge_cutoff:
-            raise ReconciliationProofError(
-                "proof cannot be generated before its knowledge cutoff"
-            )
+            raise ReconciliationProofError("proof cannot be generated before its knowledge cutoff")
         if not batch.source_links or batch.compilation_sha256 is None:
-            raise ReconciliationProofError(
-                "Gate 9 requires a journal-backed canonical compilation"
-            )
+            raise ReconciliationProofError("Gate 9 requires a journal-backed canonical compilation")
         batch_compilation_sha256 = batch.compilation_sha256
         for link in batch.source_links:
             envelope = journal.get_by_id(link.envelope_id)

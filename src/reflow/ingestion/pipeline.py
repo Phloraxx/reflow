@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime
 
 from reflow.domain import SourceKind
-from reflow.journal import InMemoryJournal, make_source_envelope, payload_sha256
+from reflow.journal import Journal, make_source_envelope, payload_sha256
 
 from .adapters import CanonicalBatch, SourceIdentity, SourceLink, adapt_observed_batch
 from .records import ObservedBatch, RawRecord
@@ -38,7 +38,7 @@ def _raw_record_id(row: RawRecord, key: str) -> str:
 
 
 def _journal_rows(
-    journal: InMemoryJournal,
+    journal: Journal,
     rows: Iterable[RawRecord],
     *,
     source_kind: SourceKind,
@@ -78,7 +78,7 @@ def _journal_rows(
 
 
 def _rows_from_journal(
-    journal: InMemoryJournal,
+    journal: Journal,
     rows: Iterable[RawRecord],
     *,
     source_kind: SourceKind,
@@ -104,7 +104,7 @@ def _rows_from_journal(
 
 def _canonical_input_from_journal(
     batch: ObservedBatch,
-    journal: InMemoryJournal,
+    journal: Journal,
 ) -> ObservedBatch:
     return ObservedBatch(
         merchant_rows=_rows_from_journal(
@@ -139,9 +139,10 @@ def _canonical_input_from_journal(
         ),
     )
 
+
 def journal_observed_batch(
     batch: ObservedBatch,
-    journal: InMemoryJournal,
+    journal: Journal,
     *,
     received_at: datetime,
 ) -> tuple[SourceLink, ...]:
@@ -210,7 +211,7 @@ def journal_observed_batch(
 
 def ingest_observed_batch(
     batch: ObservedBatch,
-    journal: InMemoryJournal,
+    journal: Journal,
     *,
     received_at: datetime,
 ) -> CanonicalBatch:

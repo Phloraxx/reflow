@@ -1,0 +1,30 @@
+{
+  "artifact_sha256": "a33416faee3e6fe5c5a3be934e42b8e9f9fdd527581ad4148a37d7bec6d363f4",
+  "config": {
+    "database_mode": "postgresql",
+    "namespace": "oracle-20260901-1000",
+    "record_count": 1000,
+    "worker_count": 1
+  },
+  "hardware": {
+    "cpu_count": 4,
+    "machine": "aarch64",
+    "platform": "Linux-6.17.0-1020-oracle-aarch64-with-glibc2.39",
+    "python": "3.12.3"
+  },
+  "metrics": {
+    "artifact_cold_ops_per_second": 90.2,
+    "artifact_cold_seconds": 11.08632,
+    "artifact_cold_stored": 1000,
+    "artifact_warm_duplicates": 1000,
+    "artifact_warm_ops_per_second": 87.43,
+    "artifact_warm_seconds": 11.437254,
+    "source_cold_ops_per_second": 76.1,
+    "source_cold_seconds": 13.141432,
+    "source_cold_stored": 1000,
+    "source_warm_duplicates": 1000,
+    "source_warm_ops_per_second": 76.41,
+    "source_warm_seconds": 13.087184
+  },
+  "schema_version": "gate17-persistence-benchmark-v1"
+}

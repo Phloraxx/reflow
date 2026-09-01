@@ -92,6 +92,8 @@ class SettlementCompositionProof:
 type EconomicIdentity = tuple[domain.ReconEntityKind, domain.EntityId]
 type EconomicClaim = tuple[domain.ReconEntityKind, str]
 type EconomicPayload = tuple[int, int, int, int, str, str, str | None]
+type ProvenanceEdgeKey = tuple[str, domain.EntityId, domain.EntityId]
+type ProvenanceEdgeIndex = dict[ProvenanceEdgeKey, tuple[domain.EvidenceEdge, ...]]
 
 
 def _economic_identity(entry: domain.SettlementReconEntry) -> EconomicIdentity:
@@ -195,36 +197,39 @@ def _require_source_envelope(
     return envelope_id
 
 
+def _provenance_edge_index(graph: MoneyGraph) -> ProvenanceEdgeIndex:
+    grouped: dict[ProvenanceEdgeKey, list[domain.EvidenceEdge]] = {}
+    for edge in graph.edges:
+        key = (edge.relationship, edge.from_id, edge.to_id)
+        grouped.setdefault(key, []).append(edge)
+    return {
+        key: tuple(sorted(edges, key=lambda edge: str(edge.id))) for key, edges in grouped.items()
+    }
+
+
 def _required_provenance_edges(
-    graph: MoneyGraph,
+    edge_index: ProvenanceEdgeIndex,
     entry: domain.SettlementReconEntry,
     source_envelope_id: domain.SourceEnvelopeId,
 ) -> tuple[domain.EvidenceEdgeId, ...] | None:
-    expected = {
-        ("entity_has_recon_entry", str(entry.entity_id), str(entry.id)),
-        (
-            "recon_entry_contributes_to_settlement",
-            str(entry.id),
-            str(entry.settlement_id),
-        ),
-    }
+    expected: tuple[ProvenanceEdgeKey, ...] = (
+        ("entity_has_recon_entry", entry.entity_id, entry.id),
+        ("recon_entry_contributes_to_settlement", entry.id, entry.settlement_id),
+    )
     required_evidence = (str(source_envelope_id),)
-    matches = [
-        edge
-        for edge in graph.edges
-        if (
-            edge.relationship,
-            str(edge.from_id),
-            str(edge.to_id),
-        )
-        in expected
-        and edge.state is domain.EdgeState.PROVEN
-        and edge.strength is domain.EvidenceStrength.AUTHORITATIVE
-        and edge.evidence_ids == required_evidence
-        and "EXACT_SOURCE_IDENTIFIER" in edge.reason_codes
-    ]
-    matched_keys = {(edge.relationship, str(edge.from_id), str(edge.to_id)) for edge in matches}
-    if matched_keys != expected:
+    matches: list[domain.EvidenceEdge] = []
+    matched_keys: set[ProvenanceEdgeKey] = set()
+    for key in expected:
+        for edge in edge_index.get(key, ()):
+            if (
+                edge.state is domain.EdgeState.PROVEN
+                and edge.strength is domain.EvidenceStrength.AUTHORITATIVE
+                and edge.evidence_ids == required_evidence
+                and "EXACT_SOURCE_IDENTIFIER" in edge.reason_codes
+            ):
+                matches.append(edge)
+                matched_keys.add(key)
+    if matched_keys != set(expected):
         return None
     return tuple(sorted((edge.id for edge in matches), key=str))
 
@@ -238,6 +243,7 @@ def _prove_settlement_composition(
     cross_settlement_claims: frozenset[EconomicClaim],
     cross_settlement_evidence: dict[EconomicClaim, tuple[domain.SettlementReconEntry, ...]]
     | None = None,
+    provenance_edge_index: ProvenanceEdgeIndex | None = None,
 ) -> SettlementCompositionProof:
     if any(entry.settlement_id != settlement.id for entry in entries):
         raise CompositionProofError("composition call contains rows for another settlement")
@@ -297,6 +303,8 @@ def _prove_settlement_composition(
 
     reason_codes: set[str] = set()
     evidence_edge_ids: list[domain.EvidenceEdgeId] = []
+    if provenance_edge_index is None:
+        provenance_edge_index = _provenance_edge_index(graph)
     source_envelope_ids: set[domain.SourceEnvelopeId] = {settlement_source_id}
 
     if not entries:
@@ -321,7 +329,7 @@ def _prove_settlement_composition(
             str(entry.id),
         )
         source_envelope_ids.add(source_envelope_id)
-        edge_ids = _required_provenance_edges(graph, entry, source_envelope_id)
+        edge_ids = _required_provenance_edges(provenance_edge_index, entry, source_envelope_id)
         if edge_ids is None:
             reason_codes.add("MISSING_GRAPH_PROVENANCE")
         else:
@@ -394,6 +402,7 @@ def prove_all_settlement_compositions(
         if len({row.settlement_id for row in rows}) > 1
     }
     cross_settlement_claims = frozenset(cross_settlement_evidence)
+    provenance_edge_index = _provenance_edge_index(graph)
 
     return tuple(
         _prove_settlement_composition(
@@ -403,6 +412,7 @@ def prove_all_settlement_compositions(
             source_index=source_index,
             cross_settlement_claims=cross_settlement_claims,
             cross_settlement_evidence=cross_settlement_evidence,
+            provenance_edge_index=provenance_edge_index,
         )
         for settlement_id in sorted(settlements, key=str)
     )
