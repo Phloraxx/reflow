@@ -24,7 +24,7 @@ Final pre-PR Oracle validation on 2026-09-01:
 - production persistence/application modules have no simulator-truth import;
 - no Kafka/Kubernetes/Celery/Redis/sharding/microservice infrastructure introduced.
 
-PR/merge CI is pending at this checkpoint.
+PR #19 merged as `ccd24497caac407034bc6b7fdd8132d310cb27de`. Merge-triggered `main` CI run `33534839864` passed with the PostgreSQL service enabled. Gate 17 is therefore closed and green.
 
 ## Gate 17 thesis
 
