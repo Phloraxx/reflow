@@ -218,6 +218,11 @@ Hardened implementation coverage added after the frozen first pass:
 34. malformed settlement API `created_at` is retained raw then rejected;
 35. malformed/out-of-range webhook and recon timestamps cannot bypass raw journal retention;
 36. Gate 15's public compile surface remains journal-first after adding the API settlement compiler.
+37. provider-shaped recon + settlement + independent bank evidence reaches the unchanged Gate 9 full-proof ledger;
+38. all safely identifiable recon rows are journaled before any row's semantic normalization can fail;
+39. a recon identity conflict is retained without preventing later identifiable rows from the same response being journaled;
+40. a signed webhook with a non-`event` outer envelope is retained then rejected;
+41. a signed webhook missing the expected entity in `contains` is retained then rejected.
 
 ## Deferred from Gate 15
 

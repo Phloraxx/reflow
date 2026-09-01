@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through the current Gate 15 Oracle checkpoint. Gate 15 PR/merge CI is still pending; F-0071 through F-0073 are resolved with regressions.
+None currently known in the deterministic implementation through the current Gate 15 Oracle checkpoint. Gate 15 PR/merge CI is still pending; F-0071 through F-0075 are resolved with regressions.
 
 ---
 
@@ -1731,6 +1731,59 @@ Provider paths now derive envelope `occurred_at` with a fail-soft timestamp help
 
 ### Regression protection
 `test_out_of_range_webhook_timestamp_is_retained_raw_then_rejected`, `test_out_of_range_recon_timestamp_is_retained_raw_then_rejected`, and `test_malformed_settlement_api_created_at_is_retained_then_rejected`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
+
+## F-0074 — Recon semantic failure could prevent later raw rows from being journaled
+
+**Date:** 2026-09-01
+**Area:** Gate 15 provider recon ingestion
+**Severity:** high
+
+### Symptom
+`compile_recon_items()` journaled and normalized one provider row at a time. If an early identity-recoverable row was semantically invalid (for example `settled=false`), normalization raised immediately and later rows from the same already-supplied recon response were never written to the raw journal.
+
+### Root cause
+Raw retention and canonical interpretation were interleaved instead of being separate phases at the provider-response boundary.
+
+### Why it matters
+One malformed transaction could turn later provider evidence into accidental absence. That violates ReFlow's raw-before-interpretation invariant and weakens source-completeness reasoning for exactly the batches most likely to need investigation.
+
+### Fix
+Gate 15 recon ingestion is now two-phase. It first scans and appends every safely identifiable row, continuing through journal identity conflicts that can themselves be retained. Only after raw retention completes does it normalize retained envelopes into canonical recon entries. A semantic failure therefore leaves the complete identifiable raw response evidence available for audit.
+
+### Regression protection
+`test_recon_batch_retains_all_identifiable_rows_before_semantic_failure` and `test_recon_identity_conflict_still_retains_later_rows_from_same_response`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
+## F-0075 — Signed webhook schema drift could bypass the Razorpay event-envelope contract
+
+**Date:** 2026-09-01
+**Area:** Gate 15 webhook schema validation
+**Severity:** high
+
+### Symptom
+A correctly HMAC-signed JSON body with a recognized `payment.captured` event and payment payload could be canonicalized even when its top-level `entity` was not `event`. The compiler also did not require the expected entity name in Razorpay's top-level `contains` declaration.
+
+### Root cause
+Webhook validation authenticated bytes and then jumped directly to event-name/payload parsing without validating the documented outer event envelope.
+
+### Why it matters
+Signature authenticity proves who signed the bytes, not that ReFlow understood the provider schema correctly. Accepting a structurally drifted signed payload risks silently interpreting a future/different Razorpay shape under old semantics.
+
+### Fix
+After raw signed evidence is retained, payment and settlement webhook compilers now require top-level `entity="event"` and the expected entity key in `contains` before canonicalization. Drift remains preserved in the journal and fails closed as an explicit provider-integration error.
+
+### Regression protection
+`test_signed_webhook_with_wrong_top_level_entity_is_retained_then_rejected` and `test_signed_webhook_with_wrong_contains_is_retained_then_rejected`.
 
 ### Status
 Resolved in Gate 15.

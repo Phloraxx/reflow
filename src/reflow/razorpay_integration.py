@@ -11,7 +11,12 @@ from enum import StrEnum
 
 from reflow import domain
 from reflow.ingestion import CanonicalBatch, SourceLink
-from reflow.journal import AppendResult, InMemoryJournal, make_source_envelope
+from reflow.journal import (
+    AppendResult,
+    InMemoryJournal,
+    JournalConflictError,
+    make_source_envelope,
+)
 
 __all__ = [
     "RazorpayAccountContext",
@@ -233,6 +238,16 @@ def _retained_webhook_event(envelope: domain.SourceEnvelope) -> Mapping[str, obj
     return _parse_event(raw_body)
 
 
+def _require_webhook_event_shape(event: Mapping[str, object], expected_entity: str) -> None:
+    if event.get("entity") != "event":
+        raise RazorpayIntegrationError("Razorpay webhook event envelope must identify an event")
+    contains = event.get("contains")
+    if not isinstance(contains, list) or expected_entity not in contains:
+        raise RazorpayIntegrationError(
+            f"Razorpay webhook event envelope must contain {expected_entity!r}"
+        )
+
+
 def _payload_entity(event: Mapping[str, object], key: str) -> Mapping[str, object]:
     payload = event.get("payload")
     if not isinstance(payload, Mapping):
@@ -286,6 +301,7 @@ def compile_payment_webhook(
         received_at=received_at,
     )
     event = _retained_webhook_event(result.envelope)
+    _require_webhook_event_shape(event, "payment")
     event_name = _non_empty_text(event.get("event"), "webhook event")
     kind = _PAYMENT_EVENT_KINDS.get(event_name)
     if kind is None:
@@ -464,27 +480,53 @@ def compile_recon_items(
     _aware(received_at, "received_at")
     if isinstance(items, (str, bytes)) or not isinstance(items, Sequence):
         raise TypeError("recon items must be a sequence of provider objects")
-    entries: dict[domain.ReconEntryId, domain.SettlementReconEntry] = {}
-    links: dict[domain.ReconEntryId, SourceLink] = {}
+
+    # Phase 1: retain every safely identifiable provider row before interpreting semantics.
+    retained_rows: list[tuple[tuple[str, str, str, str], str, domain.SourceEnvelope]] = []
+    first_retention_failure: Exception | None = None
     for supplied in items:
         if not isinstance(supplied, Mapping):
-            raise RazorpayIntegrationError("each recon item must be an object")
-        raw_identity = _recon_raw_identity(supplied, context)
+            if first_retention_failure is None:
+                first_retention_failure = RazorpayIntegrationError(
+                    "each recon item must be an object"
+                )
+            continue
+        try:
+            raw_identity = _recon_raw_identity(supplied, context)
+        except RazorpayIntegrationError as exc:
+            if first_retention_failure is None:
+                first_retention_failure = exc
+            continue
         source_record_id, _, _, _ = raw_identity
-        settled_raw = supplied.get("settled_at")
-        occurred_at = _safe_timestamp(settled_raw, "recon settled_at")
-        result = journal.append(
-            make_source_envelope(
-                source_kind=domain.SourceKind.RAZORPAY_RECON,
-                source_record_id=source_record_id,
-                occurred_at=occurred_at,
-                received_at=received_at,
-                schema_version="razorpay-settlement-recon-provider-v1",
-                payload=_recon_payload(supplied, context),
-            )
+        envelope = make_source_envelope(
+            source_kind=domain.SourceKind.RAZORPAY_RECON,
+            source_record_id=source_record_id,
+            occurred_at=_safe_timestamp(supplied.get("settled_at"), "recon settled_at"),
+            received_at=received_at,
+            schema_version="razorpay-settlement-recon-provider-v1",
+            payload=_recon_payload(supplied, context),
         )
-        retained = _retained_recon_item(result.envelope)
+        try:
+            result = journal.append(envelope)
+        except JournalConflictError as exc:
+            # The journal retains the conflicting envelope before raising. Keep scanning so
+            # later identifiable rows from the same provider response are not lost.
+            if first_retention_failure is None:
+                first_retention_failure = exc
+            continue
+        retained_rows.append((raw_identity, source_record_id, result.envelope))
+
+    if first_retention_failure is not None:
+        raise first_retention_failure
+
+    # Phase 2: normalize only from retained immutable provider evidence.
+    entries: dict[domain.ReconEntryId, domain.SettlementReconEntry] = {}
+    links: dict[domain.ReconEntryId, SourceLink] = {}
+    for raw_identity, source_record_id, envelope in retained_rows:
+        retained = _retained_recon_item(envelope)
         retained_identity = _recon_raw_identity(retained, context)
+        if retained_identity != raw_identity:
+            raise AssertionError("retained provider recon identity changed after journaling")
         entry = _normalize_recon_item(
             item=retained,
             context=context,
@@ -493,7 +535,7 @@ def compile_recon_items(
         link = SourceLink(
             source_kind=domain.SourceKind.RAZORPAY_RECON,
             source_record_id=source_record_id,
-            envelope_id=result.envelope.id,
+            envelope_id=envelope.id,
             canonical_record_id=str(entry.id),
         )
         prior_entry = entries.get(entry.id)
@@ -645,6 +687,7 @@ def compile_settlement_webhook(
         received_at=received_at,
     )
     event = _retained_webhook_event(result.envelope)
+    _require_webhook_event_shape(event, "settlement")
     event_name = _non_empty_text(event.get("event"), "webhook event")
     if event_name != "settlement.processed":
         raise RazorpayIntegrationError(

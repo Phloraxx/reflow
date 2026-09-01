@@ -12,7 +12,7 @@ import pytest
 import reflow.razorpay_integration as razorpay_module
 from reflow.bank_proof import BankReceiptStatus, prove_all_bank_receipts
 from reflow.domain import Currency, PaymentEventKind, ReconEntityKind, SourceKind
-from reflow.ingestion import merge_canonical_batches
+from reflow.ingestion import ObservedBatch, ingest_observed_batch, merge_canonical_batches
 from reflow.journal import InMemoryJournal, JournalConflictError
 from reflow.money_graph import build_money_graph
 from reflow.payment_state import reduce_all_payments
@@ -25,6 +25,7 @@ from reflow.razorpay_integration import (
     compile_settlement_api_entity,
     compile_settlement_webhook,
 )
+from reflow.reconciliation_proof import InMemoryProofLedger, ReconciliationStatus
 from reflow.settlement_proof import CompositionStatus, prove_all_settlement_compositions
 
 SECRET = "whsec_gate15_test"
@@ -162,6 +163,40 @@ def test_raw_webhook_bytes_and_auth_headers_are_retained() -> None:
     assert envelope.payload["x_razorpay_event_id"] == "evt_raw_keep"
     assert envelope.payload["x_razorpay_signature"] == headers["X-Razorpay-Signature"]
     assert envelope.payload["evidence_origin"] == "provider_doc_fixture"
+
+
+def test_signed_webhook_with_wrong_top_level_entity_is_retained_then_rejected() -> None:
+    body = json.loads(_body("payment.captured", "payment", _payment()))
+    body["entity"] = "payment"
+    raw = json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="event envelope"):
+        compile_payment_webhook(
+            raw_body=raw,
+            headers=_headers(raw, event_id="evt_wrong_envelope"),
+            webhook_secret=SECRET,
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 1
+
+
+def test_signed_webhook_with_wrong_contains_is_retained_then_rejected() -> None:
+    body = json.loads(_body("payment.captured", "payment", _payment()))
+    body["contains"] = ["refund"]
+    raw = json.dumps(body, separators=(",", ":"), sort_keys=True).encode()
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="contain"):
+        compile_payment_webhook(
+            raw_body=raw,
+            headers=_headers(raw, event_id="evt_wrong_contains"),
+            webhook_secret=SECRET,
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 1
 
 
 def test_webhook_account_mismatch_fails_closed() -> None:
@@ -417,6 +452,47 @@ def test_unsettled_recon_item_is_retained_raw_then_rejected() -> None:
     assert len(journal) == 1
 
 
+def test_recon_batch_retains_all_identifiable_rows_before_semantic_failure() -> None:
+    journal = InMemoryJournal()
+    invalid = _recon(settled=False, entity_id="pay_GATE15BADFIRST")
+    later_valid = _recon(entity_id="pay_GATE15LATER")
+    with pytest.raises(RazorpayIntegrationError, match="settled"):
+        compile_recon_items(
+            items=(invalid, later_valid),
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 2
+    identities = {entry.source_record_id for entry in journal.entries()}
+    assert any("pay_GATE15BADFIRST" in value for value in identities)
+    assert any("pay_GATE15LATER" in value for value in identities)
+
+
+def test_recon_identity_conflict_still_retains_later_rows_from_same_response() -> None:
+    journal = InMemoryJournal()
+    original = _recon(entity_id="pay_GATE15CONFLICT")
+    compile_recon_items(
+        items=(original,),
+        context=_context(),
+        journal=journal,
+        received_at=RECEIVED,
+    )
+    conflicting = dict(original)
+    conflicting["credit"] = 97000
+    later_valid = _recon(entity_id="pay_GATE15AFTERCONFLICT")
+    with pytest.raises(JournalConflictError, match="different payload"):
+        compile_recon_items(
+            items=(conflicting, later_valid),
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED + timedelta(seconds=1),
+        )
+    assert len(journal) == 3
+    identities = {entry.source_record_id for entry in journal.entries()}
+    assert any("pay_GATE15AFTERCONFLICT" in value for value in identities)
+
+
 def test_out_of_range_recon_timestamp_is_retained_raw_then_rejected() -> None:
     journal = InMemoryJournal()
     with pytest.raises(RazorpayIntegrationError, match="timestamp"):
@@ -602,6 +678,72 @@ def test_provider_shaped_recon_and_settlement_feed_existing_gate7_proof() -> Non
     proof = prove_all_settlement_compositions(combined, build_money_graph(combined))[0]
     assert proof.status is CompositionStatus.PROVEN
     assert proof.residual.is_zero
+
+
+def test_provider_shaped_evidence_reaches_existing_gate9_full_proof() -> None:
+    settlement_id = "setl_GATE15FULL"
+    journal = InMemoryJournal()
+    recon_batch = compile_recon_items(
+        items=(
+            _recon(
+                settlement_id=settlement_id,
+                entity_id="pay_GATE15FULL",
+                settled_at=int((RECEIVED - timedelta(hours=3)).timestamp()),
+            ),
+        ),
+        context=_context(),
+        journal=journal,
+        received_at=RECEIVED,
+    )
+    raw = _body(
+        "settlement.processed",
+        "settlement",
+        _settlement(settlement_id=settlement_id),
+        created_at=int((RECEIVED - timedelta(hours=2)).timestamp()),
+    )
+    settlement_batch = compile_settlement_webhook(
+        raw_body=raw,
+        headers=_headers(raw, event_id="evt_setl_full"),
+        webhook_secret=SECRET,
+        context=_context(),
+        journal=journal,
+        received_at=RECEIVED,
+    )
+    bank_batch = ingest_observed_batch(
+        ObservedBatch(
+            merchant_rows=(),
+            razorpay_events=(),
+            recon_rows=(),
+            settlement_rows=(),
+            bank_rows=(
+                {
+                    "bank_entry_id": "bank_GATE15FULL",
+                    "amount_paise": 97100,
+                    "currency": "INR",
+                    "occurred_at": (RECEIVED - timedelta(hours=1)).isoformat(),
+                    "narration": "Razorpay settlement UTR-GATE15-1",
+                    "utr": "UTR-GATE15-1",
+                },
+            ),
+        ),
+        journal,
+        received_at=RECEIVED,
+    )
+    combined = merge_canonical_batches(recon_batch, settlement_batch, bank_batch)
+    compositions = prove_all_settlement_compositions(combined, build_money_graph(combined))
+    banks = prove_all_bank_receipts(combined)
+    update = InMemoryProofLedger().apply_batch(
+        combined,
+        journal,
+        compositions,
+        banks,
+        knowledge_cutoff=RECEIVED,
+        generated_at=RECEIVED + timedelta(seconds=1),
+    )
+    assert len(update.created_versions) == 1
+    proof = update.created_versions[0]
+    assert proof.status is ReconciliationStatus.PROVEN_RECONCILED
+    assert len(proof.source_envelope_ids) == 3
 
 
 def test_recon_settlement_utr_mismatch_contradicts_existing_gate7_proof() -> None:
