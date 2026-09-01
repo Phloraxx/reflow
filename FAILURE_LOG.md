@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through Gate 14. PR #13 merged as `5118d36dcceb7c56bf0b1e784fa68264e0f113cf`, and the merge-triggered `main` CI passed. F-0068 through F-0070 remain preserved as resolved regressions.
+None currently known in the deterministic implementation through the current Gate 15 Oracle checkpoint. Gate 15 PR/merge CI is still pending; F-0071 through F-0075 are resolved with regressions.
 
 ---
 
@@ -1653,6 +1653,140 @@ Gate 14 now enforces settlement-level chronological monotonicity across all case
 
 ### Status
 Resolved in Gate 14.
+
+---
+
+## F-0071 — Provider recon UTR identity was discarded before Gate 7 proof
+
+**Date:** 2026-09-01
+**Area:** Gate 15 provider integration / Gate 7 identity proof
+**Severity:** safety-critical
+
+### Symptom
+A provider-shaped settlement recon row could carry a `settlement_utr` different from the signed `settlement.processed` entity UTR while Gate 7 still returned `COMPOSITION_PROVEN` when the amounts summed exactly.
+
+### Root cause
+The pre-Gate-15 canonical `SettlementReconEntry` model was built for normalized synthetic fixtures and did not retain provider `settlement_utr`. Gate 7 therefore had no way to compare two authoritative Razorpay settlement identities and relied only on `settlement_id` plus arithmetic.
+
+### Why it matters
+Exact arithmetic under a contradictory provider payout identity is not proof. A real integration could otherwise present a settlement as composition-proven while its recon evidence names a different bank-transfer UTR.
+
+### Fix
+`SettlementReconEntry` now retains optional `settlement_utr`; the canonical compilation contract is bumped to `canonical-source-link-v3`; Gate 7 is bumped to `gate7-composition-v2`; and UTR-mismatched recon components are excluded from arithmetic and produce `SETTLEMENT_UTR_MISMATCH` with `COMPOSITION_CONTRADICTED`. Provider normalization preserves the raw UTR rather than discarding it.
+
+### Regression protection
+`test_recon_settlement_utr_mismatch_contradicts_existing_gate7_proof`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
+
+## F-0072 — Standard settlement compiler required a provider field Razorpay does not expose
+
+**Date:** 2026-09-01
+**Area:** Gate 15 provider integration
+**Severity:** high
+
+### Symptom
+The first Gate 15 `settlement.processed` compiler required `currency` inside the embedded standard settlement entity. The checked-in provider-shaped fixture had silently added `"currency": "INR"`, so the test passed even though Razorpay's documented standard settlement entity/webhook sample does not expose that field.
+
+### Root cause
+The implementation reused the intuition that every money-bearing provider entity carries its own currency. For standard settlements, the current Razorpay API/webhook contract instead exposes amount/status/fees/tax/UTR/timestamps without a settlement `currency` field.
+
+### Why it matters
+Gate 15's admission rule explicitly forbids presenting synthetic field semantics as Razorpay production semantics. A real documented settlement webhook would have failed canonicalization even though the provider evidence was valid.
+
+### Fix
+`RazorpayAccountContext` now carries the explicitly trusted settlement currency (currently INR). Standard settlement webhook/API normalization uses that account context when the provider entity omits currency and rejects a supplied currency that conflicts with context. The provider fixture no longer invents a settlement `currency` field.
+
+For processed settlement API entities, ReFlow uses the observation `received_at` as the safe `Settlement.processed_at` fact: the API proves the entity is processed when observed, while Razorpay's `created_at` is retained/validated as provider entity timing rather than misrepresented as processing time.
+
+### Regression protection
+`test_processed_settlement_webhook_normalizes_amount_utr_and_event_time` and `test_processed_settlement_api_entity_uses_observation_time_and_retains_created_at`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
+## F-0073 — Provider timestamp validation could bypass raw-evidence retention
+
+**Date:** 2026-09-01
+**Area:** Gate 15 raw provider provenance
+**Severity:** high
+
+### Symptom
+An identity-recoverable recon item with an out-of-range integer `settled_at` failed while deriving journal metadata, before the raw provider payload was appended. The same pre-journal timestamp parsing pattern existed for signed webhook event time.
+
+### Root cause
+Optional `SourceEnvelope.occurred_at` metadata was being treated as a normalization prerequisite. That inverted Gate 15's raw-before-interpretation contract: malformed semantic time data could prevent retention of evidence whose provider identity/authenticity was already known.
+
+### Why it matters
+Malformed provider rows are often exactly the evidence an operator needs to investigate. Dropping them before the journal weakens auditability and can turn an explicit schema/provider defect into unexplained absence.
+
+### Fix
+Provider paths now derive envelope `occurred_at` with a fail-soft timestamp helper: valid timestamps become journal metadata, while malformed/out-of-range values produce `occurred_at=None`. After raw append, canonical normalization re-validates required timestamps and fails closed. Processed settlement API entities follow the same rule for provider `created_at`.
+
+### Regression protection
+`test_out_of_range_webhook_timestamp_is_retained_raw_then_rejected`, `test_out_of_range_recon_timestamp_is_retained_raw_then_rejected`, and `test_malformed_settlement_api_created_at_is_retained_then_rejected`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
+
+## F-0074 — Recon semantic failure could prevent later raw rows from being journaled
+
+**Date:** 2026-09-01
+**Area:** Gate 15 provider recon ingestion
+**Severity:** high
+
+### Symptom
+`compile_recon_items()` journaled and normalized one provider row at a time. If an early identity-recoverable row was semantically invalid (for example `settled=false`), normalization raised immediately and later rows from the same already-supplied recon response were never written to the raw journal.
+
+### Root cause
+Raw retention and canonical interpretation were interleaved instead of being separate phases at the provider-response boundary.
+
+### Why it matters
+One malformed transaction could turn later provider evidence into accidental absence. That violates ReFlow's raw-before-interpretation invariant and weakens source-completeness reasoning for exactly the batches most likely to need investigation.
+
+### Fix
+Gate 15 recon ingestion is now two-phase. It first scans and appends every safely identifiable row, continuing through journal identity conflicts that can themselves be retained. Only after raw retention completes does it normalize retained envelopes into canonical recon entries. A semantic failure therefore leaves the complete identifiable raw response evidence available for audit.
+
+### Regression protection
+`test_recon_batch_retains_all_identifiable_rows_before_semantic_failure` and `test_recon_identity_conflict_still_retains_later_rows_from_same_response`.
+
+### Status
+Resolved in Gate 15.
+
+---
+
+## F-0075 — Signed webhook schema drift could bypass the Razorpay event-envelope contract
+
+**Date:** 2026-09-01
+**Area:** Gate 15 webhook schema validation
+**Severity:** high
+
+### Symptom
+A correctly HMAC-signed JSON body with a recognized `payment.captured` event and payment payload could be canonicalized even when its top-level `entity` was not `event`. The compiler also did not require the expected entity name in Razorpay's top-level `contains` declaration.
+
+### Root cause
+Webhook validation authenticated bytes and then jumped directly to event-name/payload parsing without validating the documented outer event envelope.
+
+### Why it matters
+Signature authenticity proves who signed the bytes, not that ReFlow understood the provider schema correctly. Accepting a structurally drifted signed payload risks silently interpreting a future/different Razorpay shape under old semantics.
+
+### Fix
+After raw signed evidence is retained, payment and settlement webhook compilers now require top-level `entity="event"` and the expected entity key in `contains` before canonicalization. Drift remains preserved in the journal and fails closed as an explicit provider-integration error.
+
+### Regression protection
+`test_signed_webhook_with_wrong_top_level_entity_is_retained_then_rejected` and `test_signed_webhook_with_wrong_contains_is_retained_then_rejected`.
+
+### Status
+Resolved in Gate 15.
 
 ---
 

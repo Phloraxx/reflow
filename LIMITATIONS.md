@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 14**:
+ReFlow implementation scope now reaches **Gate 15**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -23,9 +23,10 @@ ReFlow implementation scope now reaches **Gate 14**:
 - a journal-first AI-assisted Source Adapter Compiler with finite declarative transforms, explicit review/migration authorization, versioned schema routing and raw→canonical provenance;
 - independently replayable Gate 12 proposal and automatic-migration development benchmarks;
 - a deterministic Gate 13 reconciliation control plane with explicit scope, source-delivery/completeness state, versioned policy, proof-derived no-orphan coverage, exact balance control, close readiness and immutable run capsules;
-- a deterministic Gate 14 exception-case lifecycle with stable economic identity, immutable observations, append-only workflow dispositions, economic supersession and run-specific incident fingerprints/clusters.
+- a deterministic Gate 14 exception-case lifecycle with stable economic identity, immutable observations, append-only workflow dispositions, economic supersession and run-specific incident fingerprints/clusters;
+- a Gate 15 journal-first Razorpay provider boundary for signed payment/settlement webhooks, Settlement Recon items and processed standard settlement API entities, with explicit evidence-origin labels and provider UTR preservation.
 
-Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora and Gate 13/14 deterministic fixtures are regression evidence only. The final held-out reconciliation benchmark, live-model adapter benchmark, scale benchmark, durable application persistence, exception-investigation agent, production Razorpay integration and operator UI are **not complete yet**.
+Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora, Gate 13/14 deterministic fixtures and Gate 15 provider-document fixtures are regression evidence only. The final held-out reconciliation benchmark, live-model adapter benchmark, scale benchmark, durable application persistence, authenticated real settlement/recon corpus, exception-investigation agent and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 
@@ -53,9 +54,11 @@ The simulator checks arithmetic, identity references and temporal causality. Its
 
 The current known-fixture adapters consume normalized test shapes. In particular, recon rows use fields such as `gross_amount_paise` and `settlement_effect_paise`.
 
-They are **not** claimed to be final production Razorpay API/webhook adapters. Razorpay's actual Settlement Recon API exposes authoritative `debit`, `credit`, `amount`, `fee` and `tax` fields. The later real adapter must normalize those semantics explicitly and fixture-test them against actual Test Mode/API evidence rather than reuse synthetic arithmetic assumptions.
+They remain **normalized fixture adapters**, not the provider API boundary. Gate 15 now separately consumes provider-shaped Razorpay payment/settlement webhooks and Settlement Recon rows. It preserves raw provider evidence first and normalizes authoritative `debit`, `credit`, `amount`, `fee`, `tax`, settlement identity and UTR semantics without reusing synthetic arithmetic assumptions.
 
-The neutral `ObservedBatch` / `RawRecord` transport contract now lives under `reflow.ingestion.records`; the simulator depends on that contract rather than ingestion depending on the simulator. Real provider integrations still require source-specific DTO/parsing layers before these normalized records.
+The connected merchant account did not expose settlement/recon rows during the Gate 15 check, so provider-document fixtures are not promoted to a real Test Mode settlement benchmark. An authenticated real settlement/recon corpus is still required before any live/Test Mode accuracy claim.
+
+The neutral `ObservedBatch` / `RawRecord` transport contract remains the normalized fixture/bank path; Gate 15 is a distinct provider parsing boundary that emits the same canonical domain and `SourceLink` contracts rather than a second reconciliation engine.
 
 ### 3. Payment webhook and refund evidence remain separate
 
@@ -69,7 +72,7 @@ The later production adapter must preserve that distinction and must not infer a
 
 Successful journal-first ingestion binds canonical source identities to immutable `SourceEnvelopeId`s. Canonicalization reads the journal’s retained immutable primary payloads; canonical facts and exact `SourceLink`s are then bound by a source-order-invariant compilation digest. Money Graph edges, Settlement Composition Proofs and Bank Receipt Proofs cite those raw envelopes, and each envelope validates its payload digest and deterministic identity.
 
-The compilation digest is an integrity binding, not a digital signature or proof that an external source was authentic. Production webhook/API authenticity remains a separate integration boundary.
+The compilation digest is an integrity binding, not a digital signature. Gate 15 verifies Razorpay webhook HMAC over exact raw bytes, but the repository still does not provide an HTTP webhook server, durable secret store or authenticated application-user/session layer. For API reads, `RazorpayAccountContext` is an explicit trusted connector/application boundary rather than cryptographic proof created by this library.
 
 The journal is still an in-memory reference implementation. Crash/restart persistence, database constraints, migrations and retention policy remain later work.
 
@@ -124,7 +127,7 @@ A very late exact-UTR bank observation may still become admissible evidence. Gat
 
 For the normalized fixture contract, one payment/refund/transfer/adjustment identity cannot silently be claimed by multiple settlements. Such evidence is contradicted rather than guessed.
 
-The production Razorpay adapter must verify the exact identity semantics of every real recon entity type before this rule is generalized beyond the supported source contract.
+Gate 15 validates the supported Razorpay recon identity families (`payment`, `refund`, `transfer`, `adjustment`) and fails closed on unsupported types/prefix mismatches. Any future provider entity type still requires an explicit identity contract before it can participate in this ownership rule.
 
 ### 11. Bank adapter is a settlement-credit feed contract
 
@@ -218,7 +221,7 @@ Materiality bands are workflow metadata only and never weaken exact Gate 7/8/9 p
 
 ### 24. Application persistence and authenticated workflow are not implemented yet
 
-Current stores are reference/in-memory implementations. Gate 13 run/certificate objects and Gate 14 case/disposition/incident objects exist, but durable run history, source manifests, proof/case history, adapter approvals, operator dispositions and authenticated ownership still require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.
+Current stores are reference/in-memory implementations. Gate 13 run/certificate objects, Gate 14 case/disposition/incident objects and Gate 15 raw provider envelopes exist, but durable run/provider history, source manifests, proof/case history, adapter approvals, operator dispositions and authenticated ownership still require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.
 
 
 ### 25. Gate 14 case lifecycle is deterministic but not durable/authenticated
@@ -228,3 +231,11 @@ Gate 14's `InMemoryExceptionCaseLedger` provides deterministic reference semanti
 Gate 14 currently creates settlement cases from Gate 9 proof outcomes. It does not synthesize a case for every run-level Gate 13 close-readiness blocker when no settlement proof exists. Incident fingerprints group current failure patterns; they are operational grouping identities, not financial proof and not ML classifications.
 
 Changed authoritative amount or UTR creates a new economic case and supersedes the old one. That deterministic behavior is tested with valid immutable artifacts, but production source-correction semantics still depend on the real Razorpay integration and later durable application layer.
+
+### 26. Gate 15 is a provider contract, not a complete production connector service
+
+Gate 15 implements deterministic provider parsing and webhook HMAC verification, but it does not host an HTTP webhook endpoint, persist/rotate secrets, schedule Settlement Recon polling, perform OAuth/onboarding, or authenticate the application caller that supplies `RazorpayAccountContext`. `REAL_TEST_MODE` and `REAL_LIVE` are explicit trust labels supplied by an authenticated application/connector layer that is still outside this reference library.
+
+Razorpay's documented standard settlement entity omits currency. Gate 15 therefore binds standard-settlement currency from explicit account context (currently INR) rather than inventing a provider field. A processed settlement API entity uses ReFlow observation time as canonical `processed_at`; provider `created_at` is retained/validated but is not reinterpreted as processing time or bank-credit time.
+
+The connected account exposed no settlement or settlement-recon rows during the Gate 15 inspection. No private payment payload is checked into the repository, and no `REAL_TEST_MODE` settlement accuracy number is claimed. Standard Instant Settlement (`setlod_...` / `setlodp_...`) proof topology remains explicitly unsupported.
