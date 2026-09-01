@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 15 — real Razorpay provider-shaped integration is merged and green on `main` (PR #15, merge `5396f5d`, CI `33522206484`). Gate 16 is next: bounded exception investigation over deterministic proof/case packets only. See `docs/32_GATE_15_CHECKPOINT.md`.**
+> **Current phase: Gate 16 — bounded exception investigation is implemented and Oracle-validated on `build/gate-16-bounded-exception-investigation` at `d1325a9`; PR/merge CI is pending. Gate 17 (scale + durability/application layer) begins only after Gate 16 is merged green. See `docs/34_GATE_16_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -13,7 +13,7 @@ It compiles messy merchant, Razorpay and bank evidence into a temporal **Money G
 AI has two bounded jobs:
 
 1. **Source Adapter Compiler (implemented in Gate 12)** — understand unfamiliar financial exports and propose a constrained adapter; first-seen AI proposals remain review-only and activation is deterministic/auditable.
-2. **Exception Investigation Agent (planned, still deliberately deferred)** — only after deterministic ExceptionCase lifecycle and real provider-shaped validation, use read-only evidence/proof/case tools to investigate unresolved cases and propose the next safe step.
+2. **Exception Investigation Agent (implemented in Gate 16)** — inspect one immutable non-green case/proof packet through bounded read-only tools and propose only `WAIT`, `RECHECK`, `REQUEST_SOURCE`, `REQUEST_HUMAN_REVIEW` or `ABSTAIN`; deterministic code validates every citation, amount and action.
 
 **The LLM never decides whether money reconciles.**
 
@@ -65,7 +65,8 @@ flowchart LR
   P -->|residual / contradiction / ambiguity| X[Gate 14 ExceptionCase Lifecycle]
   RR --> X
   X --> IC[Deterministic Incident Fingerprints / Clusters]
-  X -. later .-> AI[Gate 16 Bounded Investigation Agent]
+  X --> AI[Gate 16 Bounded Investigation Agent]
+  AI --> NA[Validated Safe Next Action / Abstain]
   U[Unknown Source] -.-> AS[Gate 12 Adapter Compiler]
 ```
 
@@ -370,6 +371,16 @@ A processed settlement still does not prove bank credit. Provider-shaped recon +
 
 See [`docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) and [`docs/32_GATE_15_CHECKPOINT.md`](docs/32_GATE_15_CHECKPOINT.md).
 
+### Gate 16 — Bounded Exception Investigation Agent
+
+Gate 16 binds one active Gate 14 case to its exact latest Gate 9 proof and proof-cited source envelopes, then exposes only three read-only capabilities: case snapshot, proof snapshot and one exact source envelope. Every tool call/denial is content-addressed in an independently evaluable trace.
+
+The model can only propose `WAIT`, `RECHECK`, `REQUEST_SOURCE`, `REQUEST_HUMAN_REVIEW` or `ABSTAIN`. Deterministic validation rejects unread/hallucinated citations, wrong integer-paise claims, numeric prose, unsupported source requests and unsafe actions. Provider outage/refusal is harmless to financial truth and collapses to `ABSTAIN`.
+
+The optional OpenAI Responses provider uses strict tools/output, `store=false`, stateless output-item replay, serialized tool calls, bounded rounds and a minimized/redacted model-facing evidence projection. No live-model Gate 16 quality number is claimed yet.
+
+See [`docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) and [`docs/34_GATE_16_CHECKPOINT.md`](docs/34_GATE_16_CHECKPOINT.md).
+
 ---
 
 ## Commands
@@ -434,6 +445,8 @@ CI runs the same validation path.
 - [`docs/30_GATE_14_CHECKPOINT.md`](docs/30_GATE_14_CHECKPOINT.md) — exception case/fingerprint checkpoint
 - [`docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 15 provider contract/acceptance plan
 - [`docs/32_GATE_15_CHECKPOINT.md`](docs/32_GATE_15_CHECKPOINT.md) — current Razorpay provider-integration checkpoint
+- [`docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 16 bounded-investigation contract/acceptance plan
+- [`docs/34_GATE_16_CHECKPOINT.md`](docs/34_GATE_16_CHECKPOINT.md) — current bounded investigation/provider checkpoint
 
 ---
 
@@ -480,7 +493,7 @@ CI runs the same validation path.
 ### AI / product surface
 
 - [x] Source Adapter Compiler / bounded AI proposal path
-- [ ] Exception Investigation Agent
+- [x] bounded Exception Investigation Agent / validated read-only tool trace
 - [ ] operator UI
 - [ ] failure campaign
 - [ ] final benchmark

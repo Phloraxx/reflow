@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through Gate 15. PR #15 merged as `5396f5d884012f05975a751e35fc3fdf5cd40cc8`, and merge-triggered `main` CI run `33522206484` passed. F-0071 through F-0075 remain preserved as resolved Gate 15 regressions.
+None currently known in the deterministic implementation through the current Gate 16 Oracle checkpoint. Gate 16 is not merged yet; F-0076 through F-0080 remain preserved as resolved Gate 16 regressions.
 
 ---
 
@@ -1787,6 +1787,139 @@ After raw signed evidence is retained, payment and settlement webhook compilers 
 
 ### Status
 Resolved in Gate 15.
+
+---
+
+
+## F-0076 — Gate 16 case-snapshot trace emitted noncanonical returned-reference order
+
+**Date:** 2026-09-01
+**Area:** Gate 16 tool-trace integrity
+**Severity:** high
+
+### Symptom
+The first Gate 16 behavioral run caused a valid `CASE_SNAPSHOT` call to fail its own immutable `ToolTraceEntry` validation. The trace returned the observation ID and case ID in construction order rather than canonical lexical order.
+
+### Root cause
+The trace contract correctly required unique canonical-sorted returned references, but the case tool constructed its tuple without applying the same canonical ordering rule.
+
+### Why it matters
+Every valid provider investigation that touched the case snapshot was misclassified as a provider failure, and the trace could not serve as independently reproducible evidence.
+
+### Fix
+`CASE_SNAPSHOT` now canonical-sorts its returned immutable references before trace construction.
+
+### Regression protection
+`test_case_snapshot_is_bounded_and_traced`, deterministic result-identity tests, and trace reproducibility tests.
+
+### Status
+Resolved in Gate 16.
+
+---
+
+## F-0077 — Denied Gate 16 tool access was misclassified as provider outage
+
+**Date:** 2026-09-01
+**Area:** Gate 16 safety classification
+**Severity:** high
+
+### Symptom
+A provider requesting a `SourceEnvelopeId` outside the bound Gate 9 proof produced `PROVIDER_ERROR` even though the read-only tool correctly denied and traced the request.
+
+### Root cause
+`run_investigation()` caught all provider-side exceptions in one generic provider-error branch, including `InvestigationToolError` raised by the deterministic capability boundary.
+
+### Why it matters
+A hallucinated or adversarial tool request would be reported as infrastructure failure instead of an explicit deterministic safety rejection, weakening independent evaluation of the agent.
+
+### Fix
+`InvestigationToolError` is now handled separately as `REJECTED` + `ABSTAIN`; genuine provider/transport exceptions remain `PROVIDER_ERROR` + `ABSTAIN`.
+
+### Regression protection
+`test_denied_tool_call_returns_rejected_not_provider_outage` and the denied-tool trace tests.
+
+### Status
+Resolved in Gate 16.
+
+---
+
+
+## F-0078 — Gate 16 OpenAI tool loop initially mixed `store:false` with stateful response chaining
+
+**Date:** 2026-09-01
+**Area:** Gate 16 OpenAI Responses transport
+**Severity:** high
+
+### Symptom
+The first OpenAI investigation provider draft set `store=false` but used `previous_response_id` to continue after function calls. Current OpenAI guidance for stateless/Zero Data Retention Responses workflows recommends replaying the relevant returned output items instead of depending on retained response state.
+
+### Root cause
+The initial implementation copied the convenient stateful Responses chaining pattern without reconciling it with Gate 16's explicit no-storage transport posture.
+
+### Why it matters
+A production/ZDR deployment could fail tool continuation or acquire a hidden state-retention dependency that contradicts the provider privacy contract. Reasoning-model continuity also needs the relevant returned reasoning items when operating statelessly.
+
+### Fix
+Gate 16 now runs a fully stateless Responses loop: every request keeps `store=false`, asks for `reasoning.encrypted_content`, replays prior returned output items plus each `function_call_output`, repeats the safety instructions on every turn, and never uses `previous_response_id`.
+
+### Regression protection
+`test_responses_loop_uses_only_declared_read_only_tools_and_strict_output` verifies stateless replay, `store=false`, encrypted-reasoning inclusion and the absence of `previous_response_id`.
+
+### Status
+Resolved in Gate 16.
+
+---
+
+## F-0079 — Gate 16 transport requests retained a mutable conversation alias
+
+**Date:** 2026-09-01
+**Area:** Gate 16 provider transport integrity
+**Severity:** medium
+
+### Symptom
+A fake transport that retained request payload objects observed source-tool output appearing retroactively inside the first request after later conversation items were appended.
+
+### Root cause
+The provider placed its mutable in-memory conversation list directly into every request payload instead of snapshotting the list at the transport boundary. The default HTTP transport serialized immediately, which hid the aliasing defect.
+
+### Why it matters
+Transport/evaluation traces could misrepresent what information was actually available to a model on an earlier turn, undermining prompt-injection and information-flow tests.
+
+### Fix
+Every provider request now receives a fresh list snapshot of the accumulated stateless conversation before transport invocation. Later tool results cannot mutate previously captured request payloads.
+
+### Regression protection
+`test_source_tool_output_marks_text_untrusted` verifies prompt-like source text is absent from the initial request and appears only after the explicit `source_evidence` tool call.
+
+### Status
+Resolved in Gate 16.
+
+---
+
+
+## F-0080 — Gate 16 OpenAI tool outputs exposed unnecessary external financial identifiers
+
+**Date:** 2026-09-01
+**Area:** Gate 16 model-data minimization
+**Severity:** high
+
+### Symptom
+The first pushed OpenAI investigation-provider checkpoint serialized complete read-only tool DTOs into model-facing `function_call_output`. That included provider settlement IDs, settlement UTRs, source record IDs and unredacted source-text fields even though the model did not need those identifiers to propose a bounded next action.
+
+### Root cause
+Read-only capability safety was treated as sufficient provider safety. The transport reused the internal investigation view wholesale instead of defining a second, minimized model-facing projection.
+
+### Why it matters
+A read-only tool can still disclose unnecessary merchant/payment metadata to an external model provider. Gate 16 should minimize provider-visible data independently of whether the model can mutate financial state.
+
+### Fix
+OpenAI tool outputs now use explicit model-facing projections. Case/proof outputs omit external settlement identity and UTR fields; source outputs omit external source-record IDs. Untrusted source text is bounded and redacts email addresses, long numeric identifiers, known secret-token patterns and transaction-like IDs before transport. Internal case/proof/source-envelope IDs and exact typed financial facts remain available for deterministic citation/claim validation.
+
+### Regression protection
+`test_responses_loop_uses_only_declared_read_only_tools_and_strict_output` verifies case/proof external identities are absent, while `test_source_tool_output_redacts_external_sensitive_identifiers` verifies source-record/UTR omission and redaction of sensitive-looking text.
+
+### Status
+Resolved in Gate 16.
 
 ---
 

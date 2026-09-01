@@ -133,6 +133,14 @@ class ResidualExplanationId(EntityId):
     prefix = "rexp_"
 
 
+class InvestigationTraceEntryId(EntityId):
+    prefix = "trace_"
+
+
+class InvestigationResultId(EntityId):
+    prefix = "invest_"
+
+
 class Currency(StrEnum):
     INR = "INR"
 
