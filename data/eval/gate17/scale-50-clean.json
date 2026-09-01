@@ -1,0 +1,49 @@
+{
+  "artifact_sha256": "bc2ee30e165099d99e85f21e4f268b61fcf95f86a8cccb6f810f2005fcb9c6ed",
+  "config": {
+    "database_mode": "in_memory_core",
+    "observation_seed": 1401,
+    "profile": "clean",
+    "received_at": "2027-01-01T00:00:00+00:00",
+    "settlement_count": 50,
+    "worker_count": 1,
+    "world_seed": 401
+  },
+  "hardware": {
+    "cpu_count": 4,
+    "machine": "aarch64",
+    "platform": "Linux-6.17.0-1020-oracle-aarch64-with-glibc2.39",
+    "python": "3.12.3"
+  },
+  "metrics": {
+    "exception_count": 10,
+    "graph_edges": 4523,
+    "journal_entries": 6084,
+    "max_rss_kib": 36348,
+    "proof_count": 50,
+    "raw_rows": 6084,
+    "rows_per_second_ingest": 6724.61,
+    "seconds_bank": 0.003176,
+    "seconds_composition": 0.035247,
+    "seconds_generate": 0.049149,
+    "seconds_graph": 0.074076,
+    "seconds_ingest": 0.904737,
+    "seconds_observe": 0.020877,
+    "seconds_proof_ledger": 0.037519,
+    "seconds_proof_pipeline": 0.150019,
+    "seconds_total": 1.124782,
+    "settlements_per_second_proof_pipeline": 333.29,
+    "world_payment_events": 2982,
+    "world_recon_entries": 1516
+  },
+  "schema_version": "gate17-scale-benchmark-v1",
+  "source_rejection": null,
+  "status": "evaluated",
+  "status_counts": {
+    "contradicted": 0,
+    "incomplete": 0,
+    "pending_bank_credit": 5,
+    "proven_reconciled": 40,
+    "residual": 5
+  }
+}
