@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 13**:
+ReFlow implementation scope now reaches **Gate 14**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -22,9 +22,10 @@ ReFlow implementation scope now reaches **Gate 13**:
 - a hidden-truth baseline evaluation harness with B0/B1/B2/ReFlow Core arms, semantic evidence scoring and independently verifiable benchmark artifacts;
 - a journal-first AI-assisted Source Adapter Compiler with finite declarative transforms, explicit review/migration authorization, versioned schema routing and raw→canonical provenance;
 - independently replayable Gate 12 proposal and automatic-migration development benchmarks;
-- a deterministic Gate 13 reconciliation control plane with explicit scope, source-delivery/completeness state, versioned policy, proof-derived no-orphan coverage, exact balance control, close readiness and immutable run capsules.
+- a deterministic Gate 13 reconciliation control plane with explicit scope, source-delivery/completeness state, versioned policy, proof-derived no-orphan coverage, exact balance control, close readiness and immutable run capsules;
+- a deterministic Gate 14 exception-case lifecycle with stable economic identity, immutable observations, append-only workflow dispositions, economic supersession and run-specific incident fingerprints/clusters.
 
-Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora and Gate 13 control-plane fixtures are regression evidence only. The final held-out reconciliation benchmark, live-model adapter benchmark, scale benchmark, durable ExceptionCase lifecycle, exception-investigation agent, production Razorpay integration and operator UI are **not complete yet**.
+Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora and Gate 13/14 deterministic fixtures are regression evidence only. The final held-out reconciliation benchmark, live-model adapter benchmark, scale benchmark, durable application persistence, exception-investigation agent, production Razorpay integration and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 
@@ -217,4 +218,13 @@ Materiality bands are workflow metadata only and never weaken exact Gate 7/8/9 p
 
 ### 24. Application persistence and authenticated workflow are not implemented yet
 
-Current stores are reference/in-memory implementations. Gate 13 run/certificate objects exist, but durable run history, source manifests, proof/case history, adapter approvals, operator dispositions and authenticated ownership still require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.
+Current stores are reference/in-memory implementations. Gate 13 run/certificate objects and Gate 14 case/disposition/incident objects exist, but durable run history, source manifests, proof/case history, adapter approvals, operator dispositions and authenticated ownership still require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.
+
+
+### 25. Gate 14 case lifecycle is deterministic but not durable/authenticated
+
+Gate 14's `InMemoryExceptionCaseLedger` provides deterministic reference semantics, not PostgreSQL durability, crash recovery, distributed locking or an authenticated workflow service. Actor identifiers on dispositions are supplied audit fields; ReFlow does not yet prove who performed an action.
+
+Gate 14 currently creates settlement cases from Gate 9 proof outcomes. It does not synthesize a case for every run-level Gate 13 close-readiness blocker when no settlement proof exists. Incident fingerprints group current failure patterns; they are operational grouping identities, not financial proof and not ML classifications.
+
+Changed authoritative amount or UTR creates a new economic case and supersedes the old one. That deterministic behavior is tested with valid immutable artifacts, but production source-correction semantics still depend on the real Razorpay integration and later durable application layer.

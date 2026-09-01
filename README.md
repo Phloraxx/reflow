@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 13 — Reconciliation Control Plane is merged and green on `main` (PR #11, merge `91d3e6a`). The old exception-agent branch remains abandoned. Next is Gate 14: deterministic ExceptionCase lifecycle + fingerprints before any investigation agent. See `docs/28_GATE_13_CHECKPOINT.md`.**
+> **Current phase: Gate 14 — deterministic ExceptionCase lifecycle + fingerprints is implemented and locally green on `build/gate-14-exception-case-lifecycle` at code checkpoint `83a422b`. Gate 13 remains merged on `main`; Gate 15 will validate real Razorpay-shaped integration before any investigation agent. See `docs/30_GATE_14_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -60,8 +60,10 @@ flowchart LR
   BL --> CR
   CR --> RR[Immutable Reconciliation Run]
 
-  P -->|residual / contradiction / ambiguity| X[Future ExceptionCase]
-  X -. later .-> AI[Bounded Investigation Agent]
+  P -->|residual / contradiction / ambiguity| X[Gate 14 ExceptionCase Lifecycle]
+  RR --> X
+  X --> IC[Deterministic Incident Fingerprints / Clusters]
+  X -. later .-> AI[Gate 16 Bounded Investigation Agent]
   U[Unknown Source] -.-> AS[Gate 12 Adapter Compiler]
 ```
 
@@ -212,8 +214,9 @@ See:
 - [`docs/25_GATE_11_CHECKPOINT.md`](docs/25_GATE_11_CHECKPOINT.md)
 - [`docs/26_GATE_12_CHECKPOINT.md`](docs/26_GATE_12_CHECKPOINT.md)
 - [`docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative revised roadmap
-- [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md) — current deterministic control-plane checkpoint — Gate 8 checkpoint;
-- [`docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](docs/22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — current line-by-line logic and architecture audit;
+- [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md) — deterministic control-plane checkpoint;
+- [`docs/29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 14 contract and acceptance plan;
+- [`docs/30_GATE_14_CHECKPOINT.md`](docs/30_GATE_14_CHECKPOINT.md) — Gate 14 case-lifecycle/fingerprint checkpoint;
 - [`LIMITATIONS.md`](LIMITATIONS.md) — current non-claims and unresolved scope.
 
 ---
@@ -347,6 +350,16 @@ Canonical coverage labels are derived from Gate 7/8/9 proof evidence rather than
 
 See [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md).
 
+### Gate 14 — Exception Case Lifecycle + Fingerprints
+
+Gate 14 derives stable economic case identity from the reconciliation scope, settlement identity, authoritative amount/currency and payout/UTR identity. Every immutable Gate 13 run can append a self-verifying case observation that binds the exact Gate 9 proof, policy, source completeness packet, materiality band and deterministic incident fingerprint.
+
+Financial state and operator workflow are separate. Operator close/variance acceptance never changes Gate 9 truth; a later green proof auto-closes the case as reconciled, while changed authoritative economics creates a new case and supersedes the old one. Append-only dispositions require explicit `REOPEN` after operator closure, and stale prior economics cannot reverse a newer supersession.
+
+Run-specific incident clusters preserve exact case count and integer-paise affected value and are invariant to input permutation. The reference ledger is in-memory; authenticated operator identity and durable persistence remain later work.
+
+See [`docs/30_GATE_14_CHECKPOINT.md`](docs/30_GATE_14_CHECKPOINT.md).
+
 ---
 
 ## Commands
@@ -406,7 +419,9 @@ CI runs the same validation path.
 - [`docs/25_GATE_11_CHECKPOINT.md`](docs/25_GATE_11_CHECKPOINT.md)
 - [`docs/26_GATE_12_CHECKPOINT.md`](docs/26_GATE_12_CHECKPOINT.md)
 - [`docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](docs/27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative revised roadmap
-- [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md) — current deterministic control-plane checkpoint
+- [`docs/28_GATE_13_CHECKPOINT.md`](docs/28_GATE_13_CHECKPOINT.md) — deterministic control-plane checkpoint
+- [`docs/29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 14 contract/acceptance plan
+- [`docs/30_GATE_14_CHECKPOINT.md`](docs/30_GATE_14_CHECKPOINT.md) — current exception case/fingerprint checkpoint
 
 ---
 
@@ -444,7 +459,7 @@ CI runs the same validation path.
 - [x] policy-versioned immutable reconciliation runs
 - [x] proof-derived evidence coverage / no-orphan-money control
 - [x] exact balance/clearing-position control + close readiness
-- [ ] deterministic ExceptionCase lifecycle / fingerprinting
+- [x] deterministic ExceptionCase lifecycle / fingerprinting
 - [ ] scale benchmark
 - [ ] real Razorpay Test Mode / Settlement Recon adapter evidence
 - [ ] Instant Settlement `setlod` / `setlodp` proof support
