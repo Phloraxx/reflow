@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from typing import Protocol, runtime_checkable
 
 from reflow.domain import SourceEnvelope, SourceEnvelopeId, SourceKind
 from reflow.domain.source_hash import source_envelope_id_value, source_payload_sha256
@@ -22,6 +23,21 @@ class AppendDisposition(StrEnum):
 class AppendResult:
     disposition: AppendDisposition
     envelope: SourceEnvelope
+
+
+@runtime_checkable
+class Journal(Protocol):
+    """Append-only raw-evidence journal contract used by deterministic production paths."""
+
+    def append(self, envelope: SourceEnvelope) -> AppendResult: ...
+
+    def get(self, source_kind: SourceKind, source_record_id: str) -> SourceEnvelope | None: ...
+
+    def get_by_id(self, envelope_id: SourceEnvelopeId) -> SourceEnvelope | None: ...
+
+    def entries(self) -> tuple[SourceEnvelope, ...]: ...
+
+    def __len__(self) -> int: ...
 
 
 def payload_sha256(payload: Mapping[str, object]) -> str:

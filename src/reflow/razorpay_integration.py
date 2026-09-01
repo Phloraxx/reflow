@@ -13,7 +13,7 @@ from reflow import domain
 from reflow.ingestion import CanonicalBatch, SourceLink
 from reflow.journal import (
     AppendResult,
-    InMemoryJournal,
+    Journal,
     JournalConflictError,
     make_source_envelope,
 )
@@ -206,7 +206,7 @@ def _append_webhook(
     event_id: str,
     signature: str,
     context: RazorpayAccountContext,
-    journal: InMemoryJournal,
+    journal: Journal,
     received_at: datetime,
 ) -> AppendResult:
     occurred_at = _safe_timestamp(event.get("created_at"), "webhook created_at")
@@ -274,13 +274,13 @@ def compile_payment_webhook(
     headers: Mapping[str, str],
     webhook_secret: str,
     context: RazorpayAccountContext,
-    journal: InMemoryJournal,
+    journal: Journal,
     received_at: datetime,
 ) -> CanonicalBatch:
     if not isinstance(context, RazorpayAccountContext):
         raise TypeError("context must be RazorpayAccountContext")
-    if not isinstance(journal, InMemoryJournal):
-        raise TypeError("journal must be InMemoryJournal")
+    if not isinstance(journal, Journal):
+        raise TypeError("journal must satisfy Journal")
     _aware(received_at, "received_at")
     event_id, signature = _verify_webhook(
         raw_body=raw_body,
@@ -470,13 +470,13 @@ def compile_recon_items(
     *,
     items: Sequence[Mapping[str, object]],
     context: RazorpayAccountContext,
-    journal: InMemoryJournal,
+    journal: Journal,
     received_at: datetime,
 ) -> CanonicalBatch:
     if not isinstance(context, RazorpayAccountContext):
         raise TypeError("context must be RazorpayAccountContext")
-    if not isinstance(journal, InMemoryJournal):
-        raise TypeError("journal must be InMemoryJournal")
+    if not isinstance(journal, Journal):
+        raise TypeError("journal must satisfy Journal")
     _aware(received_at, "received_at")
     if isinstance(items, (str, bytes)) or not isinstance(items, Sequence):
         raise TypeError("recon items must be a sequence of provider objects")
@@ -611,13 +611,13 @@ def compile_settlement_api_entity(
     *,
     entity: Mapping[str, object],
     context: RazorpayAccountContext,
-    journal: InMemoryJournal,
+    journal: Journal,
     received_at: datetime,
 ) -> CanonicalBatch:
     if not isinstance(context, RazorpayAccountContext):
         raise TypeError("context must be RazorpayAccountContext")
-    if not isinstance(journal, InMemoryJournal):
-        raise TypeError("journal must be InMemoryJournal")
+    if not isinstance(journal, Journal):
+        raise TypeError("journal must satisfy Journal")
     if not isinstance(entity, Mapping):
         raise TypeError("settlement API entity must be a provider object")
     _aware(received_at, "received_at")
@@ -660,13 +660,13 @@ def compile_settlement_webhook(
     headers: Mapping[str, str],
     webhook_secret: str,
     context: RazorpayAccountContext,
-    journal: InMemoryJournal,
+    journal: Journal,
     received_at: datetime,
 ) -> CanonicalBatch:
     if not isinstance(context, RazorpayAccountContext):
         raise TypeError("context must be RazorpayAccountContext")
-    if not isinstance(journal, InMemoryJournal):
-        raise TypeError("journal must be InMemoryJournal")
+    if not isinstance(journal, Journal):
+        raise TypeError("journal must satisfy Journal")
     _aware(received_at, "received_at")
     event_id, signature = _verify_webhook(
         raw_body=raw_body,

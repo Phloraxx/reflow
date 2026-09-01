@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from reflow import domain, ingestion
-from reflow.journal import InMemoryJournal
+from reflow.journal import Journal
 
 from .compiler import CanonicalRecord, canonical_record_identity, compile_adapter
 from .contracts import CanonicalRecordKind
@@ -43,7 +43,7 @@ def _canonical_batch_for_records(
 def apply_approved_adapter(
     version: ApprovedAdapterVersion,
     source_envelope_ids: tuple[domain.SourceEnvelopeId, ...],
-    journal: InMemoryJournal,
+    journal: Journal,
 ) -> ingestion.CanonicalBatch:
     if not source_envelope_ids:
         raise AdapterRuntimeError("approved adapter application requires raw source evidence")

@@ -17,7 +17,7 @@ from .exception_cases import (
     ExceptionCaseState,
     SourceStateSnapshot,
 )
-from .journal import InMemoryJournal
+from .journal import Journal
 from .reconciliation_proof import ReconciliationProofVersion, ReconciliationStatus
 
 GATE16_INVESTIGATION_RULESET_VERSION = "gate16-investigation-v1"
@@ -403,7 +403,7 @@ class ReadOnlyInvestigationTools:
         case_state: ExceptionCaseState,
         observation: ExceptionCaseObservation,
         proof: ReconciliationProofVersion,
-        journal: InMemoryJournal,
+        journal: Journal,
         as_of: datetime,
     ) -> None:
         if not isinstance(case_state, ExceptionCaseState):
@@ -412,8 +412,8 @@ class ReadOnlyInvestigationTools:
             raise TypeError("observation must be ExceptionCaseObservation")
         if not isinstance(proof, ReconciliationProofVersion):
             raise TypeError("proof must be ReconciliationProofVersion")
-        if not isinstance(journal, InMemoryJournal):
-            raise TypeError("journal must be InMemoryJournal")
+        if not isinstance(journal, Journal):
+            raise TypeError("journal must satisfy Journal")
         _aware(as_of, "investigation as_of")
         if case_state.workflow_status is CaseWorkflowStatus.CLOSED:
             raise InvestigationError("closed/resolved exception case is not investigation-active")
@@ -937,7 +937,7 @@ def run_investigation(
     case_state: ExceptionCaseState,
     observation: ExceptionCaseObservation,
     proof: ReconciliationProofVersion,
-    journal: InMemoryJournal,
+    journal: Journal,
     as_of: datetime,
 ) -> InvestigationRunResult:
     tools = ReadOnlyInvestigationTools(
