@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 16**:
+ReFlow implementation scope now reaches **Gate 17**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -25,21 +25,22 @@ ReFlow implementation scope now reaches **Gate 16**:
 - a deterministic Gate 13 reconciliation control plane with explicit scope, source-delivery/completeness state, versioned policy, proof-derived no-orphan coverage, exact balance control, close readiness and immutable run capsules;
 - a deterministic Gate 14 exception-case lifecycle with stable economic identity, immutable observations, append-only workflow dispositions, economic supersession and run-specific incident fingerprints/clusters;
 - a Gate 15 journal-first Razorpay provider boundary for signed payment/settlement webhooks, Settlement Recon items and processed standard settlement API entities, with explicit evidence-origin labels and provider UTR preservation.
-- a Gate 16 bounded exception investigator with immutable target binding, three read-only tools, content-addressed tool traces, deterministic proposal validation and an optional strict/stateless OpenAI Responses transport.
+- a Gate 16 bounded exception investigator with immutable target binding, three read-only tools, content-addressed tool traces, deterministic proposal validation and an optional strict/stateless OpenAI Responses transport;
+- a Gate 17 measured one-process scale path plus PostgreSQL 16 durability/application boundary for append-only raw evidence, immutable product/audit artifacts and optimistic operational current pointers.
 
-Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora, Gate 13/14 deterministic fixtures, Gate 15 provider-document fixtures and Gate 16 fake-provider/OpenAI-transport fixtures are regression evidence only. The final held-out reconciliation benchmark, live-model adapter/investigation benchmarks, scale benchmark, durable application persistence, authenticated real settlement/recon corpus and operator UI are **not complete yet**.
+Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora, Gate 13/14 deterministic fixtures, Gate 15 provider-document fixtures, Gate 16 fake-provider/OpenAI-transport fixtures and Gate 17 scale/PostgreSQL artifacts are regression/evidence checkpoints only. The final held-out reconciliation benchmark, live-model adapter/investigation benchmarks, authenticated real settlement/recon corpus and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 
 - final reconciliation accuracy or match rate;
-- throughput;
-- maximum supported transaction volume;
-- memory consumption;
+- production throughput or SLOs beyond the explicitly checked-in Gate 17 Oracle benchmark artifacts;
+- maximum supported transaction volume beyond the measured 10k-settlement Gate 17 tier;
+- memory consumption outside the explicitly measured Gate 17 workloads;
 - AI adapter success rate;
 - false-positive rate on a final held-out benchmark;
 - production readiness.
 
-Any such number appearing before the checked-in final benchmark exists is a documentation bug.
+Any number presented as a final/production-capacity claim before the checked-in final held-out benchmark exists is a documentation bug. Explicit Gate 17 measurements must remain labelled with their exact workload and hardware.
 
 ---
 
@@ -69,13 +70,15 @@ Razorpay documents payment entity status separately from the refund webhook life
 
 The later production adapter must preserve that distinction and must not infer a partial-refund amount from generic payment-event evidence.
 
-### 4. Raw evidence provenance is journal-backed, but persistence is in-memory
+### 4. Raw evidence provenance has a PostgreSQL durability reference, not a complete production ingestion service
 
 Successful journal-first ingestion binds canonical source identities to immutable `SourceEnvelopeId`s. Canonicalization reads the journal’s retained immutable primary payloads; canonical facts and exact `SourceLink`s are then bound by a source-order-invariant compilation digest. Money Graph edges, Settlement Composition Proofs and Bank Receipt Proofs cite those raw envelopes, and each envelope validates its payload digest and deterministic identity.
 
 The compilation digest is an integrity binding, not a digital signature. Gate 15 verifies Razorpay webhook HMAC over exact raw bytes, but the repository still does not provide an HTTP webhook server, durable secret store or authenticated application-user/session layer. For API reads, `RazorpayAccountContext` is an explicit trusted connector/application boundary rather than cryptographic proof created by this library.
 
-The journal is still an in-memory reference implementation. Crash/restart persistence, database constraints, migrations and retention policy remain later work.
+Gate 17 adds `PostgresApplicationStore`, which implements the structural journal contract with immutable PostgreSQL rows, exact duplicate replay, retained conflicting evidence, deterministic reads and restart/reconnect survival. The in-memory journal remains the fast deterministic test/evaluation implementation.
+
+This is not a complete production ingestion service: there is no connector scheduler, pooled/batched bulk loader, retention/archival policy, backup/PITR policy, authenticated tenant routing or HTTP webhook service. The measured reference PostgreSQL path is intentionally fine-grained and much slower than the in-memory proof-scale benchmark.
 
 ### 5. Settlement Composition Proof is not full reconciliation
 
@@ -220,9 +223,11 @@ Likewise, the balance control proves the exact integer equation over supplied op
 
 Materiality bands are workflow metadata only and never weaken exact Gate 7/8/9 proof or Gate 13 balance residuals.
 
-### 24. Application persistence and authenticated workflow are not implemented yet
+### 24. Application persistence is implemented as immutable audit state; authenticated workflow is not
 
-Current stores are reference/in-memory implementations. Gate 13 run/certificate objects, Gate 14 case/disposition/incident objects, Gate 15 raw provider envelopes and Gate 16 investigation results/traces exist, but durable run/provider history, source manifests, proof/case history, adapter approvals, operator dispositions and authenticated ownership still require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.
+Gate 17 adds a PostgreSQL 16 application store for append-only raw evidence, immutable canonical JSON artifacts and optimistic current pointers, plus a minimal `ReflowApplicationService`. It can durably retain Gate 13 run/control artifacts, Gate 9 proofs, Gate 14 case/disposition/incident artifacts, approved adapters and Gate 16 result/trace artifacts. Real PostgreSQL tests cover reconnect survival, conflict retention, tamper detection, scope isolation and compare-and-swap behavior.
+
+The existing `InMemoryProofLedger`, `InMemoryExceptionCaseLedger` and adapter lifecycle stores are still deterministic derivation/reference components; Gate 17 does not silently replace them with a new database-authoritative financial engine. Persisting an artifact does not bypass the originating domain object's self-validation. Authenticated operator identity, tenant authorization, RBAC/SSO and durable job/queue workflow remain unimplemented.
 
 
 ### 25. Gate 14 case lifecycle is deterministic but not durable/authenticated
@@ -231,7 +236,7 @@ Gate 14's `InMemoryExceptionCaseLedger` provides deterministic reference semanti
 
 Gate 14 currently creates settlement cases from Gate 9 proof outcomes. It does not synthesize a case for every run-level Gate 13 close-readiness blocker when no settlement proof exists. Incident fingerprints group current failure patterns; they are operational grouping identities, not financial proof and not ML classifications.
 
-Changed authoritative amount or UTR creates a new economic case and supersedes the old one. That deterministic behavior is tested with valid immutable artifacts, but production source-correction semantics still depend on the real Razorpay integration and later durable application layer.
+Changed authoritative amount or UTR creates a new economic case and supersedes the old one. That deterministic behavior is tested with valid immutable artifacts and Gate 17 can persist the resulting history, but production source-correction semantics still depend on authenticated Razorpay connector context and operator workflow.
 
 ### 26. Gate 15 is a provider contract, not a complete production connector service
 
@@ -245,8 +250,18 @@ The connected account exposed no settlement or settlement-recon rows during the 
 
 Gate 16 can investigate only one active case bound to one exact current Gate 9 proof. Its public capability set is limited to case snapshot, proof snapshot and proof-scoped source evidence. It cannot mutate proof state, case state, dispositions, adapters, evidence, refunds, payouts, transfers or settlement state. Accepted output is advisory only and limited to `WAIT`, `RECHECK`, `REQUEST_SOURCE`, `REQUEST_HUMAN_REVIEW` or `ABSTAIN`.
 
-The reference implementation is in-memory and does not provide durable investigation queues, authenticated operators, tenant authorization, rate limiting, provider-cost budgets or production observability. Core bounds currently limit one investigation to 16 tool calls and 64 proof source envelopes; cases exceeding the source-evidence budget fail closed rather than being silently sampled.
+Gate 17 can durably retain validated Gate 16 investigation result/trace artifacts, but it does not provide a durable investigation queue, authenticated operators, tenant authorization, rate limiting, provider-cost budgets or production observability. Core bounds currently limit one investigation to 16 tool calls and 64 proof source envelopes; cases exceeding the source-evidence budget fail closed rather than being silently sampled.
 
 The OpenAI Responses provider is protocol-tested with deterministic fake transports, not benchmarked for live investigation accuracy. No live-model Gate 16 success rate is claimed. It uses `store=false`, stateless output-item replay, strict function/final schemas and a minimized model-facing projection. External settlement IDs, UTRs and source-record IDs are omitted from model tool outputs, and source text gets heuristic redaction for obvious email, long-number, secret-token and transaction-ID patterns. This is data minimization, **not a DLP guarantee**; production policy must still decide whether particular merchant/customer evidence may be sent to an external model.
 
 Provider refusal, timeout, malformed output, hallucinated citations, wrong financial numbers, unsupported actions or denied tool access cannot change deterministic financial truth. They produce abstention/rejection/provider-error artifacts only.
+
+### 28. Gate 17 scale and PostgreSQL results are measured reference results, not a production capacity promise
+
+Gate 17's checked-in scale artifacts were measured on one shared 4-vCPU aarch64 Oracle VM with Python 3.12.3 and one process. The largest completed clean tier is 10,000 settlements / 1,203,220 raw rows: 267.56 s end-to-end, 48.32 s in the proof pipeline, 206.97 proof settlements/s and about 3.18 GiB process RSS. Those numbers describe that exact deterministic benchmark shape only; they are not a production SLO or a statement that every merchant dataset has the same cardinality/memory behavior.
+
+A 100k/1M run was not attempted. The 10k tier already satisfied the frozen Gate 17 requirement and used substantial memory on a VM hosting unrelated services. ReFlow makes no 100k/1M throughput or memory claim and does not extrapolate a headline number.
+
+The isolated PostgreSQL 16.15 cold/warm benchmark measured roughly 76 source writes/s and 87–90 immutable-artifact writes/s for 1,000 fine-grained operations. This proves the reference persistence/idempotency path and also exposes its current bottleneck: it is not a bulk loader and has no connection pool/batched ingestion API. In-memory core throughput and PostgreSQL durability throughput must not be conflated.
+
+Gate 17 also does not provide HA/replication, backups/PITR, migration deployment orchestration, retention/archival automation, authenticated tenant isolation, production HTTP APIs or a distributed queue. None of Kafka, Kubernetes, Celery, Redis or sharding was introduced because the measured proof-core bottleneck was fixed algorithmically instead.

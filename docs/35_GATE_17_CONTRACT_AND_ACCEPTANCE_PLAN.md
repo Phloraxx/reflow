@@ -8,6 +8,8 @@ Gate 17 starts from final verified Gate 16 `main`:
 
 Gate 16 implementation, post-merge metadata, and merge-triggered `main` CI are green. Gate 17 may change execution strategy and persistence, but it must not weaken or redefine any Gate 7–16 financial, provenance, case, workflow, or AI-safety invariant.
 
+This contract was frozen before implementation and is implemented by checkpoints `e8042e6`, `e308224`, and `3fa4dd1`. See `36_GATE_17_CHECKPOINT.md` for measured evidence, limitations and PR status.
+
 ## Thesis
 
 > Measure the existing one-process engine first, remove proven algorithmic waste, then add only the durable PostgreSQL-backed product state and application boundary required for replayable operation.

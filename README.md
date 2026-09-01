@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 16 — bounded exception investigation is merged and green on `main` (PR #17, merge `88acedf`, CI `33528694353`). Gate 17 is next: scale + durability/application layer. See `docs/34_GATE_16_CHECKPOINT.md`.**
+> **Current phase: Gate 17 — measured scale + PostgreSQL durability/application state is implemented and Oracle-validated on `build/gate-17-scale-durability-application` at `3fa4dd1`; PR/merge CI is pending. Gate 18 (Operator Control Tower) begins only after Gate 17 merges green. See `docs/36_GATE_17_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -67,6 +67,11 @@ flowchart LR
   X --> IC[Deterministic Incident Fingerprints / Clusters]
   X --> AI[Gate 16 Bounded Investigation Agent]
   AI --> NA[Validated Safe Next Action / Abstain]
+
+  J -. durable evidence .-> PG[(Gate 17 PostgreSQL Durable State)]
+  RR -. immutable artifact .-> PG
+  X -. observations / dispositions .-> PG
+  AI -. validated result / trace .-> PG
   U[Unknown Source] -.-> AS[Gate 12 Adapter Compiler]
 ```
 
@@ -357,7 +362,7 @@ Gate 14 derives stable economic case identity from the reconciliation scope, set
 
 Financial state and operator workflow are separate. Operator close/variance acceptance never changes Gate 9 truth; a later green proof auto-closes the case as reconciled, while changed authoritative economics creates a new case and supersedes the old one. Append-only dispositions require explicit `REOPEN` after operator closure, and stale prior economics cannot reverse a newer supersession.
 
-Run-specific incident clusters preserve exact case count and integer-paise affected value and are invariant to input permutation. The reference ledger is in-memory; authenticated operator identity and durable persistence remain later work.
+Run-specific incident clusters preserve exact case count and integer-paise affected value and are invariant to input permutation. Gate 14's derivation ledger remains an in-memory reference, while Gate 17 can durably retain its immutable case observations/dispositions/incidents as application artifacts. Authenticated operator identity remains later work.
 
 See [`docs/30_GATE_14_CHECKPOINT.md`](docs/30_GATE_14_CHECKPOINT.md).
 
@@ -377,9 +382,19 @@ Gate 16 binds one active Gate 14 case to its exact latest Gate 9 proof and proof
 
 The model can only propose `WAIT`, `RECHECK`, `REQUEST_SOURCE`, `REQUEST_HUMAN_REVIEW` or `ABSTAIN`. Deterministic validation rejects unread/hallucinated citations, wrong integer-paise claims, numeric prose, unsupported source requests and unsafe actions. Provider outage/refusal is harmless to financial truth and collapses to `ABSTAIN`.
 
-The optional OpenAI Responses provider uses strict tools/output, `store=false`, stateless output-item replay, serialized tool calls, bounded rounds and a minimized/redacted model-facing evidence projection. No live-model Gate 16 quality number is claimed yet.
+The optional OpenAI Responses provider uses strict tools/output, `store=false`, stateless output-item replay, serialized tool calls, bounded rounds and a minimized/redacted model-facing evidence projection. Gate 17 can durably retain validated investigation result/trace artifacts, but no live-model Gate 16 quality number is claimed yet.
 
 See [`docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) and [`docs/34_GATE_16_CHECKPOINT.md`](docs/34_GATE_16_CHECKPOINT.md).
+
+### Gate 17 — Scale + Durability/Application Layer
+
+Gate 17 measured the one-process proof engine before adding infrastructure. The first 50-settlement clean baseline exposed an O(recon rows × graph edges) Gate 7 provenance scan; the pre-optimization 1k run still had not completed after 20m31s. A batch-local exact provenance-edge index removed that waste without changing financial/provenance semantics. The final checked-in clean benchmarks process 50 / 1,000 / 10,000 settlements (6,084 / 120,052 / 1,203,220 raw rows), with the 10k proof pipeline sustaining 206.97 settlements/s at about 3.18 GiB peak RSS on the 4-vCPU Oracle VM.
+
+Gate 17 also adds a PostgreSQL 16 durability boundary: append-only raw evidence with conflict retention, immutable canonical JSON product/audit artifacts with digest verification, optimistic compare-and-swap current pointers, and a deliberately small `ReflowApplicationService` with no generic SQL or financial-truth mutation surface. Real PostgreSQL integration tests run in CI.
+
+The reference PostgreSQL path is durability-first rather than bulk optimized: the checked-in 1k cold/warm benchmark measures roughly 76 source writes/s and 87–90 artifact writes/s at fine transaction granularity. No 100k/1M, high-throughput PostgreSQL, HA, RBAC or production-readiness claim is made.
+
+See [`docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md), [`docs/36_GATE_17_CHECKPOINT.md`](docs/36_GATE_17_CHECKPOINT.md), and the self-verifying artifacts under [`data/eval/gate17/`](data/eval/gate17/).
 
 ---
 
@@ -387,11 +402,17 @@ See [`docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/33_GATE_16_CONTRACT
 
 ```bash
 python -m pip install -e '.[dev]'
+# Include PostgreSQL integration support when needed:
+python -m pip install -e '.[dev,postgres]'
 make check
 
 # Development-only deterministic evaluation artifact
 python -m reflow.evaluation.runner --world-seed 401 --observation-seed 1401 --settlements 50 --profile reconciliation_adversarial --output /tmp/reflow-gate11.json
 python -m reflow.evaluation.verify /tmp/reflow-gate11.json
+
+# Gate 17 reproducible scale artifact
+python -m reflow.evaluation.scale_runner --settlements 1000 --profile clean --output /tmp/reflow-scale.json
+python -m reflow.evaluation.scale_runner --verify /tmp/reflow-scale.json
 ```
 
 Equivalent explicit checks:
@@ -446,7 +467,9 @@ CI runs the same validation path.
 - [`docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 15 provider contract/acceptance plan
 - [`docs/32_GATE_15_CHECKPOINT.md`](docs/32_GATE_15_CHECKPOINT.md) — current Razorpay provider-integration checkpoint
 - [`docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 16 bounded-investigation contract/acceptance plan
-- [`docs/34_GATE_16_CHECKPOINT.md`](docs/34_GATE_16_CHECKPOINT.md) — current bounded investigation/provider checkpoint
+- [`docs/34_GATE_16_CHECKPOINT.md`](docs/34_GATE_16_CHECKPOINT.md) — bounded investigation/provider checkpoint
+- [`docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 17 scale/durability contract
+- [`docs/36_GATE_17_CHECKPOINT.md`](docs/36_GATE_17_CHECKPOINT.md) — current scale/PostgreSQL durability/application checkpoint
 
 ---
 
@@ -485,7 +508,9 @@ CI runs the same validation path.
 - [x] proof-derived evidence coverage / no-orphan-money control
 - [x] exact balance/clearing-position control + close readiness
 - [x] deterministic ExceptionCase lifecycle / fingerprinting
-- [ ] scale benchmark
+- [x] reproducible 50 / 1k / 10k scale benchmark + checked-in artifacts
+- [x] PostgreSQL append-only evidence + immutable application artifacts/current pointers
+- [x] minimal durability/application service boundary
 - [x] provider-shaped Razorpay webhook / Settlement Recon / standard-settlement integration
 - [ ] authenticated real Test Mode settlement/recon corpus (none currently available in connected account)
 - [ ] Instant Settlement `setlod` / `setlodp` proof support
