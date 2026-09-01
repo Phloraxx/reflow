@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 14 — deterministic ExceptionCase lifecycle + fingerprints is implemented and locally green on `build/gate-14-exception-case-lifecycle` at code checkpoint `83a422b`. Gate 13 remains merged on `main`; Gate 15 will validate real Razorpay-shaped integration before any investigation agent. See `docs/30_GATE_14_CHECKPOINT.md`.**
+> **Current phase: Gate 14 — deterministic ExceptionCase lifecycle + fingerprints is merged and green on `main` (PR #13, merge `5118d36`). Gate 15 is next: validate real Razorpay-shaped integration before any investigation agent. See `docs/30_GATE_14_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
