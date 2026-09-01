@@ -21,7 +21,7 @@ Oracle VM validation on 2026-09-01:
 - `git diff --check`: passed;
 - provider scan: no financial-mutation calls, simulator truth, TODO, FIXME or `NotImplemented` marker.
 
-PR/merge CI is pending at this checkpoint.
+PR #17 merged as `88acedf5c12eedd33fefada28c6677f76ebf4a39`; merge-triggered `main` CI run `33528694353` passed.
 
 ## Gate 16 thesis
 
@@ -221,4 +221,4 @@ The OpenAI transport is implemented and protocol-tested, but model quality remai
 
 New Gate 17 is **Scale + Durability/Application Layer**.
 
-Gate 17 should start only after Gate 16 PR CI, merge and merge-triggered `main` CI are green. Its job is to make the deterministic/reference stores durable and exercise the scale/resilience shape without weakening Gates 7–16 invariants.
+Gate 16 PR/merge/main CI are green. Gate 17 may now start from the final Gate 16 `main` checkpoint. Its job is to make the deterministic/reference stores durable and exercise the scale/resilience shape without weakening Gates 7–16 invariants.
