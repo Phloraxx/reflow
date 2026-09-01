@@ -21,9 +21,15 @@ from .journal import InMemoryJournal
 from .reconciliation_proof import ReconciliationProofVersion, ReconciliationStatus
 
 GATE16_INVESTIGATION_RULESET_VERSION = "gate16-investigation-v1"
+MAX_INVESTIGATION_TOOL_CALLS = 16
+MAX_INVESTIGATION_SOURCE_IDS = 64
+MAX_INVESTIGATION_HYPOTHESIS_CHARS = 600
 
 __all__ = [
     "GATE16_INVESTIGATION_RULESET_VERSION",
+    "MAX_INVESTIGATION_HYPOTHESIS_CHARS",
+    "MAX_INVESTIGATION_SOURCE_IDS",
+    "MAX_INVESTIGATION_TOOL_CALLS",
     "CaseInvestigationView",
     "FinancialFactKind",
     "InvestigationAction",
@@ -433,6 +439,8 @@ class ReadOnlyInvestigationTools:
             raise InvestigationError("case observation/proof settlement UTR mismatch")
         if as_of < case_state.first_seen_at:
             raise InvestigationError("investigation as_of predates case first seen")
+        if len(proof.source_envelope_ids) > MAX_INVESTIGATION_SOURCE_IDS:
+            raise InvestigationError("proof exceeds bounded investigation source-evidence budget")
         for envelope_id in proof.source_envelope_ids:
             if journal.get_by_id(envelope_id) is None:
                 raise InvestigationError(
@@ -482,6 +490,8 @@ class ReadOnlyInvestigationTools:
         result_value: object,
         error_code: str | None = None,
     ) -> None:
+        if len(self._trace) >= MAX_INVESTIGATION_TOOL_CALLS:
+            raise InvestigationToolError("investigation tool-call budget exhausted")
         self._trace.append(
             _trace_entry(
                 sequence=len(self._trace) + 1,
@@ -723,6 +733,15 @@ def _validate_proposal(
         raise InvestigationError("proposal observation id does not match target")
     if proposal.proof_version_id != context.proof_version_id:
         raise InvestigationError("proposal proof id does not match target")
+    if (
+        proposal.hypothesis is not None
+        and len(proposal.hypothesis) > MAX_INVESTIGATION_HYPOTHESIS_CHARS
+    ):
+        raise InvestigationError("hypothesis exceeds bounded length")
+    if len(proposal.citations) > MAX_INVESTIGATION_SOURCE_IDS:
+        raise InvestigationError("proposal exceeds bounded citation count")
+    if len(proposal.financial_claims) > len(FinancialFactKind):
+        raise InvestigationError("proposal exceeds bounded financial-claim count")
     if tuple(sorted(set(proposal.citations), key=str)) != proposal.citations:
         raise InvestigationError("proposal citations must be unique and canonical-sorted")
     facts = tuple(claim.fact for claim in proposal.financial_claims)

@@ -926,3 +926,53 @@ def test_trace_digest_and_id_are_reproducible_from_same_read_view() -> None:
     assert first.case_snapshot() == second.case_snapshot()
     assert first.trace[0].result_sha256 == second.trace[0].result_sha256
     assert first.trace[0].id == second.trace[0].id
+
+
+def test_generic_provider_tool_budget_is_bounded_by_core() -> None:
+    fixture = _fixture()
+
+    class Provider:
+        def propose(self, context, tools):
+            for _ in range(17):
+                tools.case_snapshot()
+            raise AssertionError("unreachable")
+
+    result = run_investigation(
+        Provider(),
+        case_state=fixture.case_state,
+        observation=fixture.observation,
+        proof=fixture.proof,
+        journal=fixture.journal,
+        as_of=AS_OF,
+    )
+    assert result.status is InvestigationRunStatus.REJECTED
+    assert result.next_action is InvestigationAction.ABSTAIN
+    assert len(result.trace) == 16
+    assert result.rejection_reason is not None
+    assert result.rejection_reason.startswith("tool_rejected:")
+
+
+def test_oversized_hypothesis_is_rejected_by_core() -> None:
+    fixture = _fixture()
+    source_id = fixture.proof.source_envelope_ids[0]
+
+    class Provider:
+        def propose(self, context, tools):
+            tools.source_evidence(source_id)
+            return _payload(
+                fixture,
+                action="RECHECK",
+                hypothesis="a" * 601,
+                citations=[str(source_id)],
+            )
+
+    result = run_investigation(
+        Provider(),
+        case_state=fixture.case_state,
+        observation=fixture.observation,
+        proof=fixture.proof,
+        journal=fixture.journal,
+        as_of=AS_OF,
+    )
+    assert result.status is InvestigationRunStatus.REJECTED
+    assert result.next_action is InvestigationAction.ABSTAIN
