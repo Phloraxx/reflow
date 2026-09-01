@@ -1,0 +1,143 @@
+{
+  "cases": [
+    {
+      "case_id": "primary-clean-01",
+      "observation_seed": 915879699,
+      "profile": "clean",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 1312853185
+    },
+    {
+      "case_id": "primary-clean-02",
+      "observation_seed": 661578842,
+      "profile": "clean",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 751117830
+    },
+    {
+      "case_id": "primary-clean-03",
+      "observation_seed": 1756873316,
+      "profile": "clean",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 1255143796
+    },
+    {
+      "case_id": "primary-clean-04",
+      "observation_seed": 486962989,
+      "profile": "clean",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 92886632
+    },
+    {
+      "case_id": "primary-adversarial-01",
+      "observation_seed": 1804996339,
+      "profile": "reconciliation_adversarial",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 963837282
+    },
+    {
+      "case_id": "primary-adversarial-02",
+      "observation_seed": 4630065,
+      "profile": "reconciliation_adversarial",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 1178716086
+    },
+    {
+      "case_id": "primary-adversarial-03",
+      "observation_seed": 238891725,
+      "profile": "reconciliation_adversarial",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 1798172152
+    },
+    {
+      "case_id": "primary-adversarial-04",
+      "observation_seed": 768664152,
+      "profile": "reconciliation_adversarial",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 1568278256
+    },
+    {
+      "case_id": "primary-adversarial-05",
+      "observation_seed": 557157697,
+      "profile": "reconciliation_adversarial",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 1338523174
+    },
+    {
+      "case_id": "primary-adversarial-06",
+      "observation_seed": 444649499,
+      "profile": "reconciliation_adversarial",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 1713905745
+    },
+    {
+      "case_id": "primary-adversarial-07",
+      "observation_seed": 1547436856,
+      "profile": "reconciliation_adversarial",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 1953161555
+    },
+    {
+      "case_id": "primary-adversarial-08",
+      "observation_seed": 675234621,
+      "profile": "reconciliation_adversarial",
+      "role": "primary_benchmark",
+      "settlement_count": 64,
+      "world_seed": 328167124
+    },
+    {
+      "case_id": "safety-source-01",
+      "observation_seed": 1186348111,
+      "profile": "source_schema_adversarial",
+      "role": "safety_failure",
+      "settlement_count": 64,
+      "world_seed": 1271023855
+    },
+    {
+      "case_id": "safety-source-02",
+      "observation_seed": 1326315652,
+      "profile": "source_schema_adversarial",
+      "role": "safety_failure",
+      "settlement_count": 64,
+      "world_seed": 1981215983
+    },
+    {
+      "case_id": "safety-source-03",
+      "observation_seed": 645897618,
+      "profile": "source_schema_adversarial",
+      "role": "safety_failure",
+      "settlement_count": 64,
+      "world_seed": 1580525887
+    },
+    {
+      "case_id": "safety-source-04",
+      "observation_seed": 1829156074,
+      "profile": "source_schema_adversarial",
+      "role": "safety_failure",
+      "settlement_count": 64,
+      "world_seed": 995512572
+    }
+  ],
+  "frozen_core_file_sha256": {
+    "src/reflow/evaluation/candidates.py": "8c7c326fc5918200f4cc4a86fdcf948f8e88b9dc2ab73c7c6ae97577266ed5a7",
+    "src/reflow/evaluation/scoring.py": "13e4702df5174935f21b6b49986ecca46232659c78a0ccc58f36db65c6908115"
+  },
+  "frozen_from_main_sha": "601f14835d177ea538f61502680527d70069f092",
+  "primary_case_count": 12,
+  "primary_settlement_count": 768,
+  "safety_case_count": 4,
+  "safety_settlement_count": 256,
+  "schema_version": "gate19-heldout-manifest-v1",
+  "seed_derivation": "sha256(<base>|gate19-heldout-v1|<case-label>), first 8 bytes mod 2,000,000,000 + 1"
+}
