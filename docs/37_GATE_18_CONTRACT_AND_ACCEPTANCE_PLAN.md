@@ -6,7 +6,7 @@ Gate 18 starts from final verified Gate 17 `main`:
 
 `95164be82a149419b936c529b57510eb17b6c317`
 
-Final Gate 17 CI run `33535214302` passed on that exact SHA. This contract is frozen before Gate 18 implementation.
+Final Gate 17 CI run `33535214302` passed on that exact SHA. This contract was frozen before Gate 18 implementation and is implemented by checkpoints `84fc18a`, `788c914` and `2f8f6b1`. See `38_GATE_18_CHECKPOINT.md` for Oracle validation, F-0082 and PR status.
 
 ## Thesis
 

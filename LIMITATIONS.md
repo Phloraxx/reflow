@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 17**:
+ReFlow implementation scope now reaches **Gate 18**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -27,8 +27,9 @@ ReFlow implementation scope now reaches **Gate 17**:
 - a Gate 15 journal-first Razorpay provider boundary for signed payment/settlement webhooks, Settlement Recon items and processed standard settlement API entities, with explicit evidence-origin labels and provider UTR preservation.
 - a Gate 16 bounded exception investigator with immutable target binding, three read-only tools, content-addressed tool traces, deterministic proposal validation and an optional strict/stateless OpenAI Responses transport;
 - a Gate 17 measured one-process scale path plus PostgreSQL 16 durability/application boundary for append-only raw evidence, immutable product/audit artifacts and optimistic operational current pointers.
+- a Gate 18 scoped read-only FastAPI + React Operator Control Tower over immutable run/proof/case/source/evaluation state, including a deterministic synthetic demo path.
 
-Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora, Gate 13/14 deterministic fixtures, Gate 15 provider-document fixtures, Gate 16 fake-provider/OpenAI-transport fixtures and Gate 17 scale/PostgreSQL artifacts are regression/evidence checkpoints only. The final held-out reconciliation benchmark, live-model adapter/investigation benchmarks, authenticated real settlement/recon corpus and operator UI are **not complete yet**.
+Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora, Gate 13/14 deterministic fixtures, Gate 15 provider-document fixtures, Gate 16 fake-provider/OpenAI-transport fixtures, Gate 17 scale/PostgreSQL artifacts and the Gate 18 synthetic control-tower demo are regression/evidence checkpoints only. The final held-out reconciliation benchmark, live-model adapter/investigation benchmarks, authenticated real settlement/recon corpus and public authenticated deployment are **not complete yet**.
 
 We currently make **no published claims** about:
 
@@ -264,4 +265,17 @@ A 100k/1M run was not attempted. The 10k tier already satisfied the frozen Gate 
 
 The isolated PostgreSQL 16.15 cold/warm benchmark measured roughly 76 source writes/s and 87–90 immutable-artifact writes/s for 1,000 fine-grained operations. This proves the reference persistence/idempotency path and also exposes its current bottleneck: it is not a bulk loader and has no connection pool/batched ingestion API. In-memory core throughput and PostgreSQL durability throughput must not be conflated.
 
-Gate 17 also does not provide HA/replication, backups/PITR, migration deployment orchestration, retention/archival automation, authenticated tenant isolation, production HTTP APIs or a distributed queue. None of Kafka, Kubernetes, Celery, Redis or sharding was introduced because the measured proof-core bottleneck was fixed algorithmically instead.
+Gate 17 also does not provide HA/replication, backups/PITR, migration deployment orchestration, retention/archival automation, authenticated tenant isolation, authenticated operator write APIs or a distributed queue. Gate 18 adds a read-only HTTP product surface, but it does not convert the Gate 17 persistence layer into a production multi-tenant service. None of Kafka, Kubernetes, Celery, Redis or sharding was introduced because the measured proof-core bottleneck was fixed algorithmically instead.
+### 29. Gate 18 is a read-only reviewer/control-tower surface, not an authenticated production finance application
+
+Gate 18 exposes scoped read models and a same-origin FastAPI/React application. It has no POST/PUT/PATCH/DELETE product routes and cannot mark a proof reconciled, issue money movement, execute Gate 16 recommendations or run generic SQL. That is an intentional authority boundary, not a claim that the web application is production-secure.
+
+There is currently no authentication, SSO, RBAC, tenant/session authorization, secure scope discovery, rate limiting, WAF policy, CSRF/session model, production security-header policy or external penetration test. A `scope_id` in the URL/API path is a routing identifier only; **knowing a scope ID must not be treated as authorization**. Real merchant evidence must not be exposed publicly until an authenticated application boundary exists.
+
+Source Lab intentionally omits raw source payloads and exposes delivery/schema/adapter metadata only. Case File exposes bounded investigation summaries/citations and immutable artifact identities, but the default product surface is not a raw secret/data explorer. These reductions lower accidental exposure risk but are not a DLP/privacy guarantee.
+
+The Gate 18 demo seeder is deterministic synthetic evidence generated through the existing proof/case/investigation pipeline. It is not Razorpay Test Mode/live merchant evidence and must not be used to claim real-data reconciliation accuracy. The demo PostgreSQL credentials shown in README are localhost-only disposable development credentials, not deployment secrets.
+
+FastAPI can serve the built Vite application and `/api` on one origin. F-0082 fixed SPA history fallback so direct client navigation works while unknown `/api/*` paths stay 404. This packaging path was smoke-tested on Oracle, but there is no public deployment/SLO/availability claim yet.
+
+The frontend formats exact API-supplied money values and performs presentation-only filtering. It must not become a second implementation of Gate 7/8/9 arithmetic or derive proof truth from displayed amounts.

@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 17 — measured scale + PostgreSQL durability/application state is merged and green on `main` (PR #19, merge `ccd2449`, CI `33534839864`). Gate 18 — Operator Control Tower is next. See `docs/36_GATE_17_CHECKPOINT.md`.**
+> **Current phase: Gate 18 — the read-only Operator Control Tower is implemented and Oracle-validated on `build/gate-18-operator-control-tower` at `2f8f6b1`; PR/merge CI is pending. Gate 19 begins only after Gate 18 merges green. See `docs/38_GATE_18_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -396,14 +396,29 @@ The reference PostgreSQL path is durability-first rather than bulk optimized: th
 
 See [`docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md), [`docs/36_GATE_17_CHECKPOINT.md`](docs/36_GATE_17_CHECKPOINT.md), and the self-verifying artifacts under [`data/eval/gate17/`](data/eval/gate17/).
 
+### Gate 18 — Operator Control Tower
+
+Gate 18 adds a scoped, read-only FastAPI projection over immutable run/proof/case/source/evaluation artifacts and a React/TypeScript control tower. The primary surfaces are Run / Close Overview, Settlement Proof, Exception Queue, Case File, Source Lab and Evaluation Lab. The bounded investigation agent appears only inside Case File; there is no chatbot homepage.
+
+The frontend formats and filters API-provided facts but does not decide proof state or recompute financial truth. Every finance API read carries an explicit reconciliation scope, cross-scope artifact references fail closed, source raw payloads are omitted from Source Lab, and benchmark artifacts are verified by a simulator-free reader before display.
+
+A deterministic synthetic demo seeder runs the existing Gates 7–16 pipeline into PostgreSQL. Same-origin FastAPI serving was smoke-tested with the built Vite app; F-0082 records/fixes the SPA direct-navigation 404 while preserving real `/api/*` 404 behavior. Final Oracle validation passed 396 Python/PostgreSQL tests, strict mypy across 61 source files, 5 React tests, TypeScript and the production Vite build.
+
+See [`docs/37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) and [`docs/38_GATE_18_CHECKPOINT.md`](docs/38_GATE_18_CHECKPOINT.md).
+
 ---
 
 ## Commands
 
 ```bash
-python -m pip install -e '.[dev]'
-# Include PostgreSQL integration support when needed:
-python -m pip install -e '.[dev,postgres]'
+# Python + PostgreSQL/read-API + frontend development dependencies
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e '.[dev,postgres,web]'
+cd web && npm ci && cd ..
+
+# Full local static/unit/build path (PostgreSQL integration tests run when
+# REFLOW_TEST_POSTGRES_DSN is configured).
 make check
 
 # Development-only deterministic evaluation artifact
@@ -415,15 +430,35 @@ python -m reflow.evaluation.scale_runner --settlements 1000 --profile clean --ou
 python -m reflow.evaluation.scale_runner --verify /tmp/reflow-scale.json
 ```
 
+### Run the synthetic Gate 18 control-tower demo
+
+```bash
+docker run --rm -d --name reflow-demo-postgres \
+  -e POSTGRES_USER=reflow_demo \
+  -e POSTGRES_PASSWORD=reflow_demo \
+  -e POSTGRES_DB=reflow_demo \
+  -p 127.0.0.1:55432:5432 postgres:16-alpine
+
+until docker exec reflow-demo-postgres pg_isready -U reflow_demo -d reflow_demo >/dev/null 2>&1; do sleep 1; done
+export REFLOW_POSTGRES_DSN='postgresql://reflow_demo:reflow_demo@127.0.0.1:55432/reflow_demo'
+SCOPE=$(python -m reflow.evaluation.control_tower_demo --dsn "$REFLOW_POSTGRES_DSN")
+cd web && npm run build && cd ..
+python -m uvicorn reflow.control_tower_api:app_from_env --factory --host 127.0.0.1 --port 8000
+# Open: http://127.0.0.1:8000/?scope=<the printed SCOPE>
+```
+
+The demo is synthetic regression/demo data. It is not a Razorpay Test Mode or live merchant accuracy claim.
+
 Equivalent explicit checks:
 
 ```bash
 python -m ruff check .
 python -m mypy src
 python -m pytest
+cd web && npm run check && npm test && npm run build
 ```
 
-CI runs the same validation path.
+CI runs Python/PostgreSQL and frontend validation together.
 
 ---
 
@@ -470,6 +505,8 @@ CI runs the same validation path.
 - [`docs/34_GATE_16_CHECKPOINT.md`](docs/34_GATE_16_CHECKPOINT.md) — bounded investigation/provider checkpoint
 - [`docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 17 scale/durability contract
 - [`docs/36_GATE_17_CHECKPOINT.md`](docs/36_GATE_17_CHECKPOINT.md) — current scale/PostgreSQL durability/application checkpoint
+- [`docs/37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 18 control-tower contract
+- [`docs/38_GATE_18_CHECKPOINT.md`](docs/38_GATE_18_CHECKPOINT.md) — current read-only Operator Control Tower checkpoint
 
 ---
 
@@ -519,7 +556,7 @@ CI runs the same validation path.
 
 - [x] Source Adapter Compiler / bounded AI proposal path
 - [x] bounded Exception Investigation Agent / validated read-only tool trace
-- [ ] operator UI
+- [x] read-only operator control tower UI / proof + case drill-down
 - [ ] failure campaign
 - [ ] final benchmark
 - [ ] public deployment

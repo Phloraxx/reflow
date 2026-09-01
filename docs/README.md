@@ -6,22 +6,24 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`36_GATE_17_CHECKPOINT.md`](36_GATE_17_CHECKPOINT.md) — **implemented measured one-process scale, PostgreSQL durability/application state and reproducible Gate 17 evidence.**
-2. [`35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 17 scale/durability contract and acceptance plan.
-3. [`34_GATE_16_CHECKPOINT.md`](34_GATE_16_CHECKPOINT.md) — bounded exception investigation, independently evaluable read-only traces and optional strict OpenAI provider.
-4. [`33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 16 contract and acceptance plan.
-5. [`32_GATE_15_CHECKPOINT.md`](32_GATE_15_CHECKPOINT.md) — journal-first Razorpay webhook/API/recon provider boundary and proof-kernel compatibility.
-6. [`31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 15 provider contract and acceptance plan.
-7. [`30_GATE_14_CHECKPOINT.md`](30_GATE_14_CHECKPOINT.md) — deterministic ExceptionCase lifecycle and incident fingerprints/clusters.
-8. [`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 14 contract and acceptance plan.
-9. [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — deterministic reconciliation control plane.
-10. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative post-Gate-12 architecture review and revised Gates 13–19.
-11. [`26_GATE_12_CHECKPOINT.md`](26_GATE_12_CHECKPOINT.md) — AI-assisted source-compiler checkpoint.
-12. [`25_GATE_11_CHECKPOINT.md`](25_GATE_11_CHECKPOINT.md) — baseline evaluation/scorer/artifact checkpoint.
-13. [`24_GATE_10_CHECKPOINT.md`](24_GATE_10_CHECKPOINT.md) — bounded residual-hypothesis checkpoint.
-14. [`23_GATE_9_CHECKPOINT.md`](23_GATE_9_CHECKPOINT.md) — immutable versioned full-proof checkpoint.
-15. [`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — pre-Gate-9 foundation audit.
-16. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — pre-review roadmap; docs 27–36 supersede its post-Gate-12 sequence/status.
+1. [`38_GATE_18_CHECKPOINT.md`](38_GATE_18_CHECKPOINT.md) — **implemented read-only Operator Control Tower, scoped API, React UI and deterministic demo path.**
+2. [`37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 18 product/read-model/frontend contract.
+3. [`36_GATE_17_CHECKPOINT.md`](36_GATE_17_CHECKPOINT.md) — measured one-process scale, PostgreSQL durability/application state and reproducible Gate 17 evidence.
+4. [`35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 17 scale/durability contract and acceptance plan.
+5. [`34_GATE_16_CHECKPOINT.md`](34_GATE_16_CHECKPOINT.md) — bounded exception investigation, independently evaluable read-only traces and optional strict OpenAI provider.
+6. [`33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 16 contract and acceptance plan.
+7. [`32_GATE_15_CHECKPOINT.md`](32_GATE_15_CHECKPOINT.md) — journal-first Razorpay webhook/API/recon provider boundary and proof-kernel compatibility.
+8. [`31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 15 provider contract and acceptance plan.
+9. [`30_GATE_14_CHECKPOINT.md`](30_GATE_14_CHECKPOINT.md) — deterministic ExceptionCase lifecycle and incident fingerprints/clusters.
+10. [`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 14 contract and acceptance plan.
+11. [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — deterministic reconciliation control plane.
+12. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) — authoritative post-Gate-12 architecture review and revised Gates 13–19.
+13. [`26_GATE_12_CHECKPOINT.md`](26_GATE_12_CHECKPOINT.md) — AI-assisted source-compiler checkpoint.
+14. [`25_GATE_11_CHECKPOINT.md`](25_GATE_11_CHECKPOINT.md) — baseline evaluation/scorer/artifact checkpoint.
+15. [`24_GATE_10_CHECKPOINT.md`](24_GATE_10_CHECKPOINT.md) — bounded residual-hypothesis checkpoint.
+16. [`23_GATE_9_CHECKPOINT.md`](23_GATE_9_CHECKPOINT.md) — immutable versioned full-proof checkpoint.
+17. [`22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md`](22_THIRD_INDEPENDENT_PRE_GATE_9_AUDIT.md) — pre-Gate-9 foundation audit.
+18. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — pre-review roadmap; docs 27–38 supersede its post-Gate-12 sequence/status.
 
 ---
 
@@ -63,6 +65,8 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`34_GATE_16_CHECKPOINT.md`](34_GATE_16_CHECKPOINT.md) — Gate 16 bounded investigator, tool trace, OpenAI transport and safety/privacy checkpoint.
 - [`35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Gate 17 frozen measured-scale/PostgreSQL durability contract.
 - [`36_GATE_17_CHECKPOINT.md`](36_GATE_17_CHECKPOINT.md) — Gate 17 performance finding, PostgreSQL application boundary, benchmark artifacts and limitations.
+- [`37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Gate 18 frozen control-tower/API/frontend contract.
+- [`38_GATE_18_CHECKPOINT.md`](38_GATE_18_CHECKPOINT.md) — Gate 18 scoped read model, React product surface, demo serving and F-0082 checkpoint.
 
 ## Execution and submission
 
@@ -77,18 +81,19 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. latest implemented checkpoint (`36_GATE_17_CHECKPOINT.md`)
-3. frozen current gate contract (`35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`)
-4. `34_GATE_16_CHECKPOINT.md` / `33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-5. `32_GATE_15_CHECKPOINT.md` / `31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-6. `30_GATE_14_CHECKPOINT.md` / `29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-7. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
-8. `28_GATE_13_CHECKPOINT.md` and earlier implemented checkpoints
-9. `16_MASTER_BUILD_PLAN.md`
-10. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
-11. `11`–`14` and `18`
-12. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
-13. `04`–`09` as earlier planning history
+2. latest implemented checkpoint (`38_GATE_18_CHECKPOINT.md`)
+3. frozen current gate contract (`37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`)
+4. `36_GATE_17_CHECKPOINT.md` / `35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+5. `34_GATE_16_CHECKPOINT.md` / `33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+6. `32_GATE_15_CHECKPOINT.md` / `31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+7. `30_GATE_14_CHECKPOINT.md` / `29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+8. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
+9. `28_GATE_13_CHECKPOINT.md` and earlier implemented checkpoints
+10. `16_MASTER_BUILD_PLAN.md`
+11. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
+12. `11`–`14` and `18`
+13. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
+14. `04`–`09` as earlier planning history
 
 If implementation/evaluation contradicts any document, update the plan and preserve the finding in `FAILURE_LOG.md` where appropriate.
 
