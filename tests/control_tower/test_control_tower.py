@@ -608,3 +608,22 @@ def test_fastapi_cross_scope_integrity_failure_is_not_404_fallback(tmp_path: Pat
     response = client.get(f"/api/v1/scopes/{SCOPE_A}/proofs/proofv_foreign_api")
     assert response.status_code == 409
     assert response.json()["error"] == "control_tower_integrity_error"
+
+
+def test_fastapi_can_serve_built_spa_without_changing_api_authority(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from reflow.control_tower_api import create_control_tower_app
+
+    web_dist = tmp_path / "dist"
+    web_dist.mkdir()
+    (web_dist / "index.html").write_text("<html><body>ReFlow Control Tower</body></html>")
+    client = TestClient(create_control_tower_app(_reader(tmp_path), web_dist=web_dist))
+    root = client.get("/")
+    assert root.status_code == 200
+    assert "ReFlow Control Tower" in root.text
+    client_route = client.get("/exceptions?scope=scope_ui")
+    assert client_route.status_code == 200
+    assert "ReFlow Control Tower" in client_route.text
+    assert client.get("/api/v1/health").json()["mode"] == "read_only"
+    assert client.get("/api/v1/not-a-route").status_code == 404

@@ -170,3 +170,32 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
 
     rebuilt = ReflowApplicationService(PostgresApplicationStore(_require_dsn()))
     assert ControlTowerReader(rebuilt, evaluation_root=tmp_path).overview(SCOPE) == overview
+
+
+def test_synthetic_control_tower_demo_seed_is_idempotent_and_readable(tmp_path: Path) -> None:
+    from reflow.evaluation.control_tower_demo import seed_demo
+
+    first = seed_demo(_require_dsn())
+    second = seed_demo(_require_dsn())
+    assert second.scope.id == first.scope.id
+    assert second.run.id == first.run.id
+    assert second.proof.id == first.proof.id
+
+    service = ReflowApplicationService(PostgresApplicationStore(_require_dsn()))
+    reader = ControlTowerReader(service, evaluation_root=tmp_path, now=lambda: NOW)
+    overview = reader.overview(first.scope.id)
+    assert overview.run is not None
+    assert overview.run.close_status == "not_ready"
+    assert overview.active_exception_count == 1
+
+    queue = reader.exceptions(first.scope.id)
+    assert len(queue) == 1
+    assert queue[0].financial_status == "pending_bank_credit"
+    assert queue[0].materiality_band == "critical"
+    assert queue[0].workflow_status == "awaiting_source"
+    assert queue[0].source_blockers == ("bank:late",)
+
+    case = reader.case_file(first.scope.id, queue[0].case_id)
+    assert case.investigation is not None
+    assert case.investigation.status == "validated"
+    assert case.investigation.next_action == "REQUEST_SOURCE"

@@ -1977,3 +1977,13 @@ These are test targets, not claimed failures:
 - production webhook signature/authenticity validation.
 
 ---
+### F-0082 — Gate 18 same-origin SPA direct navigation returned 404
+
+- **Gate:** 18 — Operator Control Tower
+- **Severity:** medium
+- **Type:** product routing / deployment integration
+- **Observed:** the built React UI loaded at `/`, but direct navigation to a client route such as `/exceptions?scope=...` returned HTTP 404 when served by FastAPI.
+- **Cause:** Starlette `StaticFiles(..., html=True)` serves directory index files but is not a generic SPA history fallback for arbitrary non-file client routes.
+- **Fix:** mount only built `/assets`, serve `/` explicitly, and add a non-API catch-all that returns the built `index.html`; unknown `/api/*` routes continue to return 404 rather than being masked by the SPA.
+- **Regression:** Gate 18 API tests assert a direct client route returns the SPA shell while an unknown API route remains 404.
+- **Financial truth impact:** none; read-only web routing only.
