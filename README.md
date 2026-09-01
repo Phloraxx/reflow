@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 18 — the read-only Operator Control Tower is implemented and Oracle-validated on `build/gate-18-operator-control-tower` at `2f8f6b1`; PR/merge CI is pending. Gate 19 begins only after Gate 18 merges green. See `docs/38_GATE_18_CHECKPOINT.md`.**
+> **Current phase: Gate 18 — the read-only Operator Control Tower is merged and green on `main` (PR #21, merge `8d9bcabeb345c921ca2fe554c566597f1830a1b8`, CI `33542261641`). Gate 19 — final failure campaign, held-out evidence and submission hardening — is next. See `docs/38_GATE_18_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 

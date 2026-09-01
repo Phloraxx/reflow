@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known through the Gate 18 implementation checkpoint. Gate 18 PR/merge CI is pending; F-0082 and F-0083 are preserved below as resolved Gate 18 product/reviewer-workflow regressions. Final verified Gate 17 `main` remains `95164be82a149419b936c529b57510eb17b6c317` with CI run `33535214302` green.
+None currently known through merged Gate 18. PR #21 merged as `8d9bcabeb345c921ca2fe554c566597f1830a1b8`, and merge-triggered `main` CI run `33542261641` passed. F-0082 and F-0083 remain preserved below as resolved Gate 18 product/reviewer-workflow regressions.
 
 ---
 
