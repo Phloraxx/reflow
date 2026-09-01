@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known through merged Gate 18. PR #21 merged as `8d9bcabeb345c921ca2fe554c566597f1830a1b8`, and merge-triggered `main` CI run `33542261641` passed. F-0082 and F-0083 remain preserved below as resolved Gate 18 product/reviewer-workflow regressions.
+None currently known through the Gate 19 evidence/submission checkpoint. The first held-out v1 is frozen at `4686608f23798c874579969e4896431899595256`; the representative failure campaign is 12/12 green; F-0084 remains preserved below as the resolved final-campaign harness defect. Gate 19 PR/merge CI is pending.
 
 ---
 

@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 18 — the read-only Operator Control Tower is merged and green on `main` (PR #21, merge `8d9bcabeb345c921ca2fe554c566597f1830a1b8`, CI `33542261641`). Gate 19 — final failure campaign, held-out evidence and submission hardening — is next. See `docs/38_GATE_18_CHECKPOINT.md`.**
+> **Current phase: Gate 19 — the final held-out v1, failure campaign and submission evidence are frozen and Oracle-validated on `build/gate-19-final-campaign-submission`; PR/merge CI is pending. ReFlow Core auto-reconciled 512/768 held-out settlements with 512/512 correct automatic matches (100% precision), 82.05% truth-reconciled recall and zero silent false auto-matches. See `EVALUATION.md` and `docs/40_GATE_19_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -275,42 +275,29 @@ Refunds remain first-class economic evidence. The normalized payment-event reduc
 
 ---
 
-## Evaluation before claims
+## Final frozen evaluation
 
-**No final benchmark result is claimed yet.**
+Gate 19 commits the held-out seeds and SHA-256 bindings for the existing scorer/candidate systems **before** the first final execution. The first v1 artifact is preserved unchanged and is independently re-verifiable.
 
-The evaluation design generates an authoritative hidden financial world and separately generates imperfect observations. Candidate reconciliation code receives only the observed side.
+Primary held-out corpus:
 
-Implemented adversarial shapes include:
+- **12 cases / 768 settlements / 87,364 observed records**;
+- 4 clean cases and 8 reconciliation-adversarial cases;
+- ReFlow automatic matches: **512 / 768 = 66.67% coverage**;
+- correct automatic matches: **512 / 512 = 100% auto-match precision**;
+- truth-reconciled recall: **512 / 624 = 82.05%**;
+- silent false auto-matches: **0 / 512 = 0%**;
+- explicit non-green decisions: **256** (170 unresolved, 78 residual, 8 contradicted).
 
-- duplicate and reordered payment evidence;
-- delayed events;
-- `failed → captured` evidence;
-- dropped events;
-- refunds and cross-period refunds;
-- transfers and adjustments;
-- missing, duplicate and wrong recon rows;
-- missing, delayed and incorrect bank credits;
-- a bank credit at the exact settlement-processing boundary;
-- same-amount settlement collisions;
-- UTR removal/corruption;
-- reused settlement UTR;
-- multiple distinct bank rows reusing one standard settlement UTR;
-- bank credit before settlement processing;
-- malformed dates and schema drift;
-- rupee/paise and sign traps;
-- prompt-like bank narration;
-- partial source outages;
-- high-cardinality settlement cases;
-- same economic identity with conflicting recon values;
-- recon evidence after settlement processing;
-- cross-settlement economic-identity conflicts;
-- wrong/missing raw provenance;
-- a 200-settlement bank-proof batch.
+The `66.67%` number is a conservative automatic match rate over every requested settlement, **not an accuracy percentage**.
 
-The safety metric that matters most is **silent false auto-match rate**. A confident wrong financial match is worse than an explicit unresolved case.
+On the same frozen corpus, the strong B1 grouped-exact baseline also produced 512 true automatic matches with zero false matches. ReFlow does **not** claim a recall win over B1. The fuzzy baseline automatically matched 521 settlements, but **9 were wrong** (1.73% silent false-match rate). ReFlow leaves those cases non-green instead of buying coverage with incorrect financial truth.
 
-Final match-rate, accuracy, throughput and scale numbers will only be published after the checked-in held-out evaluation harness exists.
+A separate frozen source-schema safety corpus failed closed **4/4** times with zero candidate decisions, and the final representative regression campaign passed **12/12** checks.
+
+For scale, the independently verified Gate 17 clean 10k artifact records **206.97 settlements/s in the proof pipeline** over 10,000 settlements / 1,203,220 raw rows on the disclosed 4-vCPU aarch64 Oracle VM. This is not a production SLO or end-to-end throughput claim.
+
+See [`EVALUATION.md`](EVALUATION.md) for exact denominators, edge metrics, exception reasons, reproduction commands and non-claims. The raw first-run result remains checked in under `data/eval/gate19/final-heldout.json`.
 
 ---
 
@@ -346,7 +333,7 @@ Gate 12 journals an unfamiliar source before inference, profiles its exact schem
 
 Approved adapters preserve both raw source identity and canonical financial identity in `SourceLink`, so unknown exports enter the existing Money Graph/proof pipeline without a second reconciliation path. Development adapter and migration artifacts are independently replayable; live-model accuracy remains unclaimed until an explicit model/key benchmark is run.
 
-Benchmark JSON uses the `gate11-evaluation-v2` schema and includes a minimal post-run truth projection plus raw candidate decisions so `python -m reflow.evaluation.verify <artifact.json>` can recompute every stored report. Checked-in development seeds are regression evidence only; the final held-out benchmark remains unrun. AI remains later.
+Benchmark JSON uses the `gate11-evaluation-v2` schema and includes a minimal post-run truth projection plus raw candidate decisions so `python -m reflow.evaluation.verify <artifact.json>` can recompute every stored report. Gate 11 development seeds remain regression evidence only; Gate 19 later froze and preserved the separate final held-out v1. Live-model quality remains unclaimed.
 
 ### Gate 13 — Reconciliation Control Plane
 
@@ -406,6 +393,14 @@ A deterministic synthetic demo seeder runs the existing Gates 7–16 pipeline in
 
 See [`docs/37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) and [`docs/38_GATE_18_CHECKPOINT.md`](docs/38_GATE_18_CHECKPOINT.md).
 
+### Gate 19 — Final Failure Campaign + Held-Out Evidence
+
+Gate 19 freezes the final evaluation protocol before execution, preserves the first held-out v1 unchanged, publishes the complete non-green exception set, and validates representative failure classes separately from the headline reconciliation denominator. The final human-readable metrics are generated from machine-verifiable artifacts rather than hand-edited numbers.
+
+The submission evidence includes a fresh-clone validation, a high-confidence current-tree/Git-history secret-pattern scan, an exact five-minute pitch runbook, and a reviewer `make submission-check` target. No live-model quality number or real Razorpay Test Mode settlement-accuracy claim is made because neither final corpus was available on the Oracle evaluation host.
+
+See [`docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md), [`docs/40_GATE_19_CHECKPOINT.md`](docs/40_GATE_19_CHECKPOINT.md), [`docs/41_FINAL_5_MINUTE_PITCH.md`](docs/41_FINAL_5_MINUTE_PITCH.md) and [`EVALUATION.md`](EVALUATION.md).
+
 ---
 
 ## Commands
@@ -420,6 +415,10 @@ cd web && npm ci && cd ..
 # Full local static/unit/build path (PostgreSQL integration tests run when
 # REFLOW_TEST_POSTGRES_DSN is configured).
 make check
+
+# Submission reviewer path: normal checks + verification of the frozen Gate 19/Gate 17 artifacts.
+# This verifies the first held-out v1; it does not rerun or overwrite it.
+make submission-check
 
 # Development-only deterministic evaluation artifact
 python -m reflow.evaluation.runner --world-seed 401 --observation-seed 1401 --settlements 50 --profile reconciliation_adversarial --output /tmp/reflow-gate11.json
@@ -507,6 +506,9 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [`docs/36_GATE_17_CHECKPOINT.md`](docs/36_GATE_17_CHECKPOINT.md) — current scale/PostgreSQL durability/application checkpoint
 - [`docs/37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) — frozen Gate 18 control-tower contract
 - [`docs/38_GATE_18_CHECKPOINT.md`](docs/38_GATE_18_CHECKPOINT.md) — current read-only Operator Control Tower checkpoint
+- [`docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md) — frozen final held-out/failure-campaign protocol
+- [`docs/40_GATE_19_CHECKPOINT.md`](docs/40_GATE_19_CHECKPOINT.md) — final held-out evidence and submission-hardening checkpoint
+- [`docs/41_FINAL_5_MINUTE_PITCH.md`](docs/41_FINAL_5_MINUTE_PITCH.md) — exact five-minute recording script/runbook
 
 ---
 
@@ -557,10 +559,11 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [x] Source Adapter Compiler / bounded AI proposal path
 - [x] bounded Exception Investigation Agent / validated read-only tool trace
 - [x] read-only operator control tower UI / proof + case drill-down
-- [ ] failure campaign
-- [ ] final benchmark
-- [ ] public deployment
-- [ ] five-minute pitch
+- [x] final representative failure campaign
+- [x] frozen final held-out benchmark
+- [ ] optional synthetic-only public deployment
+- [x] five-minute pitch script/runbook
+- [ ] five-minute pitch video recording/upload
 
 ---
 
