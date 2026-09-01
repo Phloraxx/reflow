@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through the current Gate 16 Oracle checkpoint. Gate 16 is not merged yet; F-0076 through F-0080 remain preserved as resolved Gate 16 regressions.
+None currently known in the deterministic implementation through Gate 16. PR #17 merged as `88acedf5c12eedd33fefada28c6677f76ebf4a39`, and merge-triggered `main` CI run `33528694353` passed. F-0076 through F-0080 remain preserved as resolved Gate 16 regressions.
 
 ---
 
