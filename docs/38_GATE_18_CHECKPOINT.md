@@ -16,7 +16,7 @@ Gate 18 implementation checkpoints on `build/gate-18-operator-control-tower`:
 - reproducible demo + same-origin serving/F-0082 fix: `2f8f6b143fb571c5ff35eed0265d456c1818cf2a`.
 - reviewer workflow / env / `make check` hardening: `df08a770195d1475829b31ab4b131e85a7af1525`.
 
-PR/merge CI is pending at this checkpoint.
+Gate 18 PR #21 merged as `8d9bcabeb345c921ca2fe554c566597f1830a1b8`. Merge-triggered `main` CI run `33542261641` passed on that exact SHA, including PostgreSQL, Python static/tests, frontend type/tests and production Vite build.
 
 ## 1. Product result
 
@@ -342,6 +342,6 @@ The read-only API reduces risk but does not remove the need for authentication b
 
 Gate 19 is the final failure campaign + held-out evidence + submission hardening phase.
 
-It begins only after Gate 18 PR CI, merge and merge-triggered `main` CI are green.
+Gate 18 PR CI, merge and merge-triggered `main` CI are now green. Gate 19 may begin from merged Gate 18 `main` `8d9bcabeb345c921ca2fe554c566597f1830a1b8` after this metadata record itself merges green.
 
 Gate 19 should attack the finished product end to end, freeze final scorers/policies before held-out runs, produce reproducible submission evidence, and prepare the five-minute demo without hand-edited headline metrics.
