@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through the current Gate 16 Oracle checkpoint. Gate 16 is not merged yet; F-0076 through F-0079 remain preserved as resolved Gate 16 regressions.
+None currently known in the deterministic implementation through the current Gate 16 Oracle checkpoint. Gate 16 is not merged yet; F-0076 through F-0080 remain preserved as resolved Gate 16 regressions.
 
 ---
 
@@ -1890,6 +1890,33 @@ Every provider request now receives a fresh list snapshot of the accumulated sta
 
 ### Regression protection
 `test_source_tool_output_marks_text_untrusted` verifies prompt-like source text is absent from the initial request and appears only after the explicit `source_evidence` tool call.
+
+### Status
+Resolved in Gate 16.
+
+---
+
+
+## F-0080 — Gate 16 OpenAI tool outputs exposed unnecessary external financial identifiers
+
+**Date:** 2026-09-01
+**Area:** Gate 16 model-data minimization
+**Severity:** high
+
+### Symptom
+The first pushed OpenAI investigation-provider checkpoint serialized complete read-only tool DTOs into model-facing `function_call_output`. That included provider settlement IDs, settlement UTRs, source record IDs and unredacted source-text fields even though the model did not need those identifiers to propose a bounded next action.
+
+### Root cause
+Read-only capability safety was treated as sufficient provider safety. The transport reused the internal investigation view wholesale instead of defining a second, minimized model-facing projection.
+
+### Why it matters
+A read-only tool can still disclose unnecessary merchant/payment metadata to an external model provider. Gate 16 should minimize provider-visible data independently of whether the model can mutate financial state.
+
+### Fix
+OpenAI tool outputs now use explicit model-facing projections. Case/proof outputs omit external settlement identity and UTR fields; source outputs omit external source-record IDs. Untrusted source text is bounded and redacts email addresses, long numeric identifiers, known secret-token patterns and transaction-like IDs before transport. Internal case/proof/source-envelope IDs and exact typed financial facts remain available for deterministic citation/claim validation.
+
+### Regression protection
+`test_responses_loop_uses_only_declared_read_only_tools_and_strict_output` verifies case/proof external identities are absent, while `test_source_tool_output_redacts_external_sensitive_identifiers` verifies source-record/UTR omission and redaction of sensitive-looking text.
 
 ### Status
 Resolved in Gate 16.

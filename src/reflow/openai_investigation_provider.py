@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -14,12 +15,15 @@ from . import domain
 from .investigation import (
     MAX_INVESTIGATION_HYPOTHESIS_CHARS,
     MAX_INVESTIGATION_SOURCE_IDS,
+    CaseInvestigationView,
     FinancialFactKind,
     InvestigationAction,
     InvestigationContext,
     InvestigationProvider,
     InvestigationToolError,
+    ProofInvestigationView,
     ReadOnlyInvestigationTools,
+    SourceEvidenceView,
 )
 
 
@@ -80,6 +84,77 @@ def _jsonable(value: object) -> object:
     if fields is not None:
         return {name: _jsonable(getattr(value, name)) for name in fields}
     raise TypeError(f"unsupported OpenAI investigation value {type(value).__name__}")
+
+
+_EMAIL_RE = re.compile(r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\b")
+_SECRET_RE = re.compile(r"(?i)\b(?:sk|rzp_(?:live|test)|ghp|github_pat|npk)[-_][a-z0-9_-]{8,}\b")
+_LONG_NUMBER_RE = re.compile(r"(?<!\d)\d{8,19}(?!\d)")
+_TRANSACTION_ID_RE = re.compile(
+    r"(?i)\b(?:UTR[-_: ]*[A-Z0-9-]{4,}|(?:setl|pay|rfnd|trf|adj|order|recon|bank)_[A-Z0-9_-]{4,})\b"
+)
+
+
+def _redact_untrusted_text(value: str) -> str:
+    redacted = _SECRET_RE.sub("<SECRET_LIKE>", value)
+    redacted = _EMAIL_RE.sub("<EMAIL>", redacted)
+    redacted = _LONG_NUMBER_RE.sub("<LONG_NUMBER>", redacted)
+    redacted = _TRANSACTION_ID_RE.sub("<TRANSACTION_ID>", redacted)
+    return redacted
+
+
+def _model_tool_output(value: object) -> object:
+    if isinstance(value, CaseInvestigationView):
+        return {
+            "case_id": str(value.case_id),
+            "observation_id": str(value.observation_id),
+            "proof_version_id": str(value.proof_version_id),
+            "financial_status": value.financial_status.value,
+            "reason_codes": list(value.reason_codes),
+            "affected_amount": _jsonable(value.affected_amount),
+            "materiality_band": value.materiality_band,
+            "workflow_status": value.workflow_status,
+            "source_states": [
+                {
+                    "source_kind": state.source_kind.value,
+                    "completeness": state.completeness.value,
+                    "received_late": state.received_late,
+                }
+                for state in value.source_states
+            ],
+            "first_seen_at": value.first_seen_at.isoformat(),
+            "last_seen_at": value.last_seen_at.isoformat(),
+            "age_seconds": value.age_seconds,
+        }
+    if isinstance(value, ProofInvestigationView):
+        return {
+            "proof_version_id": str(value.proof_version_id),
+            "status": value.status.value,
+            "reason_codes": list(value.reason_codes),
+            "settlement_amount": _jsonable(value.settlement_amount),
+            "composition_observed": _jsonable(value.composition_observed),
+            "composition_residual": _jsonable(value.composition_residual),
+            "bank_expected_amount": _jsonable(value.bank_expected_amount),
+            "bank_observed_credit": _jsonable(value.bank_observed_credit),
+            "bank_residual": _jsonable(value.bank_residual),
+            "source_envelope_ids": [str(item) for item in value.source_envelope_ids],
+            "knowledge_cutoff": value.knowledge_cutoff.isoformat(),
+            "generated_at": value.generated_at.isoformat(),
+        }
+    if isinstance(value, SourceEvidenceView):
+        return {
+            "source_envelope_id": str(value.source_envelope_id),
+            "source_kind": value.source_kind.value,
+            "occurred_at": None if value.occurred_at is None else value.occurred_at.isoformat(),
+            "received_at": value.received_at.isoformat(),
+            "schema_version": value.schema_version,
+            "payload_sha256": value.payload_sha256,
+            "trust_label": value.trust_label,
+            "untrusted_text_fields": [
+                {"path": item.path, "value": _redact_untrusted_text(item.value)}
+                for item in value.untrusted_text_fields
+            ],
+        }
+    raise OpenAIInvestigationError(f"unsupported investigation tool result {type(value).__name__}")
 
 
 def _proposal_schema() -> dict[str, object]:
@@ -419,7 +494,7 @@ class OpenAIInvestigationProvider(InvestigationProvider):
                         "type": "function_call_output",
                         "call_id": call_id,
                         "output": json.dumps(
-                            _jsonable(result),
+                            _model_tool_output(result),
                             sort_keys=True,
                             separators=(",", ":"),
                             ensure_ascii=False,
