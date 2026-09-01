@@ -2,6 +2,8 @@
 
 ## Status
 
+Frozen pre-implementation acceptance contract. Implemented by Gate 16 checkpoints `f4741ca`, `6ed1c8a` and `d1325a9`; see `34_GATE_16_CHECKPOINT.md` for the validated implementation state and privacy hardening discovered during execution.
+
 Gate 16 starts from verified Gate 15 `main`:
 
 `8d6b25bdab33a78e05c951f2bce4622639258909`

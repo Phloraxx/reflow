@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 15**:
+ReFlow implementation scope now reaches **Gate 16**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -25,8 +25,9 @@ ReFlow implementation scope now reaches **Gate 15**:
 - a deterministic Gate 13 reconciliation control plane with explicit scope, source-delivery/completeness state, versioned policy, proof-derived no-orphan coverage, exact balance control, close readiness and immutable run capsules;
 - a deterministic Gate 14 exception-case lifecycle with stable economic identity, immutable observations, append-only workflow dispositions, economic supersession and run-specific incident fingerprints/clusters;
 - a Gate 15 journal-first Razorpay provider boundary for signed payment/settlement webhooks, Settlement Recon items and processed standard settlement API entities, with explicit evidence-origin labels and provider UTR preservation.
+- a Gate 16 bounded exception investigator with immutable target binding, three read-only tools, content-addressed tool traces, deterministic proposal validation and an optional strict/stateless OpenAI Responses transport.
 
-Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora, Gate 13/14 deterministic fixtures and Gate 15 provider-document fixtures are regression evidence only. The final held-out reconciliation benchmark, live-model adapter benchmark, scale benchmark, durable application persistence, authenticated real settlement/recon corpus, exception-investigation agent and operator UI are **not complete yet**.
+Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora, Gate 13/14 deterministic fixtures, Gate 15 provider-document fixtures and Gate 16 fake-provider/OpenAI-transport fixtures are regression evidence only. The final held-out reconciliation benchmark, live-model adapter/investigation benchmarks, scale benchmark, durable application persistence, authenticated real settlement/recon corpus and operator UI are **not complete yet**.
 
 We currently make **no published claims** about:
 
@@ -221,7 +222,7 @@ Materiality bands are workflow metadata only and never weaken exact Gate 7/8/9 p
 
 ### 24. Application persistence and authenticated workflow are not implemented yet
 
-Current stores are reference/in-memory implementations. Gate 13 run/certificate objects, Gate 14 case/disposition/incident objects and Gate 15 raw provider envelopes exist, but durable run/provider history, source manifests, proof/case history, adapter approvals, operator dispositions and authenticated ownership still require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.
+Current stores are reference/in-memory implementations. Gate 13 run/certificate objects, Gate 14 case/disposition/incident objects, Gate 15 raw provider envelopes and Gate 16 investigation results/traces exist, but durable run/provider history, source manifests, proof/case history, adapter approvals, operator dispositions and authenticated ownership still require a minimal application/persistence layer. The planned Buildathon shape is a modular application service plus PostgreSQL, not a microservice/distributed-workflow architecture.
 
 
 ### 25. Gate 14 case lifecycle is deterministic but not durable/authenticated
@@ -239,3 +240,13 @@ Gate 15 implements deterministic provider parsing and webhook HMAC verification,
 Razorpay's documented standard settlement entity omits currency. Gate 15 therefore binds standard-settlement currency from explicit account context (currently INR) rather than inventing a provider field. A processed settlement API entity uses ReFlow observation time as canonical `processed_at`; provider `created_at` is retained/validated but is not reinterpreted as processing time or bank-credit time.
 
 The connected account exposed no settlement or settlement-recon rows during the Gate 15 inspection. No private payment payload is checked into the repository, and no `REAL_TEST_MODE` settlement accuracy number is claimed. Standard Instant Settlement (`setlod_...` / `setlodp_...`) proof topology remains explicitly unsupported.
+
+### 27. Gate 16 is a bounded advisory reference, not an autonomous finance operator
+
+Gate 16 can investigate only one active case bound to one exact current Gate 9 proof. Its public capability set is limited to case snapshot, proof snapshot and proof-scoped source evidence. It cannot mutate proof state, case state, dispositions, adapters, evidence, refunds, payouts, transfers or settlement state. Accepted output is advisory only and limited to `WAIT`, `RECHECK`, `REQUEST_SOURCE`, `REQUEST_HUMAN_REVIEW` or `ABSTAIN`.
+
+The reference implementation is in-memory and does not provide durable investigation queues, authenticated operators, tenant authorization, rate limiting, provider-cost budgets or production observability. Core bounds currently limit one investigation to 16 tool calls and 64 proof source envelopes; cases exceeding the source-evidence budget fail closed rather than being silently sampled.
+
+The OpenAI Responses provider is protocol-tested with deterministic fake transports, not benchmarked for live investigation accuracy. No live-model Gate 16 success rate is claimed. It uses `store=false`, stateless output-item replay, strict function/final schemas and a minimized model-facing projection. External settlement IDs, UTRs and source-record IDs are omitted from model tool outputs, and source text gets heuristic redaction for obvious email, long-number, secret-token and transaction-ID patterns. This is data minimization, **not a DLP guarantee**; production policy must still decide whether particular merchant/customer evidence may be sent to an external model.
+
+Provider refusal, timeout, malformed output, hallucinated citations, wrong financial numbers, unsupported actions or denied tool access cannot change deterministic financial truth. They produce abstention/rejection/provider-error artifacts only.
