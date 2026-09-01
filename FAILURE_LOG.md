@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through Gate 16. PR #17 merged as `88acedf5c12eedd33fefada28c6677f76ebf4a39`, and merge-triggered `main` CI run `33528694353` passed. F-0076 through F-0080 remain preserved as resolved Gate 16 regressions.
+None currently known in verified `main` through Gate 16. Gate 17 is in progress; F-0081 is preserved below as a resolved scale regression on the Gate 17 branch and is not yet merged.
 
 ---
 
@@ -1922,6 +1922,37 @@ OpenAI tool outputs now use explicit model-facing projections. Case/proof output
 Resolved in Gate 16.
 
 ---
+
+
+## F-0081 — Gate 7 provenance validation rescanned the full Money Graph per recon row
+
+**Date:** 2026-09-01
+**Area:** Gate 17 scale / Gate 7 composition execution
+**Severity:** high
+
+### Symptom
+The first Oracle scale baseline made a 50-settlement clean workload (6,084 raw rows) spend 2.733 s inside the ReFlow proof core, only 18.3 settlements/s. A cProfile run attributed about 7.0 of 9.8 profiled seconds to Gate 7 composition generation and showed roughly 13.8 million `EntityId.__str__` calls. The pre-optimization 1,000-settlement clean run remained CPU-bound and had still not completed after 20m31s, at which point it was stopped and recorded only as a lower bound.
+
+### Root cause
+`_required_provenance_edges()` scanned every `MoneyGraph` edge for every recon component to rediscover two exact authoritative provenance edges. Work therefore scaled approximately with recon rows multiplied by graph edges even though the graph was immutable for the batch.
+
+### Why it matters
+The bottleneck was algorithmic waste in deterministic proof validation, not a database or infrastructure limitation. Building distributed infrastructure would have hidden the real problem while preserving poor single-process scaling.
+
+### Fix
+`prove_all_settlement_compositions()` now builds one batch-local provenance-edge index keyed by relationship/from/to identity and passes it through Gate 7 proof generation. Each recon component still requires the exact two authoritative edges, exact source-envelope evidence, `PROVEN` state and `EXACT_SOURCE_IDENTIFIER`; only lookup strategy changed. No index/cache survives the canonical batch call.
+
+### Measured impact
+On the same Oracle VM and 50-settlement clean workload, the optimized official proof pipeline measured 0.154 s / 325.43 settlements/s versus 2.733 s / 18.3 settlements/s in the original core baseline (about 17.8x faster by wall-time comparison). The optimized 1,000-settlement clean workload completed in 25.53 s total with 120,052 raw rows and a 4.17 s proof pipeline (~240 settlements/s). The old 1k run has no invented completion number; only the >20m31s lower bound is retained.
+
+### Regression protection
+Existing Gate 7 duplicate/conflict/late/UTR/provenance tests remain green, provider-shaped Gate 15 proof tests remain green, and a Gate 17 regression checks indexed lookup uses the same proof semantics without cross-batch cache state.
+
+### Status
+Resolved in Gate 17.
+
+---
+
 
 # Failure categories still targeted deliberately
 
