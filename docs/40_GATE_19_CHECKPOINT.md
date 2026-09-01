@@ -16,7 +16,7 @@ Gate 19 evidence checkpoints on `build/gate-19-final-campaign-submission`:
 - final representative failure campaign + F-0084 regression: `6d6f0af5c7f537bc2a47812cbe51ee53499238ad`;
 - generated human-readable final evaluation report: `77198fb57be8eb03218abc6442d97162cd9513c5`.
 
-PR/merge CI is pending at this checkpoint.
+Gate 19 PR #23 merged as `d599a36df2a51275b1f5a420f453c5fa3774f074`. Exact merge-triggered `main` CI run `33546259876` passed on that SHA, including PostgreSQL, Python static/tests, frontend type/tests and production Vite build.
 
 ## 1. Frozen-before-seeing-results protocol
 
@@ -288,4 +288,4 @@ The following are intentionally not represented as completed by this checkpoint:
 - selecting a software license (repository currently has none; this is an owner/legal publishing choice);
 - optional synthetic-only public deployment with stable URL/monitoring.
 
-These do not alter the frozen evaluation result.
+These do not alter the frozen evaluation result. The repository engineering/evaluation gate sequence is complete; no further build gate follows Gate 19 in the revised plan.

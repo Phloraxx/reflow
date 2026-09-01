@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 19 — the final held-out v1, failure campaign and submission evidence are frozen and Oracle-validated on `build/gate-19-final-campaign-submission`; PR/merge CI is pending. ReFlow Core auto-reconciled 512/768 held-out settlements with 512/512 correct automatic matches (100% precision), 82.05% truth-reconciled recall and zero silent false auto-matches. See `EVALUATION.md` and `docs/40_GATE_19_CHECKPOINT.md`.**
+> **Current phase: Gates 1–19 are implemented and merged green. Gate 19 PR #23 merged as `d599a36df2a51275b1f5a420f453c5fa3774f074`; exact merge-triggered CI run `33546259876` passed. The frozen held-out v1 auto-reconciled 512/768 settlements with 512/512 correct automatic matches (100% precision), 82.05% truth-reconciled recall and zero silent false auto-matches. Remaining submission-owner actions are the pitch video/upload, final form entry, license choice, and any optional synthetic-only public demo. See `EVALUATION.md` and `docs/40_GATE_19_CHECKPOINT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
