@@ -31,8 +31,19 @@ def benchmark_payload(
         seed=observation_seed,
         plan=corruption_plan(profile),
     )
+    observed_record_count = sum(
+        len(rows)
+        for rows in (
+            bundle.observed.merchant_rows,
+            bundle.observed.razorpay_events,
+            bundle.observed.recon_rows,
+            bundle.observed.settlement_rows,
+            bundle.observed.bank_rows,
+        )
+    )
     metadata: dict[str, Any] = {
         "schema_version": EVALUATION_SCHEMA_VERSION,
+        "observed_record_count": observed_record_count,
         "world_seed": world_seed,
         "observation_seed": observation_seed,
         "settlement_count": settlement_count,

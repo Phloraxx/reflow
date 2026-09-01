@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 18**:
+ReFlow implementation scope now reaches **Gate 19**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -28,20 +28,20 @@ ReFlow implementation scope now reaches **Gate 18**:
 - a Gate 16 bounded exception investigator with immutable target binding, three read-only tools, content-addressed tool traces, deterministic proposal validation and an optional strict/stateless OpenAI Responses transport;
 - a Gate 17 measured one-process scale path plus PostgreSQL 16 durability/application boundary for append-only raw evidence, immutable product/audit artifacts and optimistic operational current pointers.
 - a Gate 18 scoped read-only FastAPI + React Operator Control Tower over immutable run/proof/case/source/evaluation state, including a deterministic synthetic demo path.
+- a Gate 19 frozen held-out evaluation/failure-campaign layer with precommitted seeds/scorer hashes, preserved first-run evidence, generated final metrics and submission reproducibility checks.
 
-Gate 11 fixed development-seed results, Gate 12 development adapter/migration corpora, Gate 13/14 deterministic fixtures, Gate 15 provider-document fixtures, Gate 16 fake-provider/OpenAI-transport fixtures, Gate 17 scale/PostgreSQL artifacts and the Gate 18 synthetic control-tower demo are regression/evidence checkpoints only. The final held-out reconciliation benchmark, live-model adapter/investigation benchmarks, authenticated real settlement/recon corpus and public authenticated deployment are **not complete yet**.
+Gate 19 now adds the first frozen held-out reconciliation result and a final representative failure campaign. Live-model adapter/investigation benchmarks, an authenticated real settlement/recon corpus, and a public authenticated production deployment are **not complete**.
 
-We currently make **no published claims** about:
+The repository may publish only the checked-in final evidence with its exact denominators:
 
-- final reconciliation accuracy or match rate;
-- production throughput or SLOs beyond the explicitly checked-in Gate 17 Oracle benchmark artifacts;
-- maximum supported transaction volume beyond the measured 10k-settlement Gate 17 tier;
-- memory consumption outside the explicitly measured Gate 17 workloads;
-- AI adapter success rate;
-- false-positive rate on a final held-out benchmark;
-- production readiness.
+- automatic match coverage: **512/768 = 66.67%**;
+- auto-match precision: **512/512 = 100%**;
+- truth-reconciled recall: **512/624 = 82.05%**;
+- silent false auto-match rate: **0/512 = 0%**;
+- 256 explicit non-green decisions on the primary held-out corpus;
+- Gate 17 proof-pipeline scale: **206.97 settlements/s** on the disclosed 10k Oracle workload.
 
-Any number presented as a final/production-capacity claim before the checked-in final held-out benchmark exists is a documentation bug. Explicit Gate 17 measurements must remain labelled with their exact workload and hardware.
+These are synthetic/adversarial reference results. ReFlow still makes **no claim** of production SLO/capacity, 100k/1M scale, live-model quality, real Test Mode settlement accuracy, or production readiness.
 
 ---
 
@@ -189,7 +189,7 @@ The final README/pitch must disclose:
 - how synthetic distributions were chosen;
 - which failure types are represented and omitted;
 - dataset seed/version;
-- held-out strategy;
+- frozen held-out strategy and seed/scorer hashes;
 - model/provider/version used for AI evaluation;
 - whether agent decisions are live or replayed;
 - hardware/runtime used for throughput;
@@ -279,3 +279,15 @@ The Gate 18 demo seeder is deterministic synthetic evidence generated through th
 FastAPI can serve the built Vite application and `/api` on one origin. F-0082 fixed SPA history fallback so direct client navigation works while unknown `/api/*` paths stay 404. This packaging path was smoke-tested on Oracle, but there is no public deployment/SLO/availability claim yet.
 
 The frontend formats exact API-supplied money values and performs presentation-only filtering. It must not become a second implementation of Gate 7/8/9 arithmetic or derive proof truth from displayed amounts.
+
+### 30. Gate 19 final evidence is frozen synthetic evidence, not production validation
+
+The final held-out v1 is intentionally synthetic/adversarial and its seeds/scorer/candidate hashes were committed before first execution. The first result is preserved unchanged. That makes the benchmark challengeable and reproducible; it does not make the synthetic distribution representative of every Razorpay merchant or bank.
+
+`66.67%` is the automatic match rate over all 768 requested settlements, not an accuracy score. The relevant correctness number for automatic green decisions is 512/512 = 100% precision on this frozen corpus; truth-reconciled recall is 512/624 = 82.05%. The strong B1 grouped-exact baseline ties ReFlow's recall, and the repository explicitly reports that tie.
+
+The final source-schema safety corpus and 12-check failure campaign test selected known safety boundaries. They do not constitute exhaustive security testing, penetration testing, formal verification or every possible financial/provider failure mode. The high-confidence secret-pattern scan is likewise not a substitute for platform-native secret scanning and repository-owner review.
+
+No live-model final quality benchmark ran because no provider key was configured on the final Oracle host. No real Razorpay settlement/recon accuracy benchmark ran because no suitable real/Test Mode settlement corpus was available. Those absences must remain visible in any submission/pitch.
+
+The repository is public, but a public authenticated ReFlow finance deployment is not claimed. A synthetic-only demo may be published separately. The current read-only web app still lacks authentication/RBAC and must not expose real merchant evidence publicly.
