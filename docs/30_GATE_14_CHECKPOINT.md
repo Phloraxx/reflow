@@ -2,11 +2,19 @@
 
 ## Status
 
-Gate 14 is implemented on `build/gate-14-exception-case-lifecycle` from verified Gate 13 `main` at `bd6f8b224c3100cb9354d0c4695982d216b6a877`.
+Gate 14 is implemented and merged through PR #13. It was built from verified Gate 13 `main` at `bd6f8b224c3100cb9354d0c4695982d216b6a877` and merged to `main` as `5118d36dcceb7c56bf0b1e784fa68264e0f113cf`.
 
 Code/test checkpoint:
 
 `83a422b9bf171c27f3cd8011d6c921605b097ad8`
+
+Documentation checkpoint:
+
+`0043863260b2c2cd27675d05a0539d0036aa0446`
+
+Merged `main` checkpoint:
+
+`5118d36dcceb7c56bf0b1e784fa68264e0f113cf`
 
 Local checkpoint validation on 2026-09-01:
 
@@ -15,7 +23,9 @@ Local checkpoint validation on 2026-09-01:
 - targeted Gate 14 suite: 29 passed;
 - full pytest suite: 269 passed;
 - direct production-module scan: no `reflow.simulator` / `simulator.truth` import;
-- `git diff --check`: passed.
+- `git diff --check`: passed;
+- PR #13 CI: passed;
+- merge-triggered `main` CI run `33516184548`: passed.
 
 Gate 14 contains no investigation-agent code and grants no AI authority over case creation, reconciliation truth, closure or incident grouping.
 

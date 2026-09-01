@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known in the deterministic implementation through the local Gate 14 code checkpoint `83a422b9bf171c27f3cd8011d6c921605b097ad8`. Gate 14 PR/merge CI is still pending; F-0068 through F-0070 are resolved with regressions.
+None currently known in the deterministic implementation through Gate 14. PR #13 merged as `5118d36dcceb7c56bf0b1e784fa68264e0f113cf`, and the merge-triggered `main` CI passed. F-0068 through F-0070 remain preserved as resolved regressions.
 
 ---
 
