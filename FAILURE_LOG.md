@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-No unresolved reproduced defects remain on `audit/post-final-whole-codebase` after F-0085 through F-0097 were fixed with regressions. These audit repairs are **not yet merged to `main`**; PR/main CI evidence is still required before this status can be promoted to merged. The frozen Gate 19 first-run v1 remains unchanged.
+None currently known through the post-final whole-codebase audit. F-0085 through F-0097 remain preserved below with regressions. Audit PR #25 merged as `71ae9ad039a99b5cf06c1e71d513f99be3231687`, and exact merge-triggered `main` CI run `33657418624` passed the PostgreSQL/frontend/submission validation. The frozen Gate 19 first-run v1 remains unchanged.
 
 ---
 

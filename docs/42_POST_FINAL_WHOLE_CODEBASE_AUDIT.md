@@ -3,7 +3,7 @@
 **Date:** 2026-09-02
 **Base `main`:** `4300f3493fcabb1b1fe4de732c9ce194c7adc1d7`
 **Audit branch:** `audit/post-final-whole-codebase`
-**Status:** fixes implemented and independently validated on the audit branch; PR/main merge evidence pending.
+**Status:** merged green via PR #25 as `71ae9ad039a99b5cf06c1e71d513f99be3231687`; exact merge-triggered `main` CI run `33657418624` passed.
 
 ## 1. Why this audit exists
 
@@ -210,3 +210,11 @@ This audit branch must not be merged until all of the following pass on the exac
 7. PR CI on the exact head.
 
 After merge, the exact `main` merge-triggered CI run must also be green before this post-final audit is considered closed.
+## 11. Merge evidence
+
+- audit PR: **#25**;
+- merge commit: `71ae9ad039a99b5cf06c1e71d513f99be3231687`;
+- exact merge-triggered `main` CI: **33657418624**, passed;
+- frozen Gate 19 held-out v1/seeds/scorer remained unchanged.
+
+The post-final audit is closed at this merge checkpoint.
