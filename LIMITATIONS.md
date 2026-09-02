@@ -291,3 +291,13 @@ The final source-schema safety corpus and 12-check failure campaign test selecte
 No live-model final quality benchmark ran because no provider key was configured on the final Oracle host. No real Razorpay settlement/recon accuracy benchmark ran because no suitable real/Test Mode settlement corpus was available. Those absences must remain visible in any submission/pitch.
 
 The repository is public, but a public authenticated ReFlow finance deployment is not claimed. A synthetic-only demo may be published separately. The current read-only web app still lacks authentication/RBAC and must not expose real merchant evidence publicly.
+
+### 31. Post-final audit hardening does not create a production application boundary
+
+The post-final whole-codebase audit hardened the reference implementation substantially: public durable writes now require typed/self-validating artifacts, current pointers are identity-coherent, proof browsing is tied to scoped run/manifests rather than storage labels, the public journal is a narrow façade, final evidence verification is required in CI, Python/CI bootstrap dependencies are constrained/pinned, optional OpenAI transport is HTTPS-only/no-redirect with a 1 MiB response ceiling, and Gate 12 model-facing profiles have explicit finite bounds.
+
+Those changes close reproduced reference-implementation defects; they do **not** add authentication, tenant authorization, RBAC/SSO, production connector identity, secret rotation, HA/backups/PITR, production observability or a public real-data deployment. `scope_id` remains routing identity rather than authorization.
+
+Independent branch-aware coverage is 79% on the repaired audit tree. Several proof/control validators remain intentionally complex and the Gate 13 control plane has the largest fail-closed branch-coverage debt at 73%. The generic reference artifact-list APIs also have finite query limits; production long-history operation needs pagination/indexed read models rather than assuming an unbounded in-process scan.
+
+The 46.91 MiB Gate 19 first-run held-out artifact remains checked in unchanged because it is evidence. The Control Tower consumes a compact self-verifying derived summary instead of loading that raw artifact for every Evaluation Lab request.
