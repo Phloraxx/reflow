@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gates 1–19 remain merged green. A post-final whole-codebase audit is implemented on `audit/post-final-whole-codebase` and is pending PR/merge. The audit reproduced and fixed persistence/currentness, proof-scope, evidence-CI, model-transport/resource and reproducibility defects without changing the frozen Gate 19 held-out v1. The repaired tree passes 419 PostgreSQL-enabled Python tests with 79% branch-aware coverage; see `docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md`.**
+> **Current phase: Gates 1–19 and the post-final whole-codebase audit are merged green. Audit PR #25 merged as `71ae9ad039a99b5cf06c1e71d513f99be3231687` and exact merge-triggered `main` CI run `33657418624` passed. The audit fixed F-0085 through F-0097 without changing the frozen Gate 19 held-out v1; the repaired tree passes 419 PostgreSQL-enabled Python tests with 79% branch-aware coverage. See `docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
