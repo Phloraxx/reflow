@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known through merged Gate 19. PR #23 merged as `d599a36df2a51275b1f5a420f453c5fa3774f074`, and exact merge-triggered `main` CI run `33546259876` passed. The first held-out v1 remains frozen at `4686608f23798c874579969e4896431899595256`; the representative failure campaign is 12/12 green; F-0084 remains preserved below as the resolved final-campaign harness defect.
+No unresolved reproduced defects remain on `audit/post-final-whole-codebase` after F-0085 through F-0097 were fixed with regressions. These audit repairs are **not yet merged to `main`**; PR/main CI evidence is still required before this status can be promoted to merged. The frozen Gate 19 first-run v1 remains unchanged.
 
 ---
 
@@ -2019,3 +2019,173 @@ The campaign now invokes pytest with `-q -rA` and requires both exit code 0 and 
 ### Financial truth impact
 
 None. The defect was in final regression-campaign result detection only; no proof, scorer, candidate or held-out v1 artifact changed.
+
+## F-0085 — Generic durable artifact writes could forge the operator-facing current run
+
+**Date:** 2026-09-02
+**Area:** Gate 17 persistence / Gate 18 Control Tower
+**Severity:** high
+
+**Failure:** `ReflowApplicationService.persist_artifact()` accepted arbitrary JSON for typed finance artifact kinds. A reproduced payload copied a valid run, replaced both its embedded ID and `code_build_sha`, persisted it as a later `RECONCILIATION_RUN`, and `ControlTowerReader.overview()` displayed the forged run because currentness was inferred by maximum timestamp rather than Gate 17 `LATEST_RUN` CAS state.
+
+**Invariant at risk:** durable/operator-facing finance state must be derived from self-validating typed artifacts; application persistence must not create financial or run truth from caller-authored JSON, and explicit current pointers must define operational currentness.
+
+**Required fix:** keep the low-level PostgreSQL store generic, but require the public application service to accept the correct self-validating artifact type and intrinsic ID; make Control Tower current-run reads follow `LATEST_RUN`; publish the demo current run through the CAS pointer; add regressions for arbitrary run payload rejection and stale/newer unpointed artifacts.
+
+**Financial truth impact:** the deterministic Gate 7/8/9 proof engine was not mutated. The defect could forge the read-model representation of durable/current run metadata for a caller with direct application-service write access.
+
+## F-0086 — Evaluation Lab stopped at Gate 17 and omitted the frozen Gate 19 result
+
+**Date:** 2026-09-02
+**Area:** Gate 18 product / Gate 19 evaluation
+**Severity:** medium
+
+**Failure:** the Control Tower defaulted to `data/eval/gate17` and its Evaluation Lab understood only scale/persistence artifacts, so the final frozen held-out match/precision/recall/exception evidence was absent from the finished product UI.
+
+**Required fix:** derive a compact self-verifying Gate 19 summary from the unchanged frozen first-run artifact, verify it against the source artifact, expose it through the read-only Evaluation API, and render it explicitly in Evaluation Lab without parsing the 47 MiB raw result on every request.
+
+## F-0087 — Final evidence verification was not part of CI
+
+**Date:** 2026-09-02
+**Area:** CI / reproducibility
+**Severity:** high
+
+**Failure:** CI ran static checks, pytest and frontend validation but never invoked the Gate 19 held-out verifier, failure-campaign verifier, Gate 17 scale/persistence verifiers, or generated `EVALUATION.md` check. Frozen evidence could therefore drift while ordinary CI stayed green.
+
+**Required fix:** make artifact verification a required CI step and regression-test the reviewer command contract.
+
+## F-0088 — Test/bootstrap dependency policy allowed known-vulnerable pytest and unbounded CI resolution
+
+**Date:** 2026-09-02
+**Area:** development tooling / supply-chain reproducibility
+**Severity:** medium
+
+**Failure:** `pytest>=8.3,<9` resolved to 8.4.2, which is affected by PYSEC-2026-1845 and cannot resolve the fixed 9.0.3 release. Python dependencies were range-resolved afresh in CI while the frontend used a lockfile. CI also did not explicitly upgrade pip before installation.
+
+**Required fix:** admit pytest 9.0.3+, add a clean checked-in CI/reviewer constraints set, pin the PEP 517 build tools, upgrade pip to a fixed modern line before dependency installation, and run the complete repository under the new toolchain before merging.
+
+## F-0089 — `make submission-check` could silently skip PostgreSQL integration tests
+
+**Date:** 2026-09-02
+**Area:** reviewer workflow
+**Severity:** medium
+
+**Failure:** the submission command depended on ordinary pytest behavior, where PostgreSQL tests skip when `REFLOW_TEST_POSTGRES_DSN` is absent. A reviewer could receive a successful `submission-check` without exercising durability semantics.
+
+**Required fix:** fail the submission command clearly when no test PostgreSQL DSN is configured, while preserving the lighter `make check` behavior for normal local development.
+
+## F-0090 — Public current-pointer writes did not bind stream keys to typed artifact identity
+
+**Date:** 2026-09-02
+**Area:** Gate 17 persistence currentness
+**Severity:** medium
+
+**Failure:** after hardening typed artifact writes, `ReflowApplicationService.publish_current()` still validated the semantic stream key only for `LATEST_RUN`. A valid typed proof, case observation, adapter or investigation result could therefore be attached to an unrelated operational stream key even though the low-level artifact kind was correct.
+
+**Invariant at risk:** operational currentness is separate from financial truth but must still be identity-coherent; `LATEST_PROOF` must key by settlement, `LATEST_CASE_OBSERVATION` and `LATEST_INVESTIGATION` by case, `LATEST_ADAPTER` by adapter identity, and scoped policy/run pointers by scope.
+
+**Required fix:** derive the expected stream key from the typed payload (and scoped metadata for policy), reject mismatches at the public application boundary, and retain the low-level PostgreSQL store as the intentionally generic CAS primitive.
+
+**Financial truth impact:** none directly; a malformed pointer cannot change immutable proof truth, but it can make an operational reader resolve the wrong current artifact if that reader trusts the pointer key.
+
+## F-0091 — CI bootstrap still depended on mutable action and PostgreSQL tags
+
+**Date:** 2026-09-02
+**Area:** CI supply-chain reproducibility
+**Severity:** medium
+
+**Failure:** after pinning Python packages, CI still referenced `actions/checkout@v7`, `actions/setup-python@v7`, `actions/setup-node@v6` and `postgres:16.15-alpine` by mutable tags. Those references can resolve to different code/images without a repository diff, weakening the reviewer reproducibility claim.
+
+**Required fix:** pin GitHub Actions to the exact commits currently resolved by their major tags and pin the PostgreSQL 16.15 Alpine service to its current OCI digest while retaining readable version comments/tags.
+
+**Financial truth impact:** none; CI bootstrap integrity/reproducibility only.
+
+## F-0092 — Final Evaluation card hardcoded campaign denominators in the frontend
+
+**Date:** 2026-09-02
+**Area:** Gate 18/19 read model and frontend evidence display
+**Severity:** low
+
+**Failure:** the first Gate 19 Evaluation Lab card rendered `4/4` schema fail-closed and `12/12` regression checks by hardcoding the denominators in React. The numerators came from the verified summary, but the denominator assumptions lived outside the evidence artifact.
+
+**Invariant at risk:** the frontend may format and filter verified facts but must not invent or retain hidden evaluation facts that can drift independently of the checked artifact.
+
+**Required fix:** include source-schema case count and failure-campaign check count in the compact Gate 19 summary, validate their partitions, and render both numerator and denominator from the API payload.
+
+**Financial truth impact:** none; presentation/evaluation-evidence integrity only.
+
+## F-0093 — Configurable OpenAI base URLs could send bearer credentials over insecure endpoints
+
+**Date:** 2026-09-02
+**Area:** Gate 12 / Gate 16 optional OpenAI transports
+**Severity:** medium
+
+**Failure:** both OpenAI provider classes accepted arbitrary `base_url` values while their default transport sends `Authorization: Bearer <api_key>` through `urllib.request.urlopen()`. A caller could therefore configure a plaintext HTTP or malformed/custom endpoint and expose provider credentials outside the intended TLS boundary.
+
+**Invariant at risk:** optional AI providers have no financial authority, but their credentials and bounded source context must still use a secure transport boundary.
+
+**Required fix:** require an absolute HTTPS base URL with a hostname, reject embedded URL credentials/fragments, refuse HTTP redirects in the default transport so bearer headers cannot be forwarded by urllib, and regression-test both the adapter-proposal and exception-investigation providers. Custom transport code remains caller-owned but receives only a validated endpoint configuration.
+
+**Financial truth impact:** none; provider transport/credential security only.
+
+## F-0094 — Public `service.journal` leaked the concrete PostgreSQL store and bypassed typed artifact writes
+
+**Date:** 2026-09-02
+**Area:** Gate 17 application-service capability boundary
+**Severity:** high
+
+**Failure:** `ReflowApplicationService.journal` was annotated as the narrow `Journal` protocol but returned the concrete `PostgresApplicationStore`. At runtime, callers could therefore reach `put_artifact()`, `advance_pointer()` and `publish_artifact_and_pointer()` through the public property and bypass the typed/self-validating application artifact boundary introduced for F-0085.
+
+**Invariant at risk:** the public application service must not expose generic SQL/artifact/currentness mutation capabilities merely through a wider concrete object hidden behind a protocol annotation.
+
+**Required fix:** return a concrete narrow Journal façade that delegates only append/get/get-by-id/entries/length raw-evidence operations, and regression-test the runtime public capability surface rather than relying on static typing.
+
+**Financial truth impact:** the deterministic proof engine was unchanged, but the capability leak re-exposed the same durable/operator-facing artifact forgery class to any caller holding the public `journal` property.
+
+## F-0095 — Direct proof reads trusted caller-supplied storage scope instead of run membership
+
+**Date:** 2026-09-02
+**Area:** Gate 17 persistence / Gate 18 Control Tower scope isolation
+**Severity:** high
+
+**Failure:** `ReconciliationProofVersion` is financially self-validating but intentionally has no intrinsic reconciliation `scope_id`. The application service accepted caller-supplied proof scope metadata, and `ControlTowerReader.proofs()` / `proof_detail()` trusted that storage scope directly. A valid proof could therefore be relabelled into an unrelated scope and appear in direct proof browsing even though no reconciliation run in that scope referenced it.
+
+**Invariant at risk:** a proof may be visible inside a reconciliation scope only when its cited evidence belongs to that scope and a typed reconciliation run in that scope references the proof version. Storage metadata alone is not financial provenance.
+
+**Fix:** application proof writes now require every cited raw evidence ID to be covered by typed source-delivery manifests already persisted for the supplied scope. Control Tower proof browsing independently derives the allowed proof ID set from typed reconciliation runs in the requested scope and rejects orphan/unreferenced proofs.
+
+**Regression:** PostgreSQL persistence rejects a valid proof relabelled into a scope with no matching scoped manifest evidence; Control Tower hides and rejects a same-scope stored proof that no scoped run references.
+
+**Financial truth impact:** Gate 7/8/9 proof semantics were unchanged. The defect affected durable scope metadata and operator-facing proof visibility.
+
+## F-0096 — Default OpenAI transports had no HTTP response byte ceiling
+
+**Date:** 2026-09-02
+**Area:** Gate 12 / Gate 16 optional OpenAI transports
+**Severity:** medium
+
+**Failure:** both default OpenAI transports called `response.read()` without a byte limit. Logical model/tool outputs were bounded, but a malformed or hostile endpoint could still return an arbitrarily large HTTP body and consume memory before JSON/schema validation.
+
+**Invariant at risk:** optional model integrations must fail closed under bounded resource use; model transport failure must not become an unbounded memory path.
+
+**Fix:** shared transport security now reads at most 1 MiB plus one sentinel byte and rejects oversized bodies before JSON decoding. Both provider-specific transports convert that failure into their existing non-authoritative provider-error paths.
+
+**Regression:** exact-limit bodies are accepted and one-byte-oversized bodies are rejected; the complete Gate 12/Gate 16 provider suites remain green.
+
+**Financial truth impact:** none; transport resource safety only.
+
+## F-0097 — Gate 12 documented bounded model profiles but allowed unbounded sample/schema width
+
+**Date:** 2026-09-02
+**Area:** Gate 12 Source Adapter Compiler
+**Severity:** medium
+
+**Failure:** `profile_rows()` only rejected negative `sample_limit` values. Callers could request arbitrarily many model-facing sample rows, and the structural profile accepted arbitrarily many or arbitrarily long source column names even though Gate 12 documentation explicitly described the model input as bounded.
+
+**Invariant at risk:** AI may inspect only a finite bounded projection of retained source evidence; caller-controlled profile size must not silently defeat the bounded-agent contract.
+
+**Fix:** model-facing profiles now allow at most 10 sample rows, 128 columns and 256 characters per column name. These bounds affect schema-understanding/model context only and do not grant the model any new parsing or reconciliation authority.
+
+**Regression:** maximum legal samples pass; over-limit sample counts, schema width and header length fail closed, including bool/non-integer sample-limit misuse.
+
+**Financial truth impact:** none; bounded AI input/resource semantics only.

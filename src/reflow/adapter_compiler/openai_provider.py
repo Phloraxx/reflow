@@ -9,6 +9,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from reflow.openai_transport_security import (
+    open_no_redirect,
+    read_bounded_openai_response,
+    validate_openai_https_endpoint,
+)
+
 from .contracts import AdapterSpec
 from .provider import AdapterProposalProvider, ProposalContext
 from .spec_io import adapter_spec_json_schema, parse_adapter_spec_payload
@@ -60,6 +66,7 @@ def _default_transport(
     payload: Mapping[str, object],
     timeout_seconds: float,
 ) -> Mapping[str, object]:
+    url = validate_openai_https_endpoint(url)
     request = urllib.request.Request(
         url,
         data=json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode(),
@@ -67,9 +74,10 @@ def _default_transport(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            body = json.loads(response.read().decode())
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        # Endpoint is HTTPS-validated and redirects are refused before bearer headers can move.
+        with open_no_redirect(request, timeout_seconds=timeout_seconds) as response:
+            body = json.loads(read_bounded_openai_response(response).decode())
+    except (urllib.error.URLError, TimeoutError, UnicodeDecodeError, ValueError) as exc:
         raise OpenAIProposalError(f"OpenAI proposal request failed: {type(exc).__name__}") from exc
     if not isinstance(body, Mapping):
         raise OpenAIProposalError("OpenAI response root must be an object")
@@ -138,6 +146,7 @@ class OpenAIAdapterProposalProvider(AdapterProposalProvider):
             raise ValueError("OpenAI API key cannot be empty")
         if not self.model or self.model != self.model.strip():
             raise ValueError("OpenAI model must be non-empty and trimmed")
+        validate_openai_https_endpoint(self.base_url)
         if self.timeout_seconds <= 0:
             raise ValueError("OpenAI timeout must be positive")
 

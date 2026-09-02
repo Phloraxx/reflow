@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, "build/**"]
+    branches: [main, "build/**", "audit/**"]
   pull_request:
 
 permissions:
@@ -14,7 +14,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16.15-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
         env:
           POSTGRES_USER: reflow_test
           POSTGRES_PASSWORD: reflow_test
@@ -27,35 +27,25 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
           cache: pip
-      - uses: actions/setup-node@v6
+          cache-dependency-path: requirements/ci-constraints.txt
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: "20.20.2"
           cache: npm
           cache-dependency-path: web/package-lock.json
       - name: Install Python
-        run: python -m pip install -e '.[dev,postgres,web]'
+        run: |
+          python -m pip install --upgrade 'pip==26.2.1'
+          python -m pip install -c requirements/ci-constraints.txt -e '.[dev,postgres,web]'
       - name: Install frontend
         working-directory: web
         run: npm ci
-      - name: Lint
-        run: python -m ruff check .
-      - name: Type check
-        run: python -m mypy src
-      - name: Tests
+      - name: Submission check
         env:
           REFLOW_TEST_POSTGRES_DSN: postgresql://reflow_test:reflow_test@127.0.0.1:5432/reflow_ci
-        run: python -m pytest
-      - name: Frontend type check
-        working-directory: web
-        run: npm run check
-      - name: Frontend tests
-        working-directory: web
-        run: npm test
-      - name: Frontend production build
-        working-directory: web
-        run: npm run build
+        run: make submission-check

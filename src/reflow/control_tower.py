@@ -8,7 +8,7 @@ from typing import Protocol
 
 from . import domain
 from .evaluation.benchmark_artifacts import load_verified_benchmark
-from .persistence import ArtifactKind, StoredArtifact
+from .persistence import ArtifactKind, CurrentPointer, PointerKind, StoredArtifact
 
 __all__ = [
     "BankProofView",
@@ -44,6 +44,8 @@ class ControlTowerNotFound(LookupError):
 
 class ReadArtifactStore(Protocol):
     def artifact(self, artifact_id: str) -> StoredArtifact | None: ...
+
+    def current(self, *, kind: PointerKind, stream_key: str) -> CurrentPointer | None: ...
 
     def artifacts(
         self,
@@ -391,10 +393,12 @@ class ControlTowerReader:
         store: ReadArtifactStore,
         *,
         evaluation_root: Path,
+        final_evaluation_summary: Path | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self._store = store
         self._evaluation_root = evaluation_root
+        self._final_evaluation_summary = final_evaluation_summary
         self._now = now or (lambda: datetime.now(UTC))
 
     def _list(
@@ -426,10 +430,12 @@ class ControlTowerReader:
         return artifact
 
     def _latest_run_artifact(self, scope_id: domain.ReconciliationScopeId) -> StoredArtifact | None:
-        runs = self._list(ArtifactKind.RECONCILIATION_RUN, scope_id)
-        if not runs:
+        pointer = self._store.current(kind=PointerKind.LATEST_RUN, stream_key=str(scope_id))
+        if pointer is None:
             return None
-        return max(runs, key=lambda item: (_artifact_time(item, "completed_at"), item.artifact_id))
+        if pointer.kind is not PointerKind.LATEST_RUN or pointer.stream_key != str(scope_id):
+            raise ControlTowerIntegrityError("latest run pointer does not match requested scope")
+        return self._artifact(pointer.artifact_id, ArtifactKind.RECONCILIATION_RUN, scope_id)
 
     @staticmethod
     def _source_item(artifact: StoredArtifact) -> SourceLabItem:
@@ -466,6 +472,14 @@ class ControlTowerReader:
         )
         return tuple(sorted(items, key=lambda item: (item.source_kind, item.manifest_id)))
 
+    def _scoped_run_proof_ids(
+        self, scope_id: domain.ReconciliationScopeId
+    ) -> frozenset[str]:
+        proof_ids: set[str] = set()
+        for run in self._list(ArtifactKind.RECONCILIATION_RUN, scope_id):
+            proof_ids.update(_strings(run.payload.get("proof_version_ids"), "run proof IDs"))
+        return frozenset(proof_ids)
+
     def _proof_list_item(self, artifact: StoredArtifact) -> ProofListItem:
         p = artifact.payload
         composition = _mapping(p.get("composition"), "proof composition")
@@ -484,9 +498,12 @@ class ControlTowerReader:
         )
 
     def proofs(self, scope_id: domain.ReconciliationScopeId) -> tuple[ProofListItem, ...]:
+        proof_ids = self._scoped_run_proof_ids(scope_id)
         items = tuple(
-            self._proof_list_item(artifact)
-            for artifact in self._list(ArtifactKind.PROOF_VERSION, scope_id)
+            self._proof_list_item(
+                self._artifact(proof_id, ArtifactKind.PROOF_VERSION, scope_id)
+            )
+            for proof_id in proof_ids
         )
         return tuple(
             sorted(
@@ -503,6 +520,10 @@ class ControlTowerReader:
         self, scope_id: domain.ReconciliationScopeId, proof_id: str
     ) -> ProofDetailView:
         artifact = self._artifact(proof_id, ArtifactKind.PROOF_VERSION, scope_id)
+        if proof_id not in self._scoped_run_proof_ids(scope_id):
+            raise ControlTowerIntegrityError(
+                "proof is not referenced by any reconciliation run in requested scope"
+            )
         p = artifact.payload
         composition = _mapping(p.get("composition"), "proof composition")
         bank = _mapping(p.get("bank"), "proof bank")
@@ -940,10 +961,19 @@ class ControlTowerReader:
         )
 
     def evaluation(self) -> EvaluationLabView:
-        if not self._evaluation_root.exists():
-            return EvaluationLabView(artifacts=())
+        paths = (
+            []
+            if not self._evaluation_root.exists()
+            else list(sorted(self._evaluation_root.glob("*.json")))
+        )
+        if (
+            self._final_evaluation_summary is not None
+            and self._final_evaluation_summary.is_file()
+            and self._final_evaluation_summary not in paths
+        ):
+            paths.append(self._final_evaluation_summary)
         artifacts: list[EvaluationArtifactView] = []
-        for path in sorted(self._evaluation_root.glob("*.json")):
+        for path in paths:
             try:
                 payload = load_verified_benchmark(path)
             except (OSError, ValueError) as exc:

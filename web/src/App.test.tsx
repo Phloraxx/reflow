@@ -77,13 +77,21 @@ describe('ReFlow control tower', () => {
     expect(screen.getByText('₹900.00')).toBeInTheDocument()
   })
 
-  it('renders verified evaluation metrics directly', async () => {
-    mockFetch({ '/api/v1/evaluation': { artifacts: [{ filename: 'scale-10000-clean.json', schema_version: 'gate17-scale-benchmark-v1', artifact_sha256: 'abc123', config: { settlement_count: 10000 }, hardware: { machine: 'aarch64', python: '3.12.3' }, metrics: { settlements_per_second_proof_pipeline: 206.97, max_rss_kib: 3332736, raw_rows: 1203220 }, status_counts: { proven_reconciled: 8000, residual: 1000 } }] } })
+  it('renders verified Gate 17 and final held-out evaluation metrics directly', async () => {
+    mockFetch({ '/api/v1/evaluation': { artifacts: [
+      { filename: 'scale-10000-clean.json', schema_version: 'gate17-scale-benchmark-v1', artifact_sha256: 'abc123', config: { settlement_count: 10000 }, hardware: { machine: 'aarch64', python: '3.12.3' }, metrics: { settlements_per_second_proof_pipeline: 206.97, max_rss_kib: 3332736, raw_rows: 1203220 }, status_counts: { proven_reconciled: 8000, residual: 1000 } },
+      { filename: 'final-summary.json', schema_version: 'gate19-final-summary-v1', artifact_sha256: 'def456', config: { settlement_count: 768 }, hardware: { machine: 'aarch64', python: '3.12.3' }, metrics: { safe_match_rate: 0.666667, auto_match_precision: 1, truth_reconciled_recall: 0.820513, false_auto_reconciled: 0, non_green_decisions: 256, fuzzy_false_auto_reconciled: 9, source_schema_case_count: 4, source_schema_fail_closed_cases: 4, failure_campaign_check_count: 12, failure_campaign_passed: 12 }, status_counts: { reconciled: 512, residual: 78, unresolved: 170, contradicted: 8 } },
+    ] } })
     renderAt('/evaluation?scope=scope_ui')
     expect(await screen.findByText('scale-10000-clean.json')).toBeInTheDocument()
     expect(screen.getByText('206.97 /s')).toBeInTheDocument()
     expect(screen.getByText('1,203,220')).toBeInTheDocument()
-    expect(screen.getByText('8,000')).toBeInTheDocument()
+    expect(screen.getByText('final-summary.json')).toBeInTheDocument()
+    expect(screen.getByText('100.00%')).toBeInTheDocument()
+    expect(screen.getByText('82.05%')).toBeInTheDocument()
+    expect(screen.getByText('9')).toBeInTheDocument()
+    expect(screen.getByText('4/4')).toBeInTheDocument()
+    expect(screen.getByText('12/12')).toBeInTheDocument()
   })
 
   it('renders an explicit integrity/API error state', async () => {

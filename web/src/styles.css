@@ -221,6 +221,10 @@ a.table-row:hover { background: var(--panel-2); color: var(--text); }
 .status-counts b { color: var(--text); font-size: 13px; }
 .eval-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--line-soft); padding: 12px 16px; color: var(--quiet); font-size: 9px; }
 .eval-foot .artifact-id { max-width: 45%; }
+.evaluation-final { grid-column: 1 / -1; }
+.eval-proofline { display: flex; flex-wrap: wrap; border-top: 1px solid var(--line-soft); }
+.eval-proofline span { flex: 1 0 170px; display: grid; gap: 3px; padding: 12px 15px; border-right: 1px solid var(--line-soft); color: var(--quiet); font-size: 8px; text-transform: uppercase; }
+.eval-proofline b { color: var(--text); font-size: 13px; }
 
 @media (max-width: 1120px) {
   .app-shell { grid-template-columns: 190px minmax(0,1fr); }

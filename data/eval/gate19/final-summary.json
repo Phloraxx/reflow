@@ -1,0 +1,43 @@
+{
+  "artifact_sha256": "a2a6a2bfc84d22bb311d36465ac618fd531c0eec9a6e457b9e6001f4c7527ab6",
+  "config": {
+    "case_count": 12,
+    "observed_record_count": 87364,
+    "settlement_count": 768,
+    "truth_reconciled_settlements": 624
+  },
+  "hardware": {
+    "cpu_count": 4,
+    "machine": "aarch64",
+    "platform": "Linux-6.17.0-1020-oracle-aarch64-with-glibc2.39",
+    "python": "3.12.3"
+  },
+  "metrics": {
+    "auto_match_precision": 1.0,
+    "auto_reconciled": 512,
+    "failure_campaign_check_count": 12,
+    "failure_campaign_failed": 0,
+    "failure_campaign_passed": 12,
+    "false_auto_reconciled": 0,
+    "fuzzy_false_auto_reconciled": 9,
+    "non_green_decisions": 256,
+    "safe_match_rate": 0.666667,
+    "silent_false_auto_match_rate": 0.0,
+    "source_schema_candidate_decisions": 0,
+    "source_schema_case_count": 4,
+    "source_schema_fail_closed_cases": 4,
+    "true_auto_reconciled": 512,
+    "truth_reconciled_recall": 0.820513
+  },
+  "schema_version": "gate19-final-summary-v1",
+  "source_failure_artifact_sha256": "75ae650eacd98c062d4cd944594c07c322b3a55b7613491ae776067e17d7bb38",
+  "source_heldout_artifact_sha256": "9f544fc298a64b7ad55537a55a8d7be853ba76b17588de7277ed0a59ac50f53e",
+  "source_manifest_sha256": "6bce895f10181e2a312a72f8d63ee9f49badcc7b2f25a5134f6c6decde336336",
+  "status_counts": {
+    "contradicted": 8,
+    "incomplete": 0,
+    "reconciled": 512,
+    "residual": 78,
+    "unresolved": 170
+  }
+}

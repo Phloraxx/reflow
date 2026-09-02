@@ -42,7 +42,12 @@ from reflow.investigation import (
 )
 from reflow.journal import InMemoryJournal
 from reflow.money_graph import build_money_graph
-from reflow.persistence import ArtifactKind, PostgresApplicationStore, ReflowApplicationService
+from reflow.persistence import (
+    ArtifactKind,
+    PointerKind,
+    PostgresApplicationStore,
+    ReflowApplicationService,
+)
 from reflow.reconciliation_proof import InMemoryProofLedger, ReconciliationProofVersion
 from reflow.settlement_proof import prove_all_settlement_compositions
 
@@ -369,12 +374,15 @@ def seed_demo(dsn: str) -> DemoBundle:
         scope_id=bundle.scope.id,
         observed_at=RUN_COMPLETED_AT,
     )
-    service.persist_artifact(
-        kind=ArtifactKind.RECONCILIATION_RUN,
+    service.publish_current(
+        artifact_kind=ArtifactKind.RECONCILIATION_RUN,
         artifact_id=str(bundle.run.id),
         payload=bundle.run,
         scope_id=bundle.scope.id,
         observed_at=bundle.run.completed_at,
+        pointer_kind=PointerKind.LATEST_RUN,
+        stream_key=str(bundle.scope.id),
+        expected_generation=0,
     )
     for observation in bundle.observations:
         service.persist_artifact(

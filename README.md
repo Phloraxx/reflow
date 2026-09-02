@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gates 1–19 are implemented and merged green. Gate 19 PR #23 merged as `d599a36df2a51275b1f5a420f453c5fa3774f074`; exact merge-triggered CI run `33546259876` passed. The frozen held-out v1 auto-reconciled 512/768 settlements with 512/512 correct automatic matches (100% precision), 82.05% truth-reconciled recall and zero silent false auto-matches. Remaining submission-owner actions are the pitch video/upload, final form entry, license choice, and any optional synthetic-only public demo. See `EVALUATION.md` and `docs/40_GATE_19_CHECKPOINT.md`.**
+> **Current phase: Gates 1–19 remain merged green. A post-final whole-codebase audit is implemented on `audit/post-final-whole-codebase` and is pending PR/merge. The audit reproduced and fixed persistence/currentness, proof-scope, evidence-CI, model-transport/resource and reproducibility defects without changing the frozen Gate 19 held-out v1. The repaired tree passes 419 PostgreSQL-enabled Python tests with 79% branch-aware coverage; see `docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -299,6 +299,12 @@ For scale, the independently verified Gate 17 clean 10k artifact records **206.9
 
 See [`EVALUATION.md`](EVALUATION.md) for exact denominators, edge metrics, exception reasons, reproduction commands and non-claims. The raw first-run result remains checked in under `data/eval/gate19/final-heldout.json`.
 
+### Post-final whole-codebase audit
+
+After Gates 1–19 merged, ReFlow was audited again from final `main` rather than treating green CI as proof that every runtime boundary matched the design. The audit reproduced F-0085 through F-0097 across durable artifact authority/currentness, proof scope isolation, final-evidence CI, dependency/bootstrap reproducibility, OpenAI transport/resource bounds and bounded Gate 12 model profiles.
+
+The repaired branch passes **419 PostgreSQL-enabled Python tests** with **79% branch-aware coverage**; independent Bandit medium/high, Python advisory and npm production/dev scans are clean. The frozen first-run Gate 19 held-out artifact/seeds/scorer were not altered. See [`docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md`](docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md).
+
 ---
 
 ## Current deterministic gates
@@ -406,19 +412,28 @@ See [`docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](docs/39_GATE_19_CONTRACT_AN
 ## Commands
 
 ```bash
-# Python + PostgreSQL/read-API + frontend development dependencies
+# Python + PostgreSQL/read-API + frontend development dependencies.
+# make install uses the checked-in Python constraints and npm lockfile.
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install -e '.[dev,postgres,web]'
-cd web && npm ci && cd ..
+make install
 
-# Full local static/unit/build path (PostgreSQL integration tests run when
-# REFLOW_TEST_POSTGRES_DSN is configured).
+# Full local static/unit/build path. PostgreSQL integration tests run when
+# REFLOW_TEST_POSTGRES_DSN is configured.
 make check
 
-# Submission reviewer path: normal checks + verification of the frozen Gate 19/Gate 17 artifacts.
-# This verifies the first held-out v1; it does not rerun or overwrite it.
+# Submission reviewer path. The preflight deliberately refuses to skip the
+# PostgreSQL durability suite. The held-out v1 is verified, never overwritten.
+docker run --rm -d --name reflow-review-postgres \
+  -e POSTGRES_USER=reflow_review \
+  -e POSTGRES_PASSWORD=reflow_review \
+  -e POSTGRES_DB=reflow_review \
+  -p 127.0.0.1:55433:5432 \
+  postgres:16.15-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+until docker exec reflow-review-postgres pg_isready -U reflow_review -d reflow_review >/dev/null 2>&1; do sleep 1; done
+export REFLOW_TEST_POSTGRES_DSN='postgresql://reflow_review:reflow_review@127.0.0.1:55433/reflow_review'
 make submission-check
+docker stop reflow-review-postgres
 
 # Development-only deterministic evaluation artifact
 python -m reflow.evaluation.runner --world-seed 401 --observation-seed 1401 --settlements 50 --profile reconciliation_adversarial --output /tmp/reflow-gate11.json
@@ -436,7 +451,7 @@ docker run --rm -d --name reflow-demo-postgres \
   -e POSTGRES_USER=reflow_demo \
   -e POSTGRES_PASSWORD=reflow_demo \
   -e POSTGRES_DB=reflow_demo \
-  -p 127.0.0.1:55432:5432 postgres:16-alpine
+  -p 127.0.0.1:55432:5432 postgres:16.15-alpine
 
 until docker exec reflow-demo-postgres pg_isready -U reflow_demo -d reflow_demo >/dev/null 2>&1; do sleep 1; done
 export REFLOW_POSTGRES_DSN='postgresql://reflow_demo:reflow_demo@127.0.0.1:55432/reflow_demo'

@@ -94,6 +94,10 @@ def load_verified_benchmark(path: Path) -> dict[str, Any]:
         verify_scale_benchmark_payload(payload)
     elif schema == PERSISTENCE_BENCHMARK_SCHEMA_VERSION:
         verify_persistence_benchmark_payload(payload)
+    elif schema == "gate19-final-summary-v1":
+        from .final_summary import verify_final_summary_payload
+
+        verify_final_summary_payload(payload)
     else:
         raise ValueError(f"unsupported benchmark schema {schema!r}")
     return payload
