@@ -1,8 +1,8 @@
 # Post-Final Whole-Codebase Audit
 
-**Date:** 2026-09-02  
-**Base `main`:** `4300f3493fcabb1b1fe4de732c9ce194c7adc1d7`  
-**Audit branch:** `audit/post-final-whole-codebase`  
+**Date:** 2026-09-02
+**Base `main`:** `4300f3493fcabb1b1fe4de732c9ce194c7adc1d7`
+**Audit branch:** `audit/post-final-whole-codebase`
 **Status:** fixes implemented and independently validated on the audit branch; PR/main merge evidence pending.
 
 ## 1. Why this audit exists
@@ -131,7 +131,9 @@ Branch-aware full-suite run after F-0097:
 
 The control plane remains the largest meaningful fail-closed branch-coverage debt. The audit did not inflate coverage by adding low-value tests solely to improve the percentage.
 
-The complete repository also passed under `python -O` during the audit, demonstrating that production `assert` statements are not carrying hidden financial/integrity authority. A final post-change optimized run is part of the branch validation before merge.
+The exact repaired working tree also passed `make submission-check` with PostgreSQL 16.15 enabled: Ruff, strict mypy across 66 source files, 419 Python tests, 5 React tests, TypeScript, the Vite production build, the frozen Gate 19 held-out verifier, the 12-check failure campaign, the compact Gate 19 summary, Gate 17 scale/persistence verifiers and generated `EVALUATION.md`.
+
+The final repaired tree also passed **419/419 tests under `python -O`** with PostgreSQL enabled. Pytest emitted only its expected warning that test-module assertions themselves are disabled under optimized Python. This confirms production `assert` statements are not carrying hidden financial/integrity authority.
 
 ## 5. Independent security / supply-chain results
 

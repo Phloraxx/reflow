@@ -60,4 +60,3 @@ def test_openai_response_reader_rejects_body_over_one_mibibyte() -> None:
     oversized = b"x" * (MAX_OPENAI_RESPONSE_BYTES + 1)
     with pytest.raises(ValueError, match="byte limit"):
         read_bounded_openai_response(_FakeResponse(oversized))
-
