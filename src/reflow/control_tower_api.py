@@ -106,10 +106,17 @@ def app_from_env() -> FastAPI:
     dsn = os.getenv("REFLOW_POSTGRES_DSN")
     if not dsn:
         raise RuntimeError("REFLOW_POSTGRES_DSN is required for the control tower API")
+    repo_root = Path(__file__).resolve().parents[2]
     root = Path(
         os.getenv(
             "REFLOW_EVALUATION_ROOT",
-            str(Path(__file__).resolve().parents[2] / "data" / "eval" / "gate17"),
+            str(repo_root / "data" / "eval" / "gate17"),
+        )
+    )
+    final_summary = Path(
+        os.getenv(
+            "REFLOW_FINAL_EVALUATION_SUMMARY",
+            str(repo_root / "data" / "eval" / "gate19" / "final-summary.json"),
         )
     )
     store = PostgresApplicationStore(dsn)
@@ -121,6 +128,10 @@ def app_from_env() -> FastAPI:
     else:
         web_dist = Path(web_dist_value)
     return create_control_tower_app(
-        ControlTowerReader(service, evaluation_root=root),
+        ControlTowerReader(
+            service,
+            evaluation_root=root,
+            final_evaluation_summary=final_summary,
+        ),
         web_dist=web_dist,
     )

@@ -8,7 +8,12 @@ import pytest
 
 from reflow import domain
 from reflow.control_tower import ControlTowerReader
-from reflow.persistence import ArtifactKind, PostgresApplicationStore, ReflowApplicationService
+from reflow.persistence import (
+    ArtifactKind,
+    PointerKind,
+    PostgresApplicationStore,
+    ReflowApplicationService,
+)
 
 DSN = os.getenv("REFLOW_TEST_POSTGRES_DSN")
 NOW = datetime(2026, 9, 1, 18, 0, tzinfo=UTC)
@@ -46,7 +51,7 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
     balance_id = "balance_gate18_pg"
     run_id = "run_gate18_pg"
 
-    service.persist_artifact(
+    store.put_artifact(
         kind=ArtifactKind.SOURCE_DELIVERY_MANIFEST,
         artifact_id=manifest_id,
         scope_id=SCOPE,
@@ -67,7 +72,7 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
             "schema_fingerprint": "bank-schema-v1",
         },
     )
-    service.persist_artifact(
+    store.put_artifact(
         kind=ArtifactKind.PROOF_VERSION,
         artifact_id=proof_id,
         scope_id=SCOPE,
@@ -104,14 +109,14 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
             "reopened": False,
         },
     )
-    service.persist_artifact(
+    store.put_artifact(
         kind=ArtifactKind.CLOSE_READINESS,
         artifact_id=close_id,
         scope_id=SCOPE,
         observed_at=NOW,
         payload={"id": close_id, "status": "ready", "reason_codes": []},
     )
-    service.persist_artifact(
+    store.put_artifact(
         kind=ArtifactKind.EVIDENCE_COVERAGE,
         artifact_id=coverage_id,
         scope_id=SCOPE,
@@ -124,7 +129,7 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
             "orphan_known_value": _money(0),
         },
     )
-    service.persist_artifact(
+    store.put_artifact(
         kind=ArtifactKind.BALANCE_CONTROL,
         artifact_id=balance_id,
         scope_id=SCOPE,
@@ -136,7 +141,7 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
             "residual": _money(0),
         },
     )
-    service.persist_artifact(
+    store.put_artifact(
         kind=ArtifactKind.RECONCILIATION_RUN,
         artifact_id=run_id,
         scope_id=SCOPE,
@@ -157,6 +162,13 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
             "balance_control_id": balance_id,
             "close_readiness_id": close_id,
         },
+    )
+
+    store.advance_pointer(
+        kind=PointerKind.LATEST_RUN,
+        stream_key=str(SCOPE),
+        artifact_id=run_id,
+        expected_generation=0,
     )
 
     reader = ControlTowerReader(service, evaluation_root=tmp_path, now=lambda: NOW)

@@ -99,6 +99,16 @@ def _response(payload: object) -> Mapping[str, object]:
     }
 
 
+def test_openai_provider_requires_secure_absolute_base_url() -> None:
+    for value in ("http://api.openai.com/v1/responses", "file:///tmp/responses", "not-a-url"):
+        with pytest.raises(ValueError, match="HTTPS"):
+            OpenAIAdapterProposalProvider(api_key="key", model="model", base_url=value)
+    with pytest.raises(ValueError, match="credentials"):
+        OpenAIAdapterProposalProvider(
+            api_key="key", model="model", base_url="https://user:pass@example.com/v1/responses"
+        )
+
+
 def test_openai_provider_uses_strict_schema_bounded_data_and_store_false() -> None:
     captured: dict[str, object] = {}
 

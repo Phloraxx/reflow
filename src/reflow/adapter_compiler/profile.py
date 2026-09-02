@@ -6,6 +6,10 @@ from dataclasses import dataclass
 
 from reflow.ingestion import RawRecord
 
+MAX_PROFILE_COLUMNS = 128
+MAX_PROFILE_COLUMN_NAME_CHARS = 256
+MAX_PROFILE_SAMPLE_ROWS = 10
+
 
 def _normalize_column(value: str) -> str:
     return " ".join(value.casefold().strip().split())
@@ -50,9 +54,19 @@ class StructuralProfile:
 
 
 def profile_rows(rows: tuple[RawRecord, ...], *, sample_limit: int = 5) -> StructuralProfile:
-    if sample_limit < 0:
-        raise ValueError("sample limit cannot be negative")
+    if isinstance(sample_limit, bool) or not isinstance(sample_limit, int):
+        raise TypeError("sample limit must be int")
+    if not 0 <= sample_limit <= MAX_PROFILE_SAMPLE_ROWS:
+        raise ValueError(
+            f"sample limit must be between zero and {MAX_PROFILE_SAMPLE_ROWS}"
+        )
     names = sorted({key for row in rows for key in row})
+    if len(names) > MAX_PROFILE_COLUMNS:
+        raise ValueError(f"source profile exceeds {MAX_PROFILE_COLUMNS} columns")
+    if any(len(name) > MAX_PROFILE_COLUMN_NAME_CHARS for name in names):
+        raise ValueError(
+            f"source profile column name exceeds {MAX_PROFILE_COLUMN_NAME_CHARS} characters"
+        )
     columns: list[ColumnProfile] = []
     fingerprint_columns: list[dict[str, object]] = []
     for name in names:

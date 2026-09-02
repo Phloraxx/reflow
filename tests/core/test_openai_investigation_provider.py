@@ -66,6 +66,18 @@ def _proposal(fixture, *, citation: str, amount: int):
     }
 
 
+def test_provider_requires_secure_absolute_base_url() -> None:
+    for value in ("http://api.openai.com/v1/responses", "file:///tmp/responses", "not-a-url"):
+        with pytest.raises(ValueError, match="HTTPS"):
+            OpenAIInvestigationProvider(api_key="key", model="gpt-test", base_url=value)
+    with pytest.raises(ValueError, match="credentials"):
+        OpenAIInvestigationProvider(
+            api_key="key",
+            model="gpt-test",
+            base_url="https://user:pass@example.com/v1/responses",
+        )
+
+
 def test_provider_requires_explicit_key_and_model() -> None:
     with pytest.raises(ValueError, match="API key"):
         OpenAIInvestigationProvider(api_key="", model="gpt-test")

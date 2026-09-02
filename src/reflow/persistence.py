@@ -5,7 +5,7 @@ import importlib
 import json
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import dataclass, fields, is_dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol, Self, cast
@@ -838,16 +838,25 @@ class PostgresApplicationStore(Journal):
         *,
         for_update: bool,
     ) -> CurrentPointer | None:
-        suffix = " FOR UPDATE" if for_update else ""
-        cursor.execute(
-            """
-            SELECT pointer_kind, stream_key, artifact_id, generation, updated_at
-            FROM reflow_current_pointers
-            WHERE pointer_kind = %s AND stream_key = %s
-            """
-            + suffix,
-            (kind.value, stream_key),
-        )
+        if for_update:
+            cursor.execute(
+                """
+                SELECT pointer_kind, stream_key, artifact_id, generation, updated_at
+                FROM reflow_current_pointers
+                WHERE pointer_kind = %s AND stream_key = %s
+                FOR UPDATE
+                """,
+                (kind.value, stream_key),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT pointer_kind, stream_key, artifact_id, generation, updated_at
+                FROM reflow_current_pointers
+                WHERE pointer_kind = %s AND stream_key = %s
+                """,
+                (kind.value, stream_key),
+            )
         row = cursor.fetchone()
         return None if row is None else PostgresApplicationStore._row_to_pointer(row)
 
@@ -1016,6 +1025,123 @@ class PostgresApplicationStore(Journal):
         )
 
 
+def _application_artifact_type(kind: ArtifactKind) -> type[object]:
+    from .adapter_compiler.lifecycle import ApprovedAdapterVersion
+    from .control_plane import (
+        BalanceControlProof,
+        CloseReadinessCertificate,
+        EvidenceCoverageCertificate,
+        ReconciliationPolicyVersion,
+        ReconciliationRun,
+        ReconciliationScope,
+        SourceDeliveryManifest,
+    )
+    from .exception_cases import ExceptionCaseDisposition, ExceptionCaseObservation, IncidentCluster
+    from .investigation import InvestigationRunResult, ToolTraceEntry
+    from .reconciliation_proof import ReconciliationProofVersion
+
+    return {
+        ArtifactKind.RECONCILIATION_SCOPE: ReconciliationScope,
+        ArtifactKind.POLICY_VERSION: ReconciliationPolicyVersion,
+        ArtifactKind.SOURCE_DELIVERY_MANIFEST: SourceDeliveryManifest,
+        ArtifactKind.EVIDENCE_COVERAGE: EvidenceCoverageCertificate,
+        ArtifactKind.BALANCE_CONTROL: BalanceControlProof,
+        ArtifactKind.CLOSE_READINESS: CloseReadinessCertificate,
+        ArtifactKind.RECONCILIATION_RUN: ReconciliationRun,
+        ArtifactKind.PROOF_VERSION: ReconciliationProofVersion,
+        ArtifactKind.CASE_OBSERVATION: ExceptionCaseObservation,
+        ArtifactKind.CASE_DISPOSITION: ExceptionCaseDisposition,
+        ArtifactKind.INCIDENT_CLUSTER: IncidentCluster,
+        ArtifactKind.APPROVED_ADAPTER: ApprovedAdapterVersion,
+        ArtifactKind.INVESTIGATION_RESULT: InvestigationRunResult,
+        ArtifactKind.INVESTIGATION_TRACE: ToolTraceEntry,
+    }[kind]
+
+
+def _validated_application_artifact(
+    *,
+    kind: ArtifactKind,
+    artifact_id: str,
+    payload: object,
+    scope_id: domain.ReconciliationScopeId | None,
+) -> object:
+    expected_type = _application_artifact_type(kind)
+    if not isinstance(payload, expected_type):
+        raise PersistenceError(
+            f"{kind.value} application writes require typed self-validating "
+            f"{expected_type.__name__}"
+        )
+    # Re-run top-level dataclass validation so a frozen object altered through unsafe
+    # reflection cannot bypass its own immutable-ID/content checks at this boundary.
+    try:
+        replace(cast(Any, payload))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise PersistenceIntegrityError(
+            f"{kind.value} artifact failed typed self-validation"
+        ) from exc
+    intrinsic_id = getattr(payload, "id", None)
+    if intrinsic_id is not None and str(intrinsic_id) != artifact_id:
+        raise PersistenceIntegrityError(
+            f"{kind.value} artifact id disagrees with typed payload identity"
+        )
+    intrinsic_scope = getattr(payload, "scope_id", None)
+    if intrinsic_scope is not None and intrinsic_scope != scope_id:
+        raise PersistenceIntegrityError(
+            f"{kind.value} artifact scope disagrees with typed payload scope"
+        )
+    return payload
+
+
+def _expected_application_stream_key(
+    *,
+    pointer_kind: PointerKind,
+    payload: object,
+    scope_id: domain.ReconciliationScopeId | None,
+) -> str:
+    if pointer_kind is PointerKind.LATEST_POLICY:
+        if scope_id is None:
+            raise PersistenceIntegrityError("latest_policy requires a reconciliation scope")
+        return str(scope_id)
+    typed = cast(Any, payload)
+    if pointer_kind is PointerKind.LATEST_RUN:
+        return str(typed.scope_id)
+    if pointer_kind is PointerKind.LATEST_PROOF:
+        return str(typed.settlement_id)
+    if pointer_kind is PointerKind.LATEST_CASE_OBSERVATION:
+        return str(typed.case_id)
+    if pointer_kind is PointerKind.LATEST_ADAPTER:
+        return str(typed.spec.adapter_id)
+    if pointer_kind is PointerKind.LATEST_INVESTIGATION:
+        return str(typed.case_id)
+    raise AssertionError(f"unhandled pointer kind {pointer_kind}")
+
+
+class _JournalFacade:
+    __slots__ = ("__store",)
+
+    def __init__(self, store: PostgresApplicationStore) -> None:
+        self.__store = store
+
+    def append(self, envelope: domain.SourceEnvelope) -> AppendResult:
+        return self.__store.append(envelope)
+
+    def get(
+        self, source_kind: domain.SourceKind, source_record_id: str
+    ) -> domain.SourceEnvelope | None:
+        return self.__store.get(source_kind, source_record_id)
+
+    def get_by_id(
+        self, envelope_id: domain.SourceEnvelopeId
+    ) -> domain.SourceEnvelope | None:
+        return self.__store.get_by_id(envelope_id)
+
+    def entries(self) -> tuple[domain.SourceEnvelope, ...]:
+        return self.__store.entries()
+
+    def __len__(self) -> int:
+        return len(self.__store)
+
+
 class ReflowApplicationService:
     """Minimal Gate 17 application boundary; deliberately exposes no financial mutation API."""
 
@@ -1023,13 +1149,51 @@ class ReflowApplicationService:
         if not isinstance(store, PostgresApplicationStore):
             raise TypeError("application service requires PostgresApplicationStore")
         self._store = store
+        self._journal: Journal = _JournalFacade(store)
 
     @property
     def journal(self) -> Journal:
-        return self._store
+        return self._journal
 
     def append_source(self, envelope: domain.SourceEnvelope) -> AppendResult:
         return self._store.append(envelope)
+
+    def _validate_scope_context(
+        self,
+        *,
+        kind: ArtifactKind,
+        payload: object,
+        scope_id: domain.ReconciliationScopeId | None,
+    ) -> None:
+        if kind is not ArtifactKind.PROOF_VERSION:
+            return
+        if scope_id is None:
+            raise PersistenceIntegrityError("proof version application writes require a scope")
+        proof = cast(Any, payload)
+        manifests = self._store.list_artifacts(
+            kind=ArtifactKind.SOURCE_DELIVERY_MANIFEST,
+            scope_id=scope_id,
+            limit=10_000,
+        )
+        covered_source_ids: set[str] = set()
+        for manifest in manifests:
+            if manifest.payload.get("scope_id") != str(scope_id):
+                raise PersistenceIntegrityError(
+                    "scoped source manifest payload disagrees with storage scope"
+                )
+            effective = manifest.payload.get("effective_envelope_ids")
+            if not isinstance(effective, list) or any(
+                not isinstance(item, str) for item in effective
+            ):
+                raise PersistenceIntegrityError(
+                    "scoped source manifest evidence IDs are invalid"
+                )
+            covered_source_ids.update(effective)
+        proof_source_ids = {str(item) for item in proof.source_envelope_ids}
+        if not proof_source_ids or not proof_source_ids.issubset(covered_source_ids):
+            raise PersistenceIntegrityError(
+                "proof evidence is not covered by scoped source manifests"
+            )
 
     def persist_artifact(
         self,
@@ -1040,10 +1204,14 @@ class ReflowApplicationService:
         scope_id: domain.ReconciliationScopeId | None = None,
         observed_at: datetime | None = None,
     ) -> ArtifactWriteResult:
+        validated = _validated_application_artifact(
+            kind=kind, artifact_id=artifact_id, payload=payload, scope_id=scope_id
+        )
+        self._validate_scope_context(kind=kind, payload=validated, scope_id=scope_id)
         return self._store.put_artifact(
             kind=kind,
             artifact_id=artifact_id,
-            payload=payload,
+            payload=validated,
             scope_id=scope_id,
             observed_at=observed_at,
         )
@@ -1075,10 +1243,28 @@ class ReflowApplicationService:
         stream_key: str,
         expected_generation: int,
     ) -> tuple[ArtifactWriteResult, CurrentPointer]:
+        validated = _validated_application_artifact(
+            kind=artifact_kind, artifact_id=artifact_id, payload=payload, scope_id=scope_id
+        )
+        if not isinstance(pointer_kind, PointerKind):
+            raise TypeError("pointer kind must be PointerKind")
+        if _POINTER_ARTIFACT_KIND[pointer_kind] is not artifact_kind:
+            raise PersistenceIntegrityError("pointer kind does not match typed artifact kind")
+        expected_stream_key = _expected_application_stream_key(
+            pointer_kind=pointer_kind, payload=validated, scope_id=scope_id
+        )
+        if stream_key != expected_stream_key:
+            raise PersistenceIntegrityError(
+                f"{pointer_kind.value} stream key must equal typed artifact identity "
+                f"{expected_stream_key!r}"
+            )
+        self._validate_scope_context(
+            kind=artifact_kind, payload=validated, scope_id=scope_id
+        )
         return self._store.publish_artifact_and_pointer(
             artifact_kind=artifact_kind,
             artifact_id=artifact_id,
-            payload=payload,
+            payload=validated,
             scope_id=scope_id,
             observed_at=observed_at,
             pointer_kind=pointer_kind,

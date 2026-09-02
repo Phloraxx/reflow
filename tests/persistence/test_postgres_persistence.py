@@ -9,7 +9,7 @@ import pytest
 from reflow import domain
 from reflow.control_plane import make_reconciliation_scope
 from reflow.ingestion import ObservedBatch, ingest_observed_batch
-from reflow.journal import AppendDisposition, JournalConflictError, make_source_envelope
+from reflow.journal import AppendDisposition, Journal, JournalConflictError, make_source_envelope
 from reflow.persistence import (
     POSTGRES_SCHEMA_VERSION,
     ArtifactKind,
@@ -310,6 +310,68 @@ def test_atomic_artifact_pointer_publish_rolls_back_new_artifact_on_stale_cas(st
     assert store.get_artifact("proofv_atomic_2") is None
     assert (
         store.get_pointer(kind=PointerKind.LATEST_PROOF, stream_key="setl_atomic") == first_pointer
+    )
+
+
+def test_application_service_rejects_untyped_finance_artifact_payload(store) -> None:
+    service = ReflowApplicationService(store)
+    scope_id = _scope("typed-boundary")
+    with pytest.raises(PersistenceError, match="typed self-validating"):
+        service.persist_artifact(
+            kind=ArtifactKind.RECONCILIATION_RUN,
+            artifact_id="run_forged_application_payload",
+            payload={
+                "id": "run_forged_application_payload",
+                "scope_id": str(scope_id),
+                "outcome": "ready",
+                "code_build_sha": "forged",
+            },
+            scope_id=scope_id,
+            observed_at=NOW,
+        )
+
+
+def test_application_service_rejects_wrong_semantic_pointer_stream_key(store) -> None:
+    from reflow.evaluation.control_tower_demo import build_demo_bundle
+
+    bundle = build_demo_bundle()
+    service = ReflowApplicationService(store)
+    with pytest.raises(PersistenceIntegrityError, match="latest_proof stream key"):
+        service.publish_current(
+            artifact_kind=ArtifactKind.PROOF_VERSION,
+            artifact_id=str(bundle.proof.id),
+            payload=bundle.proof,
+            scope_id=bundle.scope.id,
+            observed_at=bundle.proof.generated_at,
+            pointer_kind=PointerKind.LATEST_PROOF,
+            stream_key="setl_wrong_stream",
+            expected_generation=0,
+        )
+
+
+
+def test_application_service_rejects_proof_scope_without_scoped_manifest_evidence(store) -> None:
+    from reflow.evaluation.control_tower_demo import build_demo_bundle
+
+    bundle = build_demo_bundle()
+    service = ReflowApplicationService(store)
+    foreign_scope = _scope("foreign-proof-scope")
+    with pytest.raises(PersistenceIntegrityError, match="scoped source manifests"):
+        service.persist_artifact(
+            kind=ArtifactKind.PROOF_VERSION,
+            artifact_id=str(bundle.proof.id),
+            payload=bundle.proof,
+            scope_id=foreign_scope,
+            observed_at=bundle.proof.generated_at,
+        )
+
+def test_application_service_journal_does_not_expose_generic_store_capabilities(store) -> None:
+    service = ReflowApplicationService(store)
+    journal = service.journal
+    assert isinstance(journal, Journal)
+    public = {name for name in dir(journal) if not name.startswith("_")}
+    assert public.isdisjoint(
+        {"put_artifact", "advance_pointer", "publish_artifact_and_pointer", "execute"}
     )
 
 

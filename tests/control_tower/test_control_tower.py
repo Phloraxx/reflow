@@ -13,7 +13,13 @@ from reflow.control_tower import (
     ControlTowerNotFound,
     ControlTowerReader,
 )
-from reflow.persistence import ArtifactKind, StoredArtifact, canonical_artifact_sha256
+from reflow.persistence import (
+    ArtifactKind,
+    CurrentPointer,
+    PointerKind,
+    StoredArtifact,
+    canonical_artifact_sha256,
+)
 
 NOW = datetime(2026, 9, 1, 17, 30, tzinfo=UTC)
 SCOPE_A = domain.ReconciliationScopeId("scope_control_tower_a")
@@ -21,11 +27,51 @@ SCOPE_B = domain.ReconciliationScopeId("scope_control_tower_b")
 
 
 class FakeStore:
-    def __init__(self, artifacts: tuple[StoredArtifact, ...]) -> None:
+    def __init__(
+        self,
+        artifacts: tuple[StoredArtifact, ...],
+        *,
+        latest_run_ids: Mapping[str, str] | None = None,
+    ) -> None:
         self._by_id = {item.artifact_id: item for item in artifacts}
+        if latest_run_ids is None:
+            latest_run_ids = {
+                str(scope_id): max(
+                    (
+                        item
+                        for item in artifacts
+                        if item.kind is ArtifactKind.RECONCILIATION_RUN
+                        and item.scope_id == scope_id
+                    ),
+                    key=lambda item: (
+                        item.observed_at or datetime.min.replace(tzinfo=UTC),
+                        item.artifact_id,
+                    ),
+                ).artifact_id
+                for scope_id in {
+                    item.scope_id
+                    for item in artifacts
+                    if item.kind is ArtifactKind.RECONCILIATION_RUN and item.scope_id is not None
+                }
+            }
+        self._latest_run_ids = dict(latest_run_ids)
 
     def artifact(self, artifact_id: str) -> StoredArtifact | None:
         return self._by_id.get(artifact_id)
+
+    def current(self, *, kind: PointerKind, stream_key: str) -> CurrentPointer | None:
+        if kind is not PointerKind.LATEST_RUN:
+            return None
+        artifact_id = self._latest_run_ids.get(stream_key)
+        if artifact_id is None:
+            return None
+        return CurrentPointer(
+            kind=kind,
+            stream_key=stream_key,
+            artifact_id=artifact_id,
+            generation=1,
+            updated_at=NOW,
+        )
 
     def artifacts(
         self,
@@ -363,6 +409,33 @@ def _reader(
     )
 
 
+def test_overview_uses_explicit_latest_run_pointer_not_newer_unpointed_artifact(
+    tmp_path: Path,
+) -> None:
+    artifacts = _base_artifacts()
+    current = next(item for item in artifacts if item.artifact_id == "run_ui")
+    forged_payload = dict(current.payload)
+    forged_payload["id"] = "run_unpointed_newer"
+    forged_payload["code_build_sha"] = "unpointed-newer"
+    newer = StoredArtifact(
+        artifact_id="run_unpointed_newer",
+        kind=ArtifactKind.RECONCILIATION_RUN,
+        scope_id=SCOPE_A,
+        observed_at=NOW + timedelta(days=1),
+        payload_sha256=canonical_artifact_sha256(forged_payload),
+        payload=forged_payload,
+    )
+    store = FakeStore(
+        (*artifacts, newer),
+        latest_run_ids={str(SCOPE_A): "run_ui"},
+    )
+    reader = ControlTowerReader(store, evaluation_root=tmp_path, now=lambda: NOW)
+    overview = reader.overview(SCOPE_A)
+    assert overview.run is not None
+    assert overview.run.run_id == "run_ui"
+    assert overview.run.code_build_sha == "95164be"
+
+
 def test_overview_binds_current_run_controls_and_exact_status_totals(tmp_path: Path) -> None:
     overview = _reader(tmp_path).overview(SCOPE_A)
     assert overview.has_current_run
@@ -426,6 +499,27 @@ def test_proof_detail_rejects_cross_scope_artifact(tmp_path: Path) -> None:
     with pytest.raises(ControlTowerIntegrityError, match="another reconciliation scope"):
         reader.proof_detail(SCOPE_A, "proofv_foreign")
 
+
+
+def test_proof_browsing_rejects_orphan_proof_not_referenced_by_scoped_run(tmp_path: Path) -> None:
+    orphan = _artifact(
+        ArtifactKind.PROOF_VERSION,
+        "proofv_orphan_same_scope",
+        SCOPE_A,
+        _proof(
+            "proofv_orphan_same_scope",
+            "setl_orphan",
+            "proven_reconciled",
+            100,
+            generated_at=NOW,
+        ),
+    )
+    reader = _reader(tmp_path, (*_base_artifacts(), orphan))
+    assert "proofv_orphan_same_scope" not in {item.proof_id for item in reader.proofs(SCOPE_A)}
+    with pytest.raises(
+        ControlTowerIntegrityError, match="not referenced by any reconciliation run"
+    ):
+        reader.proof_detail(SCOPE_A, "proofv_orphan_same_scope")
 
 def test_exception_queue_derives_workflow_owner_source_blocker_and_age(tmp_path: Path) -> None:
     queue = _reader(tmp_path).exceptions(SCOPE_A)
