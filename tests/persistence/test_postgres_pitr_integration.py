@@ -49,6 +49,30 @@ def _wait_ready(container: str) -> None:
     raise AssertionError("PostgreSQL PITR container did not become ready")
 
 
+def _wait_promoted(container: str) -> None:
+    deadline = time.monotonic() + 60
+    while time.monotonic() < deadline:
+        result = _docker(
+            "exec",
+            container,
+            "psql",
+            "-U",
+            DB_USER,
+            "-d",
+            DB_NAME,
+            "-At",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            "SELECT pg_is_in_recovery();",
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip() == "f":
+            return
+        time.sleep(0.25)
+    raise AssertionError("PostgreSQL PITR recovery target did not finish promotion")
+
+
 def _psql(container: str, sql: str) -> str:
     result = _docker(
         "exec",
@@ -209,6 +233,7 @@ def test_real_postgres16_named_restore_point_pitr_drill() -> None:
             POSTGRES_IMAGE,
         )
         _wait_ready(recovered)
+        _wait_promoted(recovered)
 
         rows = _psql(
             recovered,
