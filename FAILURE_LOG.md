@@ -2496,3 +2496,14 @@ None. The defect was in final regression-campaign result detection only; no proo
 **Fix/regression:** `httpx2` moved to the `dev` extra, which is already installed by the reviewer/CI path. Focused FastAPI tests remain green, the combined `.[dev,postgres,web]` constrained install still resolves, and an `--ignore-installed` dry-run of `.[web]` confirms `httpx2`/`httpcore2`/`truststore` are absent from the runtime dependency set.
 
 **Financial truth impact:** none; this reduces production dependency/attack surface without changing runtime behavior.
+## F-0124 — PITR readiness probe could race Docker database initialization
+
+**Date:** 2026-09-03
+**Area:** PostgreSQL PITR acceptance harness
+**Severity:** low
+
+**Failure:** the first full reviewer run exposed a race in the new physical-recovery test. The harness used `pg_isready -d reflow_pitr` as its startup gate, but `pg_isready` reports server connection acceptance without requiring the requested database to exist. On a slower Docker initialization, the probe succeeded before the entrypoint had created `reflow_pitr`, so the following baseline `psql` command failed with `database "reflow_pitr" does not exist`.
+
+**Fix/regression:** PITR container readiness now requires an actual `SELECT 1` through `psql` against the exact target database. The fixed drill passed five consecutive isolated runs and then passed the complete PostgreSQL-enabled reviewer suite. This makes the acceptance test wait for the same database-level condition its next operation requires instead of inferring readiness from socket acceptance.
+
+**Financial truth impact:** none; the defect existed only in the new recovery-test startup harness and never affected application persistence or reconciliation behavior.

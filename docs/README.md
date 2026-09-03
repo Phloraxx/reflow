@@ -6,22 +6,23 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable Razorpay webhook ingress gate with exact PR and `main` CI closure evidence.
-2. [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged restore-tested PostgreSQL logical-backup gate; PITR remains unclaimed.
-3. [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged Cloudflare Access authentication and exact-scope authorization boundary.
-4. [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — merged readiness and real-Razorpay acceptance foundation.
-5. [`43_THIRD_WHOLE_CODEBASE_AUDIT.md`](43_THIRD_WHOLE_CODEBASE_AUDIT.md) — latest closed whole-codebase audit and merge evidence.
-6. [`../EVALUATION.md`](../EVALUATION.md) — frozen evaluation metrics, denominators, exception list and reproduction commands.
-7. [`40_GATE_19_CHECKPOINT.md`](40_GATE_19_CHECKPOINT.md) — final held-out evidence and submission-hardening checkpoint.
-8. [`39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md) — pre-execution frozen Gate 19 seeds/scorer/campaign contract.
-9. [`41_FINAL_5_MINUTE_PITCH.md`](41_FINAL_5_MINUTE_PITCH.md) — final timed pitch script and recording runbook.
-10. [`38_GATE_18_CHECKPOINT.md`](38_GATE_18_CHECKPOINT.md) / [`37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Operator Control Tower implementation and contract.
-11. [`36_GATE_17_CHECKPOINT.md`](36_GATE_17_CHECKPOINT.md) / [`35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — measured scale and PostgreSQL durability.
-12. [`34_GATE_16_CHECKPOINT.md`](34_GATE_16_CHECKPOINT.md) / [`33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) — bounded investigation agent.
-13. [`32_GATE_15_CHECKPOINT.md`](32_GATE_15_CHECKPOINT.md) / [`31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Razorpay provider boundary.
-14. [`30_GATE_14_CHECKPOINT.md`](30_GATE_14_CHECKPOINT.md) / [`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — exception lifecycle and incident grouping.
-15. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) + [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — post-Gate-12 architecture and deterministic control plane.
-16. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — historical comprehensive build plan; later checkpoints supersede its status.
+1. [`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — active single-host deployment and real PostgreSQL PITR mechanics gate; local full validation is green, merge closure pending.
+2. [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable Razorpay webhook ingress gate with exact PR and `main` CI closure evidence.
+3. [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged restore-tested PostgreSQL logical-backup gate; PITR remains unclaimed.
+4. [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged Cloudflare Access authentication and exact-scope authorization boundary.
+5. [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — merged readiness and real-Razorpay acceptance foundation.
+6. [`43_THIRD_WHOLE_CODEBASE_AUDIT.md`](43_THIRD_WHOLE_CODEBASE_AUDIT.md) — latest closed whole-codebase audit and merge evidence.
+7. [`../EVALUATION.md`](../EVALUATION.md) — frozen evaluation metrics, denominators, exception list and reproduction commands.
+8. [`40_GATE_19_CHECKPOINT.md`](40_GATE_19_CHECKPOINT.md) — final held-out evidence and submission-hardening checkpoint.
+9. [`39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md) — pre-execution frozen Gate 19 seeds/scorer/campaign contract.
+10. [`41_FINAL_5_MINUTE_PITCH.md`](41_FINAL_5_MINUTE_PITCH.md) — final timed pitch script and recording runbook.
+11. [`38_GATE_18_CHECKPOINT.md`](38_GATE_18_CHECKPOINT.md) / [`37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Operator Control Tower implementation and contract.
+12. [`36_GATE_17_CHECKPOINT.md`](36_GATE_17_CHECKPOINT.md) / [`35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — measured scale and PostgreSQL durability.
+13. [`34_GATE_16_CHECKPOINT.md`](34_GATE_16_CHECKPOINT.md) / [`33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) — bounded investigation agent.
+14. [`32_GATE_15_CHECKPOINT.md`](32_GATE_15_CHECKPOINT.md) / [`31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Razorpay provider boundary.
+15. [`30_GATE_14_CHECKPOINT.md`](30_GATE_14_CHECKPOINT.md) / [`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — exception lifecycle and incident grouping.
+16. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) + [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — post-Gate-12 architecture and deterministic control plane.
+17. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — historical comprehensive build plan; later checkpoints supersede its status.
 
 ---
 
@@ -74,6 +75,7 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged production human authentication and exact-scope authorization.
 - [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged logical backup/restore verification contract.
 - [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable provider-authenticated webhook receipt/replay contract.
+- [`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — active production deployment/PITR contract with real recovery-drill acceptance evidence.
 
 ## Execution and submission
 
@@ -89,26 +91,27 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. merged durable webhook-ingress contract (`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`)
-3. merged logical backup/recovery contract (`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`)
-4. merged authentication/scope-authorization contract (`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`)
-5. production-readiness foundation (`44_PRODUCTION_READINESS_PHASE1.md`)
-6. latest closed audit (`43_THIRD_WHOLE_CODEBASE_AUDIT.md`)
-7. frozen first-run Gate 19 artifacts + generated `EVALUATION.md`
-8. Gate 19 implementation checkpoint (`40_GATE_19_CHECKPOINT.md`)
-9. frozen Gate 19 pre-execution contract (`39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`)
-10. `38_GATE_18_CHECKPOINT.md` / `37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-11. `36_GATE_17_CHECKPOINT.md` / `35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-12. `34_GATE_16_CHECKPOINT.md` / `33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-13. `32_GATE_15_CHECKPOINT.md` / `31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-14. `30_GATE_14_CHECKPOINT.md` / `29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-15. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
-16. `28_GATE_13_CHECKPOINT.md` and earlier implemented checkpoints
-17. `16_MASTER_BUILD_PLAN.md`
-18. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
-19. `11`–`14` and `18`
-20. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
-21. `04`–`09` as earlier planning history
+2. active production deployment/PITR contract (`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`)
+3. merged durable webhook-ingress contract (`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`)
+4. merged logical backup/recovery contract (`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`)
+5. merged authentication/scope-authorization contract (`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`)
+6. production-readiness foundation (`44_PRODUCTION_READINESS_PHASE1.md`)
+7. latest closed audit (`43_THIRD_WHOLE_CODEBASE_AUDIT.md`)
+8. frozen first-run Gate 19 artifacts + generated `EVALUATION.md`
+9. Gate 19 implementation checkpoint (`40_GATE_19_CHECKPOINT.md`)
+10. frozen Gate 19 pre-execution contract (`39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`)
+11. `38_GATE_18_CHECKPOINT.md` / `37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+12. `36_GATE_17_CHECKPOINT.md` / `35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+13. `34_GATE_16_CHECKPOINT.md` / `33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+14. `32_GATE_15_CHECKPOINT.md` / `31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+15. `30_GATE_14_CHECKPOINT.md` / `29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+16. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
+17. `28_GATE_13_CHECKPOINT.md` and earlier implemented checkpoints
+18. `16_MASTER_BUILD_PLAN.md`
+19. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
+20. `11`–`14` and `18`
+21. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
+22. `04`–`09` as earlier planning history
 
 If implementation/evaluation contradicts any document, update the plan and preserve the finding in `FAILURE_LOG.md` where appropriate.
 

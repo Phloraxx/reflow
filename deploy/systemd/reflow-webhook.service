@@ -1,0 +1,31 @@
+[Unit]
+Description=ReFlow Razorpay Webhook Ingress
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=reflow
+Group=reflow
+WorkingDirectory=/opt/reflow/current
+EnvironmentFile=/etc/reflow/webhook.env
+ExecStart=/opt/reflow/current/.venv/bin/python -m uvicorn reflow.webhook_api:app_from_env --factory --host 127.0.0.1 --port 8081 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
