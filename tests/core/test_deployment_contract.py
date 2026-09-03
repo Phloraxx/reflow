@@ -30,11 +30,13 @@ def test_systemd_services_are_separate_and_loopback_only() -> None:
     webhook = _service_text(WEBHOOK_UNIT)
 
     assert "EnvironmentFile=/etc/reflow/control-tower.env" in control
+    assert "SyslogIdentifier=reflow-control-tower" in control
     assert "reflow.control_tower_api:app_from_env" in control
     assert "--port 8080" in control
     assert "reflow.webhook_api:app_from_env" not in control
 
     assert "EnvironmentFile=/etc/reflow/webhook.env" in webhook
+    assert "SyslogIdentifier=reflow-webhook" in webhook
     assert "reflow.webhook_api:app_from_env" in webhook
     assert "--port 8081" in webhook
     assert "reflow.control_tower_api:app_from_env" not in webhook
@@ -49,6 +51,10 @@ def test_cloudflared_example_routes_two_hostnames_and_fails_closed() -> None:
     assert "service: http://127.0.0.1:8081" in text
     assert text.rstrip().endswith("- service: http_status:404")
     assert text.count("hostname:") == 2
+    metrics_block = text.index("path: ^/internal/metrics$")
+    control_host = text.index("hostname: control.example.com")
+    assert metrics_block < control_host
+    assert "service: http_status:404" in text[metrics_block:control_host]
 
 
 def test_deployment_env_files_keep_human_and_provider_secrets_separate() -> None:
@@ -59,8 +65,10 @@ def test_deployment_env_files_keep_human_and_provider_secrets_separate() -> None
     assert "REFLOW_CF_ACCESS_ISSUER=" in control
     assert "REFLOW_CF_ACCESS_AUD=" in control
     assert "REFLOW_RAZORPAY_WEBHOOK_SECRET" not in control
+    assert "REFLOW_METRICS_TOKEN=" in control
 
     assert "REFLOW_RAZORPAY_WEBHOOK_MODE=enabled" in webhook
     assert "REFLOW_RAZORPAY_WEBHOOK_SECRET=" in webhook
     assert "REFLOW_RAZORPAY_WEBHOOK_PREVIOUS_SECRET=" in webhook
+    assert "REFLOW_METRICS_TOKEN=" in webhook
     assert "REFLOW_CF_ACCESS_ISSUER" not in webhook

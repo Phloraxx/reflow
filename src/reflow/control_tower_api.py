@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import domain
@@ -18,6 +19,23 @@ from .access_auth import (
     auth_boundary_from_env,
 )
 from .control_tower import ControlTowerIntegrityError, ControlTowerNotFound, ControlTowerReader
+from .observability import (
+    EventSink,
+    MetricsRegistry,
+    install_http_observability,
+    json_event_sink,
+    metrics_response,
+    metrics_token_from_env,
+    normalize_metrics_token,
+    request_id,
+)
+from .operator_audit import (
+    OperatorAuditAction,
+    OperatorAuditDecision,
+    OperatorAuditRecorder,
+    PostgresOperatorAuditStore,
+    principal_subject_sha256,
+)
 from .persistence import PostgresApplicationStore, ReflowApplicationService
 
 __all__ = ["app_from_env", "create_control_tower_app"]
@@ -36,12 +54,24 @@ def create_control_tower_app(
     web_dist: Path | None = None,
     readiness_probe: Callable[[], None] | None = None,
     auth_boundary: AccessAuthBoundary | None = None,
+    operator_audit: OperatorAuditRecorder | None = None,
+    metrics: MetricsRegistry | None = None,
+    metrics_token: str | None = None,
+    event_sink: EventSink | None = None,
 ) -> FastAPI:
+    if auth_boundary is not None and operator_audit is None:
+        raise RuntimeError("authenticated control tower requires operator audit persistence")
+
+    metrics_token = normalize_metrics_token(metrics_token)
+
     app = FastAPI(
         title="ReFlow Operator Control Tower",
         version="0.1.0",
         description="Read-only Gate 18 projection over immutable ReFlow finance artifacts.",
     )
+    metrics_registry = metrics if metrics is not None else MetricsRegistry()
+    sink = event_sink if event_sink is not None else json_event_sink("reflow-control-tower")
+    install_http_observability(app, metrics=metrics_registry, event_sink=sink)
 
     @app.exception_handler(ControlTowerNotFound)
     async def not_found(_request: Request, exc: ControlTowerNotFound) -> JSONResponse:
@@ -62,6 +92,11 @@ def create_control_tower_app(
             "financial_truth_mutation": False,
             "generic_sql": False,
             "authentication": "cloudflare_access" if auth_boundary is not None else "disabled",
+            "request_correlation": "generated",
+            "operator_audit": "postgresql_append_only"
+            if operator_audit is not None
+            else "disabled",
+            "metrics": "token_gated" if metrics_token is not None else "disabled",
         }
 
     def authenticated_principal(request: Request) -> AuthenticatedPrincipal | None:
@@ -73,7 +108,52 @@ def create_control_tower_app(
         except AccessAuthenticationError as exc:
             raise HTTPException(status_code=401, detail="authentication required") from exc
 
-    def authorized_scope(request: Request, scope_id: str) -> domain.ReconciliationScopeId:
+    def audit_access(
+        request: Request,
+        *,
+        principal: AuthenticatedPrincipal,
+        action: OperatorAuditAction,
+        scope_id: domain.ReconciliationScopeId | None,
+        decision: OperatorAuditDecision,
+    ) -> None:
+        if operator_audit is None:
+            return
+        try:
+            digest = principal_subject_sha256(principal.subject)
+            operator_audit.record_access(
+                occurred_at=datetime.now(tz=UTC),
+                request_id=request_id(request),
+                principal_subject_sha256=digest,
+                action=action,
+                scope_id=scope_id,
+                decision=decision,
+            )
+        except Exception as exc:
+            sink(
+                {
+                    "event.name": "reflow.operator.audit.persistence_failure",
+                    "reflow.request_id": request_id(request),
+                    "reflow.operator.action": action.value,
+                }
+            )
+            raise HTTPException(status_code=503, detail="operator audit unavailable") from exc
+        metrics_registry.record_operator_access(action=action.value, decision=decision.value)
+        sink(
+            {
+                "event.name": "reflow.operator.access",
+                "reflow.request_id": request_id(request),
+                "reflow.operator.principal_subject_sha256": digest,
+                "reflow.operator.action": action.value,
+                "reflow.operator.decision": decision.value,
+            }
+        )
+
+    def authorized_scope(
+        request: Request,
+        scope_id: str,
+        *,
+        action: OperatorAuditAction,
+    ) -> domain.ReconciliationScopeId:
         principal = authenticated_principal(request)
         scope = _scope(scope_id)
         if auth_boundary is None or principal is None:
@@ -81,17 +161,46 @@ def create_control_tower_app(
         try:
             auth_boundary.policy.require_scope(principal, scope)
         except AccessAuthorizationError as exc:
+            audit_access(
+                request,
+                principal=principal,
+                action=action,
+                scope_id=scope,
+                decision=OperatorAuditDecision.DENIED,
+            )
             raise HTTPException(status_code=403, detail="forbidden") from exc
+        audit_access(
+            request,
+            principal=principal,
+            action=action,
+            scope_id=scope,
+            decision=OperatorAuditDecision.ALLOWED,
+        )
         return scope
 
     def authorize_evaluation(request: Request) -> None:
         principal = authenticated_principal(request)
         if auth_boundary is None or principal is None:
             return
+        action = OperatorAuditAction.VIEW_EVALUATION
         try:
             auth_boundary.policy.require_evaluation(principal)
         except AccessAuthorizationError as exc:
+            audit_access(
+                request,
+                principal=principal,
+                action=action,
+                scope_id=None,
+                decision=OperatorAuditDecision.DENIED,
+            )
             raise HTTPException(status_code=403, detail="forbidden") from exc
+        audit_access(
+            request,
+            principal=principal,
+            action=action,
+            scope_id=None,
+            decision=OperatorAuditDecision.ALLOWED,
+        )
 
     @app.get("/api/v1/ready")
     def ready() -> JSONResponse:
@@ -112,29 +221,63 @@ def create_control_tower_app(
             content={"status": "ready", "dependency": "postgresql"},
         )
 
+    @app.get("/internal/metrics", include_in_schema=False)
+    def internal_metrics(request: Request) -> PlainTextResponse:
+        return metrics_response(request, metrics=metrics_registry, token=metrics_token)
+
     @app.get("/api/v1/scopes/{scope_id}/overview")
     def overview(request: Request, scope_id: str) -> dict[str, object]:
-        return asdict(reader.overview(authorized_scope(request, scope_id)))
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.VIEW_SCOPE_OVERVIEW,
+        )
+        return asdict(reader.overview(scope))
 
     @app.get("/api/v1/scopes/{scope_id}/proofs")
     def proofs(request: Request, scope_id: str) -> list[dict[str, object]]:
-        return [asdict(item) for item in reader.proofs(authorized_scope(request, scope_id))]
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.LIST_SCOPE_PROOFS,
+        )
+        return [asdict(item) for item in reader.proofs(scope)]
 
     @app.get("/api/v1/scopes/{scope_id}/proofs/{proof_id}")
     def proof(request: Request, scope_id: str, proof_id: str) -> dict[str, object]:
-        return asdict(reader.proof_detail(authorized_scope(request, scope_id), proof_id))
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.VIEW_SCOPE_PROOF,
+        )
+        return asdict(reader.proof_detail(scope, proof_id))
 
     @app.get("/api/v1/scopes/{scope_id}/exceptions")
     def exceptions(request: Request, scope_id: str) -> list[dict[str, object]]:
-        return [asdict(item) for item in reader.exceptions(authorized_scope(request, scope_id))]
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.LIST_SCOPE_EXCEPTIONS,
+        )
+        return [asdict(item) for item in reader.exceptions(scope)]
 
     @app.get("/api/v1/scopes/{scope_id}/cases/{case_id}")
     def case_file(request: Request, scope_id: str, case_id: str) -> dict[str, object]:
-        return asdict(reader.case_file(authorized_scope(request, scope_id), case_id))
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.VIEW_SCOPE_CASE,
+        )
+        return asdict(reader.case_file(scope, case_id))
 
     @app.get("/api/v1/scopes/{scope_id}/sources")
     def sources(request: Request, scope_id: str) -> list[dict[str, object]]:
-        return [asdict(item) for item in reader.sources(authorized_scope(request, scope_id))]
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.LIST_SCOPE_SOURCES,
+        )
+        return [asdict(item) for item in reader.sources(scope)]
 
     @app.get("/api/v1/evaluation")
     def evaluation(request: Request) -> dict[str, object]:
@@ -183,12 +326,20 @@ def app_from_env() -> FastAPI:
     store = PostgresApplicationStore(dsn)
     service = ReflowApplicationService(store)
     auth_boundary = auth_boundary_from_env()
+    operator_audit = PostgresOperatorAuditStore(dsn) if auth_boundary is not None else None
+    metrics_token = metrics_token_from_env()
     web_dist_value = os.getenv("REFLOW_WEB_DIST")
     if web_dist_value is None:
         candidate = Path.cwd() / "web" / "dist"
         web_dist = candidate if candidate.is_dir() else None
     else:
         web_dist = Path(web_dist_value)
+
+    def readiness() -> None:
+        store.check_ready()
+        if operator_audit is not None:
+            operator_audit.check_ready()
+
     return create_control_tower_app(
         ControlTowerReader(
             service,
@@ -196,6 +347,8 @@ def app_from_env() -> FastAPI:
             final_evaluation_summary=final_summary,
         ),
         web_dist=web_dist,
-        readiness_probe=store.check_ready,
+        readiness_probe=readiness,
         auth_boundary=auth_boundary,
+        operator_audit=operator_audit,
+        metrics_token=metrics_token,
     )

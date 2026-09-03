@@ -8,6 +8,7 @@ Type=simple
 User=reflow
 Group=reflow
 WorkingDirectory=/opt/reflow/current
+SyslogIdentifier=reflow-webhook
 EnvironmentFile=/etc/reflow/webhook.env
 ExecStart=/opt/reflow/current/.venv/bin/python -m uvicorn reflow.webhook_api:app_from_env --factory --host 127.0.0.1 --port 8081 --proxy-headers --forwarded-allow-ips=127.0.0.1
 Restart=on-failure

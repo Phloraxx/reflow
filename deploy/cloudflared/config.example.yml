@@ -3,6 +3,10 @@ tunnel: <TUNNEL-UUID>
 credentials-file: /etc/cloudflared/<TUNNEL-UUID>.json
 
 ingress:
+  # Internal metrics are never tunnel-published, even if the app token is known.
+  - path: ^/internal/metrics$
+    service: http_status:404
+
   # Keep this hostname behind Cloudflare Access for human operators.
   - hostname: control.example.com
     service: http://127.0.0.1:8080

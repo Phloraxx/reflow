@@ -2519,3 +2519,27 @@ None. The defect was in final regression-campaign result detection only; no proo
 **Fix/regression:** the PITR harness now separates three readiness conditions: target database exists and accepts SQL, the named recovery target has produced the expected data state, and promotion has completed. A bounded `_wait_promoted` poll requires `pg_is_in_recovery() = false` before the final recovered-state assertions. From failed `main` plus this fix, the real PITR drill passed 10 consecutive runs and then the complete PostgreSQL-enabled 524-test submission gate. This preserves the intended proof that recovery both stopped at the named target and left the server promoted for normal operation.
 
 **Financial truth impact:** none; the recovered data was already correct. The defect was only in the timing assumption of the new PITR acceptance assertion.
+
+## F-0126 — Raw HTTP methods could create unbounded observability label cardinality
+
+**Date:** 2026-09-04
+**Area:** production observability / HTTP metrics
+**Severity:** medium
+
+**Failure:** Gate 49 initially used the raw request method as the `http.request.method` metric/log label. Although route values were already templated, an external client can send arbitrary method tokens, so repeated custom methods could grow process-local metric cardinality without a fixed bound. This contradicted the gate's bounded-cardinality contract and current OpenTelemetry HTTP guidance for unknown methods.
+
+**Fix/regression:** the observability boundary now maps only the fixed known HTTP method set (`CONNECT`, `DELETE`, `GET`, `HEAD`, `OPTIONS`, `PATCH`, `POST`, `PUT`, `QUERY`, `TRACE`) and collapses every other method to `_OTHER`. A regression sends multiple different custom methods and requires one `_OTHER` label with none of the attacker-controlled method strings retained in metrics or request telemetry.
+
+**Financial truth impact:** none; this affected only operational telemetry cardinality.
+
+## F-0127 — Unhandled HTTP 500 responses lost their correlation header
+
+**Date:** 2026-09-04
+**Area:** production observability / request correlation
+**Severity:** medium
+
+**Failure:** Gate 49 generated and logged a request ID before invoking the application, but its first unhandled-exception path re-raised into Starlette's outer error middleware. The resulting generic 500 response therefore had no `X-Request-ID`, breaking the correlation contract precisely on the requests most likely to need investigation.
+
+**Fix/regression:** the observability middleware now converts only otherwise-unhandled application exceptions into a generic `Internal Server Error` response itself, attaches the generated `X-Request-ID`, records bounded 500 metrics, and emits only `error.type=unhandled_exception` without the exception message. Registered FastAPI/domain exception handlers continue to produce their existing responses normally. A regression injects a secret-looking exception message and requires a generic 500, a matching response/log request ID, and no secret detail in either response or telemetry.
+
+**Financial truth impact:** none; this changes only generic error/correlation behavior and does not alter deterministic reconciliation or domain exception handling.

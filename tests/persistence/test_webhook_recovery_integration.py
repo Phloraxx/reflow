@@ -10,6 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from reflow.domain import ReconciliationScopeId
+from reflow.operator_audit import (
+    OperatorAuditAction,
+    OperatorAuditDecision,
+    PostgresOperatorAuditStore,
+    principal_subject_sha256,
+)
 from reflow.persistence import PostgresApplicationStore
 from reflow.postgres_recovery import create_logical_backup, restore_and_verify
 from reflow.webhook_ingress import (
@@ -78,9 +85,7 @@ def _reset_database(admin_dsn: str, database: str) -> None:
         connection.cursor() as cursor,
     ):
         cursor.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
-                sql.Identifier(database)
-            )
+            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(database))
         )
         cursor.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database)))
 
@@ -93,9 +98,7 @@ def _drop_database(admin_dsn: str, database: str) -> None:
         connection.cursor() as cursor,
     ):
         cursor.execute(
-            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(
-                sql.Identifier(database)
-            )
+            sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(database))
         )
 
 
@@ -121,9 +124,18 @@ def _seed_webhook_state(dsn: str) -> None:
         outcome=WebhookProcessingOutcome.REJECTED,
         outcome_code="provider_payload_rejected",
     )
+    audit = PostgresOperatorAuditStore(dsn)
+    audit.record_access(
+        occurred_at=NOW,
+        request_id="d" * 32,
+        principal_subject_sha256=principal_subject_sha256("cf-subject-recovery-ci"),
+        action=OperatorAuditAction.VIEW_SCOPE_OVERVIEW,
+        scope_id=ReconciliationScopeId("scope_operator_recovery_ci"),
+        decision=OperatorAuditDecision.ALLOWED,
+    )
 
 
-def test_real_recovery_drill_preserves_webhook_receipts_and_attempts() -> None:
+def test_real_recovery_drill_preserves_webhook_and_operator_audit_state() -> None:
     admin_dsn = _require_ci_drill()
     source_name = "reflow_webhook_recovery_source_ci"
     restore_name = "reflow_webhook_recovery_restore_ci"
@@ -162,6 +174,17 @@ def test_real_recovery_drill_preserves_webhook_receipts_and_attempts() -> None:
             )
             restored.check_ready()
             assert restored.integrity_counts() == (1, 1)
+
+            restored_audit = PostgresOperatorAuditStore(
+                restore_dsn,
+                initialize=False,
+            )
+            restored_audit.check_ready()
+            assert restored_audit.integrity_count() == 1
+            audit_event = restored_audit.list_recent(limit=1)[0]
+            assert audit_event.action is OperatorAuditAction.VIEW_SCOPE_OVERVIEW
+            assert audit_event.decision is OperatorAuditDecision.ALLOWED
+            assert audit_event.scope_id == ReconciliationScopeId("scope_operator_recovery_ci")
     finally:
         _drop_database(admin_dsn, restore_name)
         _drop_database(admin_dsn, source_name)

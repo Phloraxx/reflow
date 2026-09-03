@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from fastapi.testclient import TestClient
 
+from reflow.observability import MetricsRegistry
 from reflow.webhook_api import create_webhook_app
 from reflow.webhook_ingress import (
     MAX_WEBHOOK_BODY_BYTES,
@@ -30,12 +31,27 @@ class StubIngress:
         return self.result
 
 
-def _client(ingress: StubIngress, *, ready: bool = True) -> TestClient:
+def _client(
+    ingress: StubIngress,
+    *,
+    ready: bool = True,
+    metrics: MetricsRegistry | None = None,
+    metrics_token: str | None = None,
+    event_sink=None,
+) -> TestClient:
     def readiness() -> None:
         if not ready:
             raise RuntimeError("database unavailable")
 
-    return TestClient(create_webhook_app(ingress, readiness_probe=readiness))  # type: ignore[arg-type]
+    return TestClient(
+        create_webhook_app(
+            ingress,  # type: ignore[arg-type]
+            readiness_probe=readiness,
+            metrics=metrics,
+            metrics_token=metrics_token,
+            event_sink=event_sink,
+        )
+    )
 
 
 def test_health_and_readiness_are_non_sensitive() -> None:
@@ -51,7 +67,10 @@ def test_health_and_readiness_are_non_sensitive() -> None:
         "status": "ok",
         "provider": "razorpay",
         "financial_truth_mutation": False,
+        "request_correlation": "generated",
+        "metrics": "disabled",
     }
+    assert client.get("/internal/metrics").status_code == 404
     assert client.get("/ready").status_code == 200
     failed = _client(ingress, ready=False).get("/ready")
     assert failed.status_code == 503
@@ -118,3 +137,46 @@ def test_auth_conflict_and_persistence_failures_are_non_2xx() -> None:
         assert response.status_code == expected_status
         assert "secret detail" not in response.text
         assert "database dsn detail" not in response.text
+
+
+def test_webhook_observability_is_correlated_bounded_and_secret_free() -> None:
+    ingress = StubIngress(
+        result=WebhookIngressResult(
+            WebhookReceiptDisposition.STORED,
+            WebhookProcessingOutcome.REJECTED,
+            "provider_payload_rejected",
+        )
+    )
+    metrics = MetricsRegistry()
+    telemetry: list[dict[str, object]] = []
+    token = "m" * 48
+    client = _client(
+        ingress,
+        metrics=metrics,
+        metrics_token=token,
+        event_sink=telemetry.append,
+    )
+    raw = b"signed-but-malformed-secret-body"
+    response = client.post("/api/v1/webhooks/razorpay", content=raw)
+    assert response.status_code == 202
+    correlation = response.headers["x-request-id"]
+    webhook_event = next(
+        event for event in telemetry if event.get("event.name") == "reflow.webhook.ingress"
+    )
+    assert webhook_event["reflow.request_id"] == correlation
+    assert webhook_event["reflow.webhook.disposition"] == "stored"
+    assert webhook_event["reflow.webhook.processing_outcome"] == "rejected"
+    assert webhook_event["reflow.webhook.processing_code"] == "provider_payload_rejected"
+
+    assert client.get("/internal/metrics").status_code == 401
+    metric_response = client.get(
+        "/internal/metrics",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert metric_response.status_code == 200
+    assert "reflow_webhook_receipts_total" in metric_response.text
+    assert 'processing_code="provider_payload_rejected"' in metric_response.text
+    serialized = repr(telemetry) + metric_response.text
+    assert raw.decode() not in serialized
+    assert token not in serialized
+    assert "x-razorpay-signature" not in serialized.lower()
