@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Production Readiness Phase 1 is merged green as `c4922b8c466656bea3c9ee9016818e1fd7235ea7` (PR #29; exact `main` CI run `33763965048` passed). The active next gate adds Cloudflare Access origin JWT verification plus exact server-side scope authorization without changing financial truth or frozen Gate 19 evidence. See `docs/44_PRODUCTION_READINESS_PHASE1.md` and `docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`.**
+> **Current phase: Production authentication/scope authorization is merged green as `7a5ebe7c17606aa7a171f3d43e62405dc095e48c` (PR #30; exact `main` CI run `33767659563` passed). PostgreSQL logical backup/recovery PR #31 has passed its exact code CI, including the real PostgreSQL 16.15 dump/restore drill; merge and `main` CI closure are pending. PITR remains explicitly unclaimed. See `docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md` and `docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -497,6 +497,22 @@ python -m uvicorn reflow.control_tower_api:app_from_env --factory --host 127.0.0
 
 `/api/v1/health` and `/api/v1/ready` remain infrastructure endpoints. Finance scope routes require the `scope_viewer` role plus an exact scope grant; `/api/v1/evaluation` requires `evaluation_reviewer`. A URL/query `scope_id` never grants access. See [`docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md).
 
+### Create and restore-test a PostgreSQL logical backup
+
+Use a secure backup directory outside public/static paths. The restore DSN must point to a separately provisioned **empty** database; the tool refuses in-place restore verification.
+
+```bash
+export REFLOW_POSTGRES_DSN='postgresql://...'
+python -m reflow.postgres_recovery backup --output-dir data/generated/recovery
+
+export REFLOW_RESTORE_POSTGRES_DSN='postgresql://.../separate_empty_restore_db'
+python -m reflow.postgres_recovery restore-verify \
+  --archive data/generated/recovery/<archive>.dump \
+  --manifest data/generated/recovery/<archive>.manifest.json
+```
+
+`REFLOW_PG_DUMP_BIN` and `REFLOW_PG_RESTORE_BIN` may point to deployment-approved PostgreSQL client wrappers. Credentials are passed through a sanitized libpq environment, never command arguments. This is a logical restore drill, **not PITR**. See [`docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md).
+
 Equivalent explicit checks:
 
 ```bash
@@ -615,7 +631,8 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [ ] public webhook HTTP ingress with durable operator-visible failure semantics
 - [x] Cloudflare Access human authentication + exact-scope read authorization/RBAC
 - [ ] tenant onboarding/provisioning and authenticated operator write permissions
-- [ ] backup/restore/PITR and production deployment runbook
+- [x] restore-tested PostgreSQL logical backup/recovery drill
+- [ ] WAL archiving/PITR and production deployment runbook
 
 ### AI / product surface
 

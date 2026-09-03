@@ -19,7 +19,10 @@ def test_root_env_example_matches_runtime_environment_contract() -> None:
         "REFLOW_EVALUATION_ROOT",
         "REFLOW_FINAL_EVALUATION_SUMMARY",
         "REFLOW_INVESTIGATION_MODEL",
+        "REFLOW_PG_DUMP_BIN",
+        "REFLOW_PG_RESTORE_BIN",
         "REFLOW_POSTGRES_DSN",
+        "REFLOW_RESTORE_POSTGRES_DSN",
         "REFLOW_RAZORPAY_ACCOUNT_ID",
         "REFLOW_WEB_DIST",
     }
