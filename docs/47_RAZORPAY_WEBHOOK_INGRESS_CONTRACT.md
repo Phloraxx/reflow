@@ -16,6 +16,12 @@ The boundary separates three facts:
 
 Only the deterministic reconciliation pipeline can later decide whether money reconciles.
 
+## Service isolation
+
+Webhook ingress runs as a dedicated public ASGI service rather than sharing the human Control Tower application. Its HTTP surface contains only health, readiness, and the Razorpay webhook endpoint.
+
+The existing Control Tower remains behind Cloudflare Access unchanged. This gate deliberately does not add an internet-facing operator API or weaken its authentication boundary just to receive provider callbacks.
+
 ## Provider-facing receipt semantics
 
 The public endpoint reads the raw ASGI body with a fixed byte cap before JSON parsing. It requires `X-Razorpay-Signature` and `x-razorpay-event-id`, verifies HMAC-SHA256 over the exact raw bytes, and never accepts caller-supplied account configuration.
@@ -37,7 +43,7 @@ Webhook transport state is not a financial `SourceKind`. It therefore uses a sep
 - append-only processing attempts with bounded public outcome code;
 - no webhook secret, Authorization header or API key persisted.
 
-The signature is retained only so replay can traverse the same Gate 15 verification/compilation evidence path; operator APIs never return it.
+The signature is retained only so replay can traverse the same Gate 15 verification/compilation evidence path. Operator output never returns the raw body or signature.
 
 The subsystem is independently schema-versioned so transport evolution does not silently change the financial application schema contract.
 
@@ -47,6 +53,8 @@ After durable receipt, ReFlow parses the retained bytes and dispatches only supp
 
 Every attempt records a terminal `processed` or `rejected` outcome. Rejection codes are bounded and non-secret. Replaying a rejected receipt creates a new attempt; it never rewrites the original receipt or earlier outcome.
 
+Replay re-verifies the retained body/signature against the currently configured current/previous webhook secrets before invoking Gate 15. If the receipt is older than the configured rotation window, replay fails closed with a bounded `verification_key_unavailable` outcome instead of fabricating a signature.
+
 ## Secret rotation
 
 The runtime may configure a current and one previous Razorpay webhook secret. Verification tries both without exposing which value matched outside the process; persistence records only generation `current` or `previous`.
@@ -55,11 +63,17 @@ The previous secret exists only to cover provider retry windows during controlle
 
 ## Operator boundary
 
-Human read/replay endpoints remain behind the existing Cloudflare Access identity boundary. A dedicated `webhook_operator` role is separate from `scope_viewer` and `evaluation_reviewer`.
+This gate exposes inspection and replay only through the privileged local CLI `python -m reflow.webhook_cli`. The CLI returns receipt metadata and processing outcomes, never raw webhook bytes, signatures, webhook secrets or provider credentials.
 
-Receipt listing/detail exposes metadata and processing outcomes, never raw webhook bytes, signatures, webhook secrets or provider credentials.
+A future human UI/control API may expose the same operations behind Cloudflare Access as a separate authorization change. That is intentionally not bundled into the public ingress service.
 
 Replay is an operator action, not a finance mutation: it can create another processing attempt and canonical evidence from the immutable receipt, but cannot create a proof, mark a case green, or update reconciliation disposition directly.
+
+## Recovery boundary
+
+The independently versioned webhook tables are included naturally in PostgreSQL logical dumps. The CI recovery drill restores a database containing a webhook receipt and processing attempt, then independently reopens the webhook subsystem with initialization disabled and verifies its schema and integrity inventory.
+
+The generic financial recovery verifier remains responsible only for financial application tables; this gate does not silently widen that existing contract.
 
 ## Acceptance criteria
 
@@ -70,11 +84,11 @@ Replay is an operator action, not a finance mutation: it can create another proc
 5. malformed/unsupported signed events remain operator-visible after 2xx;
 6. PostgreSQL failure before receipt persistence returns non-2xx;
 7. current/previous secret rotation is regression-covered;
-8. operator receipt/replay routes require existing authenticated authorization;
-9. raw body/signature/secrets are never returned by operator APIs or ordinary logs;
-10. backup/restore integrity includes the independently versioned webhook tables;
+8. the public webhook service is isolated from the Access-protected Control Tower;
+9. raw body/signature/secrets are never returned by public responses or operator CLI output;
+10. a real PostgreSQL 16 logical backup/restore drill preserves and revalidates webhook tables;
 11. full PostgreSQL reviewer suite and frozen evaluation evidence remain green.
 
 ## Non-claims
 
-This gate does not claim a distributed queue, cross-region webhook ingestion, provider IP allowlisting, unlimited throughput, or live settlement accuracy. Production Cloudflare configuration must allow Razorpay to reach only the webhook path while preserving Access protection for human routes.
+This gate does not claim a distributed queue, cross-region webhook ingestion, provider IP allowlisting, unlimited throughput, authenticated webhook-operator UI, or live settlement accuracy. Production Cloudflare/reverse-proxy configuration must route Razorpay only to the dedicated webhook service while preserving Access protection for human Control Tower routes.
