@@ -3,7 +3,7 @@
 **Started:** 2026-09-04
 **Base `main`:** `dfd8c943aae80ffb2184f1c9df718d1922175ad9`
 **Working branch:** `hardening/control-tower-pagination`
-**Status:** active; local acceptance in progress, merge evidence pending
+**Status:** merged and closed
 
 ## Purpose
 
@@ -164,7 +164,15 @@ The exact pre-commit working tree passed:
 - source hygiene scan: no TODO/FIXME/HACK, `eval`, `exec`, or `shell=True`;
 - optimized Python (`python -O`) non-PostgreSQL suite: exit **0** with only the expected pytest assertion warning.
 
-This is local validation, not merge evidence. Required PR CI and exact merge-triggered `main` CI remain pending.
+The local validation was followed by required repository closure:
+
+- implementation commit: `d08d028c6830ba5badeee2d6f15cb3ab674b65ce`;
+- PR: **#40**;
+- exact PR CI: **33800278792**, success with **539 tests**, strict mypy across **75 source files**, frontend **6/6**, production build, recovery drills and frozen Gate 17/19 verification;
+- merge commit: `8330a12f2bd170de4897ab483834d94943e603bd`;
+- exact merge-triggered `main` CI: **33800798991**, success with the same **539-test** recovery-enabled submission gate and frozen evidence checks.
+
+No PR/main CI failure occurred in Gate 50.
 
 ## Non-claims
 
@@ -180,6 +188,6 @@ Gate 50 does not claim:
 
 The primary guarantees are removal of the hard 10,000-history ceiling, bounded database query batches, bounded browser collection payloads, and continued fail-closed historical integrity.
 
-## Merge rule
+## Merge rule — satisfied
 
-This gate is not closed until the exact implementation head passes required PR CI, is merged, and the exact merge-triggered `main` CI is green. Any PR/main failure must be recorded rather than hidden by a rerun.
+The exact implementation head passed required PR CI, PR #40 merged without head movement, and the exact merge-triggered `main` CI passed. Gate 50 is closed.

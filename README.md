@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Control Tower long-history pagination Gate 50 is active on `hardening/control-tower-pagination` from green `main` `dfd8c943aae80ffb2184f1c9df718d1922175ad9`. The branch replaces the legacy 10,000-artifact read ceiling with fail-closed PostgreSQL keyset traversal and moves Proofs, Exceptions and Sources to bounded cursor pages while preserving legacy API routes and financial semantics. Snapshot-pinned cross-request pages, materialized exception read models, centralized observability, a public production deployment, and a non-empty authenticated Razorpay settlement/recon corpus remain unclaimed. See `docs/50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`.**
+> **Current phase: Control Tower long-history pagination Gate 50 is merged green on `main` as `8330a12f2bd170de4897ab483834d94943e603bd` via PR #40; exact merge-triggered CI `33800798991` passed the full 539-test recovery-enabled gate. ReFlow now replaces the legacy 10,000-artifact read ceiling with fail-closed PostgreSQL keyset traversal and serves Proofs, Exceptions and Sources through bounded cursor pages while preserving legacy API routes and financial semantics. Snapshot-pinned cross-request pages, materialized exception read models, centralized observability, a public production deployment, and a non-empty authenticated Razorpay settlement/recon corpus remain unclaimed. See `docs/50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
