@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known on the third whole-codebase audit branch after reproducing and fixing F-0098 through F-0112. Final PR/merge CI is still pending. Earlier audit PR #25 merged as `71ae9ad039a99b5cf06c1e71d513f99be3231687`. The frozen Gate 19 seeds, scorer and first-run v1 remain unchanged.
+None currently known through the third whole-codebase audit. F-0098 through F-0123 remain preserved below with regressions. Audit PR #27 merged as `e2c8a2f33bbf7506257a9a8cfda4349d838a60ac`, and exact merge-triggered `main` CI run `33744722448` passed the PostgreSQL/frontend/submission validation. The frozen Gate 19 seeds, scorer and first-run v1 remain unchanged.
 
 ---
 
