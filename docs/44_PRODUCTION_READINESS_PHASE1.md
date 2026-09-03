@@ -120,6 +120,6 @@ On the exact Phase 1 worktree:
 - TODO/FIXME/HACK and unsafe dynamic execution scan: no matches;
 - `git diff --check`: passed.
 
-## Merge rule
+## Merge closure
 
-Phase 1 is not closed until its exact branch commit passes PR CI, is merged, and merge-triggered `main` CI is green. Real Razorpay acceptance remains pending until the account supplies a non-empty settlement/recon corpus; merging this code does not change that non-claim.
+Phase 1 is closed. PR #29 merged as `c4922b8c466656bea3c9ee9016818e1fd7235ea7`; exact merge-triggered `main` CI run `33763965048` completed successfully. Real Razorpay acceptance remains pending until the account supplies a non-empty settlement/recon corpus; this merge does not change that non-claim.

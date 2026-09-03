@@ -1,11 +1,14 @@
 # Generated from a clean Python 3.12 environment for CI/reviewer reproducibility.
 # Regenerate only after validating the full repository and dependency advisories.
+PyJWT==2.13.0
 Pygments==2.21.0
 annotated-doc==0.0.5
 annotated-types==0.8.0
 anyio==4.14.2
+cffi==2.1.1
 click==8.5.0
 coverage==7.16.0
+cryptography==50.0.1
 fastapi==0.141.1
 h11==0.16.0
 httpcore2==2.12.0
@@ -21,6 +24,7 @@ pathspec==1.1.1
 pluggy==1.6.0
 psycopg-binary==3.3.5
 psycopg==3.3.5
+pycparser==3.0
 pydantic==2.13.5
 pydantic_core==2.46.5
 pytest-cov==6.3.0
