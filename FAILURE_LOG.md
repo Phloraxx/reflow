@@ -2507,3 +2507,15 @@ None. The defect was in final regression-campaign result detection only; no proo
 **Fix/regression:** PITR container readiness now requires an actual `SELECT 1` through `psql` against the exact target database. The fixed drill passed five consecutive isolated runs and then passed the complete PostgreSQL-enabled reviewer suite. This makes the acceptance test wait for the same database-level condition its next operation requires instead of inferring readiness from socket acceptance.
 
 **Financial truth impact:** none; the defect existed only in the new recovery-test startup harness and never affected application persistence or reconciliation behavior.
+
+## F-0125 — PITR recovered server could accept reads before promotion completed
+
+**Date:** 2026-09-03
+**Area:** PostgreSQL PITR acceptance harness
+**Severity:** low
+
+**Failure:** PR #35 passed its exact PR CI, but merge-triggered `main` CI run `33785451379` reproduced a second timing race. The physical restore had already reached the named restore point and returned the correct target data (`baseline` present, later row excluded), yet the first read-capable connection still reported `pg_is_in_recovery() = true`. The test incorrectly treated database read readiness as proof that `recovery_target_action=promote` had completed.
+
+**Fix/regression:** the PITR harness now separates three readiness conditions: target database exists and accepts SQL, the named recovery target has produced the expected data state, and promotion has completed. A bounded `_wait_promoted` poll requires `pg_is_in_recovery() = false` before the final recovered-state assertions. From failed `main` plus this fix, the real PITR drill passed 10 consecutive runs and then the complete PostgreSQL-enabled 524-test submission gate. This preserves the intended proof that recovery both stopped at the named target and left the server promoted for normal operation.
+
+**Financial truth impact:** none; the recovered data was already correct. The defect was only in the timing assumption of the new PITR acceptance assertion.
