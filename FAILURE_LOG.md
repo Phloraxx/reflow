@@ -26,7 +26,7 @@ For every meaningful failure:
 
 # Active failures
 
-None currently known through the post-final whole-codebase audit. F-0085 through F-0097 remain preserved below with regressions. Audit PR #25 merged as `71ae9ad039a99b5cf06c1e71d513f99be3231687`, and exact merge-triggered `main` CI run `33657418624` passed the PostgreSQL/frontend/submission validation. The frozen Gate 19 first-run v1 remains unchanged.
+None currently known on the third whole-codebase audit branch after reproducing and fixing F-0098 through F-0112. Final PR/merge CI is still pending. Earlier audit PR #25 merged as `71ae9ad039a99b5cf06c1e71d513f99be3231687`. The frozen Gate 19 seeds, scorer and first-run v1 remain unchanged.
 
 ---
 
@@ -2189,3 +2189,310 @@ None. The defect was in final regression-campaign result detection only; no proo
 **Regression:** maximum legal samples pass; over-limit sample counts, schema width and header length fail closed, including bool/non-integer sample-limit misuse.
 
 **Financial truth impact:** none; bounded AI input/resource semantics only.
+
+## F-0098 — PostgreSQL duplicate raw-evidence replay disagreed with the in-memory journal
+
+**Date:** 2026-09-03
+**Area:** Gate 17 raw-evidence durability
+**Severity:** medium
+
+**Failure:** PostgreSQL compared the full reconstructed `SourceEnvelope` on duplicate replay. The stable envelope identity intentionally excludes local receipt/derived occurrence/schema metadata, so a replay of the same source record and immutable payload could conflict in PostgreSQL even though `InMemoryJournal` correctly treated it as a duplicate and retained the first observation metadata.
+
+**Fix/regression:** PostgreSQL duplicate checks now compare only stable evidence identity plus immutable payload content and preserve the first retained metadata, matching the in-memory journal contract.
+
+**Financial truth impact:** none; this was durability parity/idempotency, but inconsistent replay semantics could break restart/recovery workflows.
+
+## F-0099 — Control Tower exposed exact paise values as JavaScript numbers
+
+**Date:** 2026-09-03
+**Area:** Gate 18 API/frontend exact-money representation
+**Severity:** high
+
+**Failure:** `MoneyView.amount_paise` was an integer in FastAPI JSON. Domain money is signed int64, while JavaScript numbers cannot exactly represent every int64 value. A sufficiently large exact paise amount could therefore be rounded after crossing the API boundary even though Python proof truth remained exact.
+
+**Fix/regression:** raw paise values are serialized as base-10 strings; display strings remain presentation-only. FastAPI and React tests assert exact large-value preservation.
+
+**Financial truth impact:** proof truth was unchanged, but operator-visible exact money could be corrupted in the browser.
+
+## F-0100 — Raw double-slash API paths could fall through to the SPA shell
+
+**Date:** 2026-09-03
+**Area:** Gate 18 FastAPI/SPA routing
+**Severity:** medium
+
+**Failure:** the SPA fallback rejected `api/...` but did not normalize leading slashes in the captured path. A malformed path such as `//api/...` could be served the React shell instead of remaining an API 404 boundary.
+
+**Fix/regression:** the fallback normalizes leading slashes before the API-prefix check; malformed API-like paths remain 404 while ordinary client routes still receive `index.html`.
+
+**Financial truth impact:** none; routing/integrity semantics only.
+
+## F-0101 — Optional OpenAI transports accepted non-finite or effectively unbounded timeouts
+
+**Date:** 2026-09-03
+**Area:** Gate 12 / Gate 16 model transport resource bounds
+**Severity:** medium
+
+**Failure:** provider constructors accepted `NaN`, infinity and arbitrarily large timeout values. HTTPS/redirect/response-size protections existed, but caller-controlled timeout values could still defeat the bounded-resource contract.
+
+**Fix/regression:** shared transport validation requires a finite positive timeout no greater than 300 seconds; both OpenAI providers use the same validator and regressions cover NaN/infinity/over-limit values.
+
+**Financial truth impact:** none; optional AI transport availability/resource safety only.
+
+## F-0102 — `LATEST_PROOF` pointer namespaces could collide across reconciliation scopes
+
+**Date:** 2026-09-03
+**Area:** Gate 17 current-pointer identity / migration
+**Severity:** high
+
+**Failure:** latest-proof currentness was keyed only by settlement ID. Two reconciliation scopes can legally contain the same external settlement identifier, so operational current pointers were not scope-isolated even though proof artifacts remained scoped.
+
+**Fix/regression:** `LATEST_PROOF` keys are now `scope_id:settlement_id`. PostgreSQL schema v2 migrates legacy v1 proof pointers in place and preserves scoped proof storage; the migration is idempotent and tested against legacy rows.
+
+**Financial truth impact:** immutable proof truth was unchanged, but operational currentness could resolve the wrong scope's proof.
+
+## F-0103 — Durable artifact metadata still allowed caller-controlled identity/chronology fields
+
+**Date:** 2026-09-03
+**Area:** Gate 17 typed application persistence
+**Severity:** high
+
+**Failure:** typed artifacts could still be stored with caller-supplied convenience scope/timestamps, and `ApprovedAdapterVersion` lacked a deterministic storage ID requirement. That allowed durable metadata to disagree with intrinsic typed chronology or gave callers an arbitrary adapter artifact identity.
+
+**Fix/regression:** storage time is derived from intrinsic typed fields when one exists and conflicting overrides fail; policy/approved-adapter definitions are stored globally; approved adapters use a deterministic content-addressed artifact ID. Schema v2 migrates legacy convenience timestamps/global configuration scope without rewriting immutable payloads.
+
+**Financial truth impact:** deterministic proof truth was unchanged, but durable/operator identity and chronology could drift from the typed artifact.
+
+## F-0104 — A run could become current before its complete immutable dependency graph existed
+
+**Date:** 2026-09-03
+**Area:** Gate 17 current-run publication / Gate 18 overview
+**Severity:** high
+
+**Failure:** `LATEST_RUN` publication validated the typed run but did not require its policy, manifests, proofs, coverage, balance and close artifacts to already exist and agree. A pointer could therefore make an incomplete or contradictory durable packet operationally current.
+
+**Fix/regression:** current-run publication now validates the complete persisted dependency graph and proof/manifest coverage before the transactional pointer advance. Control Tower independently rejects current control packets that disagree with run bindings.
+
+**Financial truth impact:** proof constructors remained exact, but the operator-facing current packet could be incomplete or internally contradictory.
+
+## F-0105 — Fixed 10k artifact scans could silently change correctness
+
+**Date:** 2026-09-03
+**Area:** Gate 17/18 scale/read integrity
+**Severity:** high
+
+**Failure:** Control Tower treated a 10,000-row artifact list as complete, and proof scope validation built source-manifest coverage from a generic list capped at 10,000. Large scopes could therefore show incomplete history or reject valid old proof evidence solely because data fell outside an arbitrary read window.
+
+**Fix/regression:** Control Tower compares list size with an exact artifact count and fails closed with an explicit pagination/read-model requirement when history is truncated. Proof source-scope validation now uses targeted PostgreSQL manifest-coverage queries rather than a finite generic scan.
+
+**Financial truth impact:** proof truth was unchanged; large-scope durable validation/operator visibility could become wrong due to pagination limits.
+
+## F-0106 — Control Tower case observations were not fully rebound to their immutable run/proof/policy/source packet
+
+**Date:** 2026-09-03
+**Area:** Gate 14 persistence projection / Gate 18 Control Tower
+**Severity:** high
+
+**Failure:** low-level persisted observation JSON could disagree with its bound proof on settlement/status/reasons/amount/UTR, disagree with source manifests, use a materiality band inconsistent with the policy, drift economic identity under the same case ID, or exist without a valid scoped parent run while still being projected.
+
+**Fix/regression:** the read model now fail-closes unless observation financial facts match the exact proof, source states exactly match the run manifests, policy/materiality agrees, run completion equals observation time, economic identity remains stable for the case, and all parent artifacts are present in the requested scope.
+
+**Financial truth impact:** Gate 14 typed artifacts were unchanged; this closes forged/corrupted low-level durable data reaching the operator truth surface.
+
+## F-0107 — Control Tower disposition replay accepted impossible or orphaned Gate 14 workflow history
+
+**Date:** 2026-09-03
+**Area:** Gate 14 lifecycle projection / Gate 18 Control Tower
+**Severity:** high
+
+**Failure:** the reader replayed disposition kinds but did not enforce key Gate 14 transition invariants. It could display a disposition before case creation, accept another status transition after CLOSE without explicit REOPEN, or silently ignore a disposition for a case with no observation history.
+
+**Fix/regression:** disposition replay now requires a known case, contiguous sequence, monotonic time not predating first observation, and explicit REOPEN before any transition from an operator-closed workflow.
+
+**Financial truth impact:** financial proof status was never changed, but operator workflow state could be impossible relative to the audited Gate 14 lifecycle.
+
+## F-0108 — Incident-cluster projection trusted orphan references and caller-controlled storage chronology
+
+**Date:** 2026-09-03
+**Area:** Gate 14 incident clustering / Gate 18 Control Tower
+**Severity:** medium
+
+**Failure:** an incident cluster could reference a missing run/case observation, and competing clusters were ordered using artifact storage time. An old run's cluster could therefore masquerade as newest by using a later caller-supplied `observed_at`.
+
+**Fix/regression:** clusters must bind to a real scoped run and a matching case observation in that run; one case cannot occupy multiple clusters in one run; recency is derived from immutable run completion chronology, not storage metadata.
+
+**Financial truth impact:** none; incident grouping/operator presentation only.
+
+## F-0109 — Investigation packets allowed temporal/citation inconsistency with their bound evidence
+
+**Date:** 2026-09-03
+**Area:** Gate 16 investigation core / Gate 18 Case File
+**Severity:** high
+
+**Failure:** Gate 16 required `as_of >= case.first_seen_at` but did not require `as_of` to be at or after the latest bound observation/proof. The Case File also could display a persisted investigation citing a source outside its exact proof packet.
+
+**Fix/regression:** investigation construction now rejects `as_of` before the latest case observation or proof generation; the reader rejects out-of-proof citations and investigations predating their bound observation.
+
+**Financial truth impact:** AI remained non-authoritative, but an advisory result could claim evidence/time context that did not exist at its declared investigation instant.
+
+## F-0110 — Durable manifests/proofs did not require their raw source envelopes to exist
+
+**Date:** 2026-09-03
+**Area:** Gate 17 evidence-first persistence
+**Severity:** high
+
+**Failure:** a typed manifest could be persisted before its effective raw envelopes existed in PostgreSQL, and a proof could pass scoped-manifest coverage using manifest JSON even when the cited raw evidence was absent from the journal. After restart, the durable proof packet could therefore be non-retrievable despite claiming evidence-first retention.
+
+**Fix/regression:** application manifest writes require every effective envelope ID to exist in the raw journal; proof writes require retained raw source IDs as well as scoped manifest coverage. Current-run publication inherits those guarantees.
+
+**Financial truth impact:** deterministic proof computation was unchanged; this fixes durable provenance/restart completeness.
+
+## F-0111 — Gate 16 bounded source extraction did not bound or redact field paths
+
+**Date:** 2026-09-03
+**Area:** Gate 16 model-facing source projection
+**Severity:** medium
+
+**Failure:** source text values were bounded/redacted, but recursively generated JSON paths were not. Deep structures or very long keys could inflate model context, and sensitive identifiers embedded in a JSON key could be sent to the model unredacted.
+
+**Fix/regression:** extraction now bounds field count, collection fan-out, recursion depth, path length and value length. Model-facing paths pass through the same sensitive-data redactor as values.
+
+**Financial truth impact:** none; optional advisory-model privacy/resource bounds only.
+
+## F-0112 — Gate 12 could send sensitive identifiers embedded in source column names to the model
+
+**Date:** 2026-09-03
+**Area:** Gate 12 adapter proposal privacy boundary
+**Severity:** medium
+
+**Failure:** sample values were redacted, but exact column names must be preserved for adapter proposals and were transmitted unchanged. A source whose header itself contained an email/UPI-like address, credential token or long account/phone number could therefore leak that identifier into model context.
+
+**Fix/regression:** because redacting column names would invalidate adapter semantics, the OpenAI proposal provider now refuses model transport entirely when a column name looks sensitive; deterministic/human review remains available. Ordinary schema names and existing sample-value redaction remain green.
+
+**Financial truth impact:** none; model-facing privacy only.
+
+## F-0113 — Schema-v1 proof-pointer migration could silently change contradictory legacy currentness
+
+**Date:** 2026-09-03
+**Area:** Gate 17 schema migration / current-pointer integrity
+**Severity:** high
+
+**Failure:** the v1→v2 migration rewrote every migratable `LATEST_PROOF` key from the referenced proof payload without first proving that the legacy v1 key actually equaled that proof's `settlement_id`. A contradictory legacy row such as `setl_wrong → proof(settlement_id=setl_actual)` was silently converted into `scope_id:setl_actual` and the database was stamped schema v2, changing operational currentness instead of failing closed on corrupt legacy state.
+
+**Fix/regression:** schema-v1 migration now preflights each latest-proof pointer before any migration mutation. The row must reference a proof artifact with non-empty scope and settlement identity, and its legacy stream key must exactly equal the proof's settlement ID. Any disagreement aborts and rolls back the migration; regression coverage verifies the schema remains v1 and the original pointer key remains untouched. The compatibility test also verifies scoped policy/adapter cleanup, timestamp semantics, pointer generation preservation and repeat reopen/idempotence.
+
+**Financial truth impact:** immutable proof payloads were not rewritten, but an upgrade could silently change which proof was operationally current for a settlement.
+
+## F-0114 — Schema-v2 canonical storage metadata disagreed with its own v1 migration
+
+**Date:** 2026-09-03
+**Area:** Gate 17 schema migration / deterministic replay
+**Severity:** high
+
+**Failure:** schema-v2 migration deliberately cleared caller convenience `observed_at` values for reconciliation scopes, policies, evidence coverage, balance controls, close readiness, and approved adapters, but the current typed application write path still accepted those same caller timestamps. A database created by the actual schema-v1/base code migrated successfully, then replaying/reseeding the same deterministic artifacts under current code failed with an immutable-content conflict on the reconciliation-scope artifact.
+
+**Fix/regression:** the typed application boundary now canonicalizes `observed_at` to `NULL` for the six artifact families that have no intrinsic domain observation time, matching the v1→v2 migration. The deterministic Control Tower demo no longer supplies misleading convenience timestamps for those artifacts. Regression coverage proves different caller timestamps replay as duplicates, and an isolated end-to-end check built a real v1 database from base `HEAD`, migrated it with current code, reseeded the same demo, reopened it, and preserved the migrated latest-proof pointer generation.
+
+**Financial truth impact:** immutable financial payloads were unchanged, but a production upgrade could break deterministic replay/recovery immediately after migration.
+
+## F-0115 — Schema-v1 approved-adapter identities were not canonicalized during migration
+
+**Date:** 2026-09-03
+**Area:** Gate 12 / Gate 17 adapter persistence migration
+**Severity:** high
+
+**Failure:** schema v2 requires approved adapters to use deterministic content-addressed artifact IDs, but the v1→v2 migration only cleared adapter scope/timestamp metadata. A genuine base-code v1 adapter with a caller-chosen artifact ID survived migration under that legacy ID; replaying the same typed adapter under v2 stored a second canonical artifact while `LATEST_ADAPTER` still pointed at the legacy artifact at generation 1.
+
+**Fix/regression:** migration now verifies each legacy approved-adapter payload digest, derives the same `adapterv_<digest-prefix>` identity used by the typed v2 boundary, fails closed on incompatible canonical-ID collisions or wrong-kind adapter pointers, inserts/reuses the canonical row, rebinds current pointers without changing their generation/timestamp, and removes the obsolete caller-chosen row. Synthetic regressions and an actual base-HEAD schema-v1 database both prove replay returns `DUPLICATE` and currentness remains generation 1.
+
+**Financial truth impact:** none to reconciliation arithmetic, but adapter operational identity/currentness could fork across an upgrade and deterministic replay was not idempotent.
+
+## F-0116 — Missing schema metadata on a populated database was mistaken for a fresh schema-v2 database
+
+**Date:** 2026-09-03
+**Area:** Gate 17 schema initialization / migration safety
+**Severity:** high
+
+**Failure:** initialization created the schema metadata row as the current version whenever that singleton row was absent. If a populated v1 database had lost/corrupted only its metadata row, current code silently stamped it schema v2 without running v1 migrations; reproduced policy rows retained legacy scope and convenience timestamps.
+
+**Fix/regression:** a missing metadata row is initialized only when all ReFlow data/current-pointer tables are empty. If any retained evidence, identity, artifact or current-pointer row exists, initialization fails closed and rolls back instead of guessing the schema version. Regressions cover both legitimate empty-database initialization and populated-database refusal.
+
+**Financial truth impact:** immutable payloads were not rewritten, but silently misclassifying a populated legacy database could bypass every schema-v2 durability/currentness migration guarantee.
+## F-0117 — Schema-v1 adapter migration accepted a latest-adapter pointer targeting the wrong artifact kind
+
+**Date:** 2026-09-03
+**Area:** Gate 12 / Gate 17 adapter current-pointer migration
+**Severity:** high
+
+**Failure:** the v1→v2 approved-adapter migration validated pointers that referenced approved-adapter artifacts, but it did not validate every `LATEST_ADAPTER` pointer. A legacy `LATEST_ADAPTER` row could therefore point at a different artifact kind (reproduced with a policy artifact), survive migration unchanged, and the database would still be stamped schema v2.
+
+**Fix/regression:** adapter migration now preflights the union of all `LATEST_ADAPTER` pointers and all pointers targeting approved-adapter artifacts. Every such row must be exactly `LATEST_ADAPTER → approved_adapter`, its stream key must equal the adapter payload's `spec.adapter_id`, and any disagreement aborts/rolls back migration. PostgreSQL regression coverage verifies a wrong-kind target leaves schema version 1 and preserves the original invalid legacy row for operator repair rather than silently blessing it as v2.
+
+**Financial truth impact:** reconciliation arithmetic is unchanged, but adapter operational currentness could otherwise reference non-adapter immutable content after an upgrade.
+## F-0118 — Schema-v1 proof-pointer migration trusted proof payload content whose stored digest was invalid
+
+**Date:** 2026-09-03
+**Area:** Gate 17 schema migration / immutable proof integrity
+**Severity:** high
+
+**Failure:** v1→v2 migration derived the new scope-qualified `LATEST_PROOF` key from `payload_json.settlement_id` without first verifying that `payload_json` still matched the row's retained SHA-256. A reproduced proof row with a deliberately mismatched digest was accepted, its pointer was rewritten, and the database was stamped schema v2 even though later artifact integrity checks would reject that proof.
+
+**Fix/regression:** latest-proof migration now performs a Python preflight over every legacy pointer, requires the referenced artifact to be a scoped proof, decodes an object payload, recomputes its canonical SHA-256 and compares it to `payload_sha256`, then requires the legacy stream key to equal the verified payload settlement ID. Any mismatch aborts and rolls back before migration mutation. PostgreSQL regression coverage verifies digest corruption leaves schema version 1 and the original pointer key untouched.
+
+**Financial truth impact:** no proof arithmetic was recomputed, but migration previously trusted tampered/corrupt immutable proof content to establish operational currentness.
+## F-0119 — Gate 12 sample redaction leaked long numeric identifiers represented as floats
+
+**Date:** 2026-09-03
+**Area:** Gate 12 model-facing adapter proposal privacy boundary
+**Severity:** medium
+
+**Failure:** sample-value redaction masked long integer identifiers and identifier-like strings, but returned all floats unchanged. A spreadsheet/CSV-style value such as `9876543210.0` therefore reached the captured model request verbatim even though the equivalent integer/string form was redacted. Non-finite floats could also enter the model prompt as non-standard JSON numeric tokens.
+
+**Fix/regression:** Gate 12 now redacts finite float values whose magnitude has an eight-digit-or-longer integer part as `<LONG_NUMBER>` and converts non-finite floats to `<NON_FINITE_NUMBER>` before prompt serialization. A transport-level regression verifies the original long float and `Infinity` do not appear in model input.
+
+**Financial truth impact:** none; deterministic adapter compilation and financial validation are unchanged. This closes an optional model-context privacy/serialization gap.
+## F-0120 — Model-facing long-number redaction stopped at 19 digits
+
+**Date:** 2026-09-03
+**Area:** Gate 12 / Gate 16 model-facing privacy boundaries
+**Severity:** medium
+
+**Failure:** both model redactors recognized only numeric strings containing 8–19 consecutive digits. A longer identifier such as a 25-digit account/reference value bypassed redaction and was reproduced verbatim in both the Gate 12 adapter proposal prompt and Gate 16 source-evidence tool output. Integer-valued source data did not share this upper bound, making string handling inconsistent.
+
+**Fix/regression:** both long-number matchers now redact any standalone run of eight or more digits, without an upper bound. Gate 12 and Gate 16 regressions include a 25-digit identifier and verify it never reaches model-facing text while `<LONG_NUMBER>` remains present.
+
+**Financial truth impact:** none; deterministic financial computation is unchanged. This closes an optional model-context privacy gap.
+## F-0121 — Gate 16 truncation could split a credential before redaction and leak its prefix/body fragment
+
+**Date:** 2026-09-03
+**Area:** Gate 16 model-facing source-evidence privacy boundary
+**Severity:** medium
+
+**Failure:** untrusted source strings are bounded before the OpenAI-facing redactor runs. If the value limit cut through a credential-like token, the retained fragment could fall below the redactor's eight-character token-body threshold. Reproduced evidence ended with `rzp_live_abcdefg`; that fragment was emitted unchanged to model-facing tool output even though the original full token would have been redacted.
+
+**Fix/regression:** Gate 16's credential-pattern redactor now treats a recognized secret prefix followed by any non-empty token body as sensitive. This preserves conservative redaction even when bounding has truncated the original credential. A regression exercises the actual `_extract_untrusted_text` → model-tool-output path at the value boundary and requires `<SECRET_LIKE>`.
+
+**Financial truth impact:** none; this is an optional advisory-model privacy boundary only.
+
+## F-0122 — Root environment example advertised dead and misnamed runtime variables
+
+**Date:** 2026-09-03
+**Area:** configuration / operator startup contract
+**Severity:** low
+
+**Failure:** the checked-in root `.env.example` advertised `AI_API_KEY`/`AI_PROVIDER`, Razorpay credential names, `REFLOW_ENV` and `REFLOW_RANDOM_SEED`, but no production code consumed them. The optional OpenAI providers actually read `OPENAI_API_KEY` plus `REFLOW_ADAPTER_MODEL` or `REFLOW_INVESTIGATION_MODEL`. Copying the example therefore produced a misleading configuration that could not activate either model provider.
+
+**Fix/regression:** the root example now contains only environment variables consumed by the Python runtime and names the exact OpenAI key/model variables used by both provider constructors. Frontend-only `VITE_REFLOW_SCOPE_ID` remains in `web/.env.example`. A regression asserts the root example's executable variable set exactly matches the supported Python environment contract.
+
+**Financial truth impact:** none; deterministic reconciliation never depended on these variables. This fixes operator/configuration correctness for optional integrations and startup.
+
+## F-0123 — Test-only HTTP client was shipped in the production web dependency extra
+
+**Date:** 2026-09-03
+**Area:** dependency surface / packaging
+**Severity:** low
+
+**Failure:** `httpx2` was declared in the runtime `web` extra even though no production ReFlow module imports it. Inspection of Starlette shows it is used by `starlette.testclient`; the serving stack (`FastAPI` + `Starlette` + `uvicorn`) does not require it. A web-only installation therefore pulled an unnecessary outbound HTTP client, `httpcore2` and `truststore` into production.
+
+**Fix/regression:** `httpx2` moved to the `dev` extra, which is already installed by the reviewer/CI path. Focused FastAPI tests remain green, the combined `.[dev,postgres,web]` constrained install still resolves, and an `--ignore-installed` dry-run of `.[web]` confirms `httpx2`/`httpcore2`/`truststore` are absent from the runtime dependency set.
+
+**Financial truth impact:** none; this reduces production dependency/attack surface without changing runtime behavior.

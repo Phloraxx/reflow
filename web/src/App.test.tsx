@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
-const money = (amount_paise: number, display: string) => ({ amount_paise, currency: 'INR', display })
+const money = (amount_paise: number, display: string) => ({ amount_paise: String(amount_paise), currency: 'INR', display })
 
 const overview = {
   scope_id: 'scope_ui', has_current_run: true,

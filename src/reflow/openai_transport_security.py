@@ -1,11 +1,25 @@
 from __future__ import annotations
 
+import math
 import urllib.error
 import urllib.request
 from typing import IO, Any
 from urllib.parse import urlsplit
 
 MAX_OPENAI_RESPONSE_BYTES = 1_048_576
+MAX_OPENAI_TIMEOUT_SECONDS = 300.0
+
+
+def validate_openai_timeout_seconds(value: object) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("OpenAI timeout must be a finite positive number")
+    rendered = float(value)
+    if not math.isfinite(rendered) or rendered <= 0 or rendered > MAX_OPENAI_TIMEOUT_SECONDS:
+        raise ValueError(
+            "OpenAI timeout must be finite and between 0 and "
+            f"{MAX_OPENAI_TIMEOUT_SECONDS:g} seconds"
+        )
+    return rendered
 
 
 def validate_openai_https_endpoint(value: str) -> str:
@@ -43,10 +57,9 @@ class RejectRedirectHandler(urllib.request.HTTPRedirectHandler):
         )
 
 
-def open_no_redirect(
-    request: urllib.request.Request, *, timeout_seconds: float
-) -> Any:
+def open_no_redirect(request: urllib.request.Request, *, timeout_seconds: float) -> Any:
     validate_openai_https_endpoint(request.full_url)
+    timeout_seconds = validate_openai_timeout_seconds(timeout_seconds)
     opener = urllib.request.build_opener(RejectRedirectHandler())
     return opener.open(request, timeout=timeout_seconds)  # nosec B310
 

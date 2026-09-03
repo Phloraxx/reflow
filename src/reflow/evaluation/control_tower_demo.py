@@ -325,14 +325,14 @@ def seed_demo(dsn: str) -> DemoBundle:
         artifact_id=str(bundle.scope.id),
         payload=bundle.scope,
         scope_id=bundle.scope.id,
-        observed_at=PERIOD_START,
+        observed_at=None,
     )
     service.persist_artifact(
         kind=ArtifactKind.POLICY_VERSION,
         artifact_id=str(bundle.policy.id),
         payload=bundle.policy,
         scope_id=bundle.scope.id,
-        observed_at=PERIOD_START,
+        observed_at=None,
     )
     for manifest in bundle.manifests:
         service.persist_artifact(
@@ -358,21 +358,21 @@ def seed_demo(dsn: str) -> DemoBundle:
         artifact_id=str(coverage.id),
         payload=coverage,
         scope_id=bundle.scope.id,
-        observed_at=RUN_COMPLETED_AT,
+        observed_at=None,
     )
     service.persist_artifact(
         kind=ArtifactKind.BALANCE_CONTROL,
         artifact_id=str(balance.id),
         payload=balance,
         scope_id=bundle.scope.id,
-        observed_at=RUN_COMPLETED_AT,
+        observed_at=None,
     )
     service.persist_artifact(
         kind=ArtifactKind.CLOSE_READINESS,
         artifact_id=str(close.id),
         payload=close,
         scope_id=bundle.scope.id,
-        observed_at=RUN_COMPLETED_AT,
+        observed_at=None,
     )
     service.publish_current(
         artifact_kind=ArtifactKind.RECONCILIATION_RUN,

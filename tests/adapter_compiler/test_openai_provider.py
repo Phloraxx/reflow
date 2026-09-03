@@ -306,7 +306,7 @@ def test_openai_provider_redacts_obvious_sensitive_sample_values() -> None:
             **_rows()[0],
             "Memo": (
                 "contact sourav@example.com / sourav@okbank / 9876543210 / "
-                "sk-test_secret123456789"
+                "1234567890123456789012345 / sk-test_dummy123"
             ),
         },
     )
@@ -335,10 +335,74 @@ def test_openai_provider_redacts_obvious_sensitive_sample_values() -> None:
     assert "sourav@example.com" not in prompt
     assert "sourav@okbank" not in prompt
     assert "9876543210" not in prompt
-    assert "sk-test_secret123456789" not in prompt
+    assert "1234567890123456789012345" not in prompt
+    assert "sk-test_dummy123" not in prompt
     assert "<ADDRESS_LIKE>" in prompt
     assert "<LONG_NUMBER>" in prompt
     assert "<SECRET_LIKE>" in prompt
+
+
+def test_openai_provider_redacts_large_float_identifiers_before_transport() -> None:
+    captured: dict[str, object] = {}
+    rows = (
+        {
+            **_rows()[0],
+            "Customer Numeric Ref": 9876543210.0,
+            "Nonfinite Metric": float("inf"),
+        },
+    )
+
+    def transport(url, headers, payload, timeout):
+        captured["payload"] = payload
+        return _response(_spec_payload())
+
+    provider = OpenAIAdapterProposalProvider(
+        api_key="test-key",
+        model="test-model",
+        transport=transport,
+    )
+    _propose_and_validate_rows(
+        provider,
+        rows,
+        adapter_id="bank_ai_proposal",
+        version=1,
+        source_kind=SourceKind.BANK,
+        record_kind=CanonicalRecordKind.BANK_ENTRY,
+        sample_limit=1,
+    )
+    request = captured["payload"]
+    assert isinstance(request, Mapping)
+    prompt = request["input"]
+    assert isinstance(prompt, str)
+    assert "9876543210" not in prompt
+    assert "Infinity" not in prompt
+    assert "<LONG_NUMBER>" in prompt
+    assert "<NON_FINITE_NUMBER>" in prompt
+
+
+def test_openai_provider_refuses_sensitive_looking_column_names_before_transport() -> None:
+    calls: list[object] = []
+    rows = ({**_rows()[0], "finance@example.com": "sensitive-schema-value"},)
+
+    def transport(*args):
+        calls.append(args)
+        return _response(_spec_payload())
+
+    provider = OpenAIAdapterProposalProvider(
+        api_key="test-key",
+        model="test-model",
+        transport=transport,
+    )
+    with pytest.raises(OpenAIProposalError, match="column name"):
+        _propose_and_validate_rows(
+            provider,
+            rows,
+            adapter_id="bank_ai_sensitive_schema",
+            version=1,
+            source_kind=SourceKind.BANK,
+            record_kind=CanonicalRecordKind.BANK_ENTRY,
+        )
+    assert calls == []
 
 
 def test_openai_provider_environment_requires_explicit_model(monkeypatch) -> None:
@@ -350,3 +414,9 @@ def test_openai_provider_environment_requires_explicit_model(monkeypatch) -> Non
     monkeypatch.setenv("REFLOW_ADAPTER_MODEL", "test-model")
     provider = OpenAIAdapterProposalProvider.from_environment()
     assert provider.model == "test-model"
+
+
+def test_provider_rejects_non_finite_or_unbounded_timeout() -> None:
+    for value in (float("nan"), float("inf"), 301.0):
+        with pytest.raises(ValueError, match="timeout"):
+            OpenAIAdapterProposalProvider(api_key="key", model="gpt-test", timeout_seconds=value)

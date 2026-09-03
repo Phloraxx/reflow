@@ -362,6 +362,23 @@ class ValidProvider:
         )
 
 
+def test_investigation_as_of_cannot_predate_latest_observation_or_bound_proof() -> None:
+    fixture = _fixture()
+    earlier_state = replace(
+        fixture.case_state,
+        first_seen_at=fixture.observation.observed_at - timedelta(hours=2),
+        observation_count=2,
+    )
+    with pytest.raises(InvestigationError, match="predates latest case observation"):
+        ReadOnlyInvestigationTools(
+            case_state=earlier_state,
+            observation=fixture.observation,
+            proof=fixture.proof,
+            journal=fixture.journal,
+            as_of=fixture.observation.observed_at - timedelta(hours=1),
+        )
+
+
 def test_exact_latest_case_observation_proof_packet_is_accepted() -> None:
     fixture = _fixture()
     tools = ReadOnlyInvestigationTools(

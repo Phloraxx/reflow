@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import urllib.error
@@ -13,6 +14,7 @@ from reflow.openai_transport_security import (
     open_no_redirect,
     read_bounded_openai_response,
     validate_openai_https_endpoint,
+    validate_openai_timeout_seconds,
 )
 
 from .contracts import AdapterSpec
@@ -32,7 +34,7 @@ _ADDRESS_LIKE_RE = re.compile(r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\b")
 _SECRET_LIKE_RE = re.compile(
     r"(?i)\b(?:sk|rzp_(?:live|test)|ghp|github_pat|npk)[-_][a-z0-9_-]{8,}\b"
 )
-_LONG_NUMBER_RE = re.compile(r"(?<!\d)\d{8,19}(?!\d)")
+_LONG_NUMBER_RE = re.compile(r"(?<!\d)\d{8,}(?!\d)")
 _MAX_SAMPLE_STRING = 160
 
 
@@ -42,7 +44,9 @@ def _redact_sample_value(value: object) -> object:
     if isinstance(value, int):
         return "<LONG_NUMBER>" if len(str(abs(value))) >= 8 else value
     if isinstance(value, float):
-        return value
+        if not math.isfinite(value):
+            return "<NON_FINITE_NUMBER>"
+        return "<LONG_NUMBER>" if abs(value) >= 10_000_000 else value
     if not isinstance(value, str):
         return f"<COMPLEX_VALUE:{type(value).__name__}>"
     redacted = _SECRET_LIKE_RE.sub("<SECRET_LIKE>", value)
@@ -58,6 +62,19 @@ def _safe_sample_rows(context: ProposalContext) -> list[dict[str, object]]:
         {key: _redact_sample_value(value) for key, value in row.items()}
         for row in context.profile.sample_rows
     ]
+
+
+def _validate_model_column_names(context: ProposalContext) -> None:
+    for column in context.profile.columns:
+        name = column.name
+        if (
+            _SECRET_LIKE_RE.search(name)
+            or _ADDRESS_LIKE_RE.search(name)
+            or _LONG_NUMBER_RE.search(name)
+        ):
+            raise OpenAIProposalError(
+                "source column name contains sensitive-looking identifier; model proposal refused"
+            )
 
 
 def _default_transport(
@@ -108,6 +125,7 @@ def _output_text(response: Mapping[str, object]) -> str:
 
 
 def _proposal_input(context: ProposalContext) -> str:
+    _validate_model_column_names(context)
     columns = [
         {
             "name": column.name,
@@ -147,8 +165,7 @@ class OpenAIAdapterProposalProvider(AdapterProposalProvider):
         if not self.model or self.model != self.model.strip():
             raise ValueError("OpenAI model must be non-empty and trimmed")
         validate_openai_https_endpoint(self.base_url)
-        if self.timeout_seconds <= 0:
-            raise ValueError("OpenAI timeout must be positive")
+        validate_openai_timeout_seconds(self.timeout_seconds)
 
     @classmethod
     def from_environment(cls, *, model: str | None = None) -> OpenAIAdapterProposalProvider:

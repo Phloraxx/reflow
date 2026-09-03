@@ -6,8 +6,16 @@ from collections.abc import Mapping
 import pytest
 from test_investigation import AS_OF, _fixture
 
-from reflow.domain import SourceKind
-from reflow.investigation import InvestigationAction, run_investigation
+import reflow.openai_investigation_provider as provider_module
+from reflow.domain import SourceEnvelopeId, SourceKind
+from reflow.investigation import (
+    MAX_UNTRUSTED_TEXT_VALUE_CHARS,
+    InvestigationAction,
+    SourceEvidenceView,
+    UntrustedTextField,
+    _extract_untrusted_text,
+    run_investigation,
+)
 from reflow.openai_investigation_provider import (
     OpenAIInvestigationProvider,
 )
@@ -409,7 +417,8 @@ def test_final_hallucinated_citation_is_still_rejected_by_core_validator() -> No
 
 def test_source_tool_output_redacts_external_sensitive_identifiers() -> None:
     narration = (
-        "contact finance@example.com phone 9876543210 token rzp_live_abcdefghij UTR-ABC123456789"
+        "contact finance@example.com phone 9876543210 longref "
+        "1234567890123456789012345 token rzp_live_abcdefgh UTR-ABC123456789"
     )
     fixture = _fixture(bank_amount=90_000, narration=narration)
     source_id = next(
@@ -452,7 +461,8 @@ def test_source_tool_output_redacts_external_sensitive_identifiers() -> None:
     output = transport.calls[1][2]["input"][2]["output"]
     assert "finance@example.com" not in output
     assert "9876543210" not in output
-    assert "rzp_live_abcdefghij" not in output
+    assert "1234567890123456789012345" not in output
+    assert "rzp_live_abcdefgh" not in output
     assert "UTR-ABC123456789" not in output
     assert envelope.source_record_id not in output
     assert fixture.proof.bank.settlement_utr not in output
@@ -460,6 +470,73 @@ def test_source_tool_output_redacts_external_sensitive_identifiers() -> None:
     assert "<LONG_NUMBER>" in output
     assert "<SECRET_LIKE>" in output
     assert "<TRANSACTION_ID>" in output
+
+
+def test_source_tool_output_redacts_secret_fragment_cut_by_value_bound() -> None:
+    secret = "rzp_live_abcdefgh"
+    leaked_prefix = "rzp_live_abcdefg"
+    prefix = "x" * (MAX_UNTRUSTED_TEXT_VALUE_CHARS - 1 - len(leaked_prefix))
+    field = next(
+        item
+        for item in _extract_untrusted_text({"memo": prefix + " " + secret})
+        if item.path.endswith(".memo")
+    )
+    view = SourceEvidenceView(
+        source_envelope_id=SourceEnvelopeId("src_openai_truncated_secret"),
+        source_kind=SourceKind.BANK,
+        source_record_id="bank-truncated-secret",
+        occurred_at=None,
+        received_at=__import__("datetime").datetime(2026, 9, 3, tzinfo=__import__("datetime").UTC),
+        schema_version="test-v1",
+        payload_sha256="0" * 64,
+        trust_label="UNTRUSTED_SOURCE_DATA",
+        untrusted_text_fields=(field,),
+    )
+    output = provider_module._model_tool_output(view)
+    rendered = output["untrusted_text_fields"][0]["value"]
+    assert leaked_prefix not in rendered
+    assert "<SECRET_LIKE>" in rendered
+
+
+def test_source_tool_output_redacts_and_bounds_untrusted_field_paths() -> None:
+    from datetime import UTC, datetime
+
+    secret_path = "payload.finance@example.com.rzp_live_abcdefgh." + ("x" * 300)
+    field = UntrustedTextField(path=secret_path[:240], value="safe")
+    view = SourceEvidenceView(
+        source_envelope_id=SourceEnvelopeId("src_openai_path_redaction"),
+        source_kind=SourceKind.BANK,
+        source_record_id="bank-path-redaction",
+        occurred_at=None,
+        received_at=datetime(2026, 9, 2, tzinfo=UTC),
+        schema_version="test-v1",
+        payload_sha256="0" * 64,
+        trust_label="UNTRUSTED_SOURCE_DATA",
+        untrusted_text_fields=(field,),
+    )
+    output = provider_module._model_tool_output(view)
+    rendered = output["untrusted_text_fields"][0]["path"]
+    assert len(rendered) <= 240
+    assert "finance@example.com" not in rendered
+    assert "rzp_live_abcdefgh" not in rendered
+
+
+def test_untrusted_text_extraction_bounds_depth_and_path_length() -> None:
+    deep: dict[str, object] = {"leaf": "too-deep"}
+    for index in range(20):
+        deep = {("k" * 500) + str(index): deep}
+    payload: dict[str, object] = {
+        "finance@example.com.rzp_live_abcdefgh." + ("k" * 500): "visible",
+        "deep": deep,
+    }
+    # Exercise the core extractor through the investigation module to prove it does not
+    # recurse through arbitrarily deep source payloads or emit unbounded field paths.
+    import reflow.investigation as investigation_module
+
+    fields = investigation_module._extract_untrusted_text(payload)
+    assert fields
+    assert all(len(item.path) <= 240 for item in fields)
+    assert len(fields) <= 16
 
 
 def test_incomplete_or_error_response_fails_closed() -> None:
@@ -496,3 +573,9 @@ def test_provider_source_contains_no_financial_mutation_surface() -> None:
     )
     for forbidden in forbidden_names:
         assert forbidden not in source
+
+
+def test_provider_rejects_non_finite_or_unbounded_timeout() -> None:
+    for value in (float("nan"), float("inf"), 301.0):
+        with pytest.raises(ValueError, match="timeout"):
+            OpenAIInvestigationProvider(api_key="key", model="gpt-test", timeout_seconds=value)
