@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +14,7 @@ from reflow.persistence import (
     PointerKind,
     PostgresApplicationStore,
     ReflowApplicationService,
+    canonical_artifact_json,
 )
 
 DSN = os.getenv("REFLOW_TEST_POSTGRES_DSN")
@@ -208,6 +210,58 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
     rebuilt = ReflowApplicationService(PostgresApplicationStore(_require_dsn()))
     assert ControlTowerReader(rebuilt, evaluation_root=tmp_path).overview(SCOPE) == overview
 
+
+
+def test_real_postgres_control_tower_traverses_more_than_10000_artifacts(
+    tmp_path: Path,
+) -> None:
+    dsn = _require_dsn()
+    psycopg = pytest.importorskip("psycopg")
+    store = PostgresApplicationStore(dsn)
+    with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """
+            TRUNCATE reflow_current_pointers,
+                     reflow_artifacts,
+                     reflow_source_identity,
+                     reflow_source_envelopes
+            """
+        )
+        rows = []
+        for index in range(10_001):
+            artifact_id = f"trace_long_history_{index:05d}"
+            rendered = canonical_artifact_json(
+                {"id": artifact_id, "scope_id": str(SCOPE)}
+            )
+            rows.append(
+                (
+                    artifact_id,
+                    ArtifactKind.INVESTIGATION_TRACE.value,
+                    str(SCOPE),
+                    NOW,
+                    hashlib.sha256(rendered.encode()).hexdigest(),
+                    rendered,
+                )
+            )
+        cursor.executemany(
+            """
+            INSERT INTO reflow_artifacts(
+                artifact_id, artifact_kind, scope_id, observed_at,
+                payload_sha256, payload_json
+            ) VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+            """,
+            rows,
+        )
+
+    reader = ControlTowerReader(
+        ReflowApplicationService(store),
+        evaluation_root=tmp_path,
+        now=lambda: NOW,
+    )
+    artifacts = reader._list(ArtifactKind.INVESTIGATION_TRACE, SCOPE)
+    assert len(artifacts) == 10_001
+    assert artifacts[0].artifact_id == "trace_long_history_00000"
+    assert artifacts[-1].artifact_id == "trace_long_history_10000"
 
 def test_synthetic_control_tower_demo_seed_is_idempotent_and_readable(tmp_path: Path) -> None:
     from reflow.evaluation.control_tower_demo import seed_demo

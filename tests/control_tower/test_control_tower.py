@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
@@ -10,12 +11,15 @@ import pytest
 
 from reflow import domain
 from reflow.control_tower import (
+    ControlTowerCursorError,
     ControlTowerIntegrityError,
     ControlTowerNotFound,
     ControlTowerReader,
 )
 from reflow.persistence import (
     ArtifactKind,
+    ArtifactPage,
+    ArtifactPageCursor,
     CurrentPointer,
     PointerKind,
     StoredArtifact,
@@ -73,6 +77,50 @@ class FakeStore:
             generation=1,
             updated_at=NOW,
         )
+
+    def artifact_page(
+        self,
+        *,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId | None,
+        limit: int = 100,
+        after: ArtifactPageCursor | None = None,
+    ) -> ArtifactPage:
+        max_time = datetime.max.replace(tzinfo=UTC)
+        values = sorted(
+            (
+                item
+                for item in self._by_id.values()
+                if item.kind is kind and item.scope_id == scope_id
+            ),
+            key=lambda item: (
+                item.observed_at is None,
+                item.observed_at or max_time,
+                item.artifact_id,
+            ),
+        )
+        if after is not None:
+            after_key = (
+                after.observed_at is None,
+                after.observed_at or max_time,
+                after.artifact_id,
+            )
+            values = [
+                item
+                for item in values
+                if (
+                    item.observed_at is None,
+                    item.observed_at or max_time,
+                    item.artifact_id,
+                )
+                > after_key
+            ]
+        items = tuple(values[:limit])
+        next_cursor = None
+        if len(values) > limit and items:
+            last = items[-1]
+            next_cursor = ArtifactPageCursor(last.observed_at, last.artifact_id)
+        return ArtifactPage(items=items, next_cursor=next_cursor)
 
     def artifacts(
         self,
@@ -484,22 +532,63 @@ def test_overview_uses_explicit_latest_run_pointer_not_newer_unpointed_artifact(
     assert overview.run.code_build_sha == "95164be"
 
 
-def test_control_tower_fails_closed_when_artifact_history_exceeds_read_window(
+def test_control_tower_paged_history_still_fails_closed_on_truncated_store(
     tmp_path: Path,
 ) -> None:
-    class TruncatedStore(FakeStore):
-        def artifact_count(self, *, kind, scope_id):
-            if kind is ArtifactKind.CASE_OBSERVATION and scope_id == SCOPE_A:
-                return 10_001
-            return super().artifact_count(kind=kind, scope_id=scope_id)
+    class TruncatedPageStore(FakeStore):
+        def artifact_page(self, *, kind, scope_id, limit=100, after=None):
+            page = super().artifact_page(
+                kind=kind, scope_id=scope_id, limit=limit, after=after
+            )
+            if page.items:
+                return ArtifactPage(items=page.items[:1], next_cursor=None)
+            return page
 
+    artifacts = (
+        _artifact(
+            ArtifactKind.INVESTIGATION_TRACE,
+            "trace_truncated_a",
+            SCOPE_A,
+            {"scope_id": str(SCOPE_A)},
+        ),
+        _artifact(
+            ArtifactKind.INVESTIGATION_TRACE,
+            "trace_truncated_b",
+            SCOPE_A,
+            {"scope_id": str(SCOPE_A)},
+        ),
+    )
     reader = ControlTowerReader(
-        TruncatedStore(_base_artifacts()),
+        TruncatedPageStore(artifacts),
         evaluation_root=tmp_path,
         now=lambda: NOW,
     )
-    with pytest.raises(ControlTowerIntegrityError, match="history is incomplete"):
-        reader.exceptions(SCOPE_A)
+    with pytest.raises(ControlTowerIntegrityError, match="pagination was incomplete"):
+        reader._list(ArtifactKind.INVESTIGATION_TRACE, SCOPE_A)
+
+
+def test_control_tower_scans_artifact_history_beyond_legacy_10000_window(
+    tmp_path: Path,
+) -> None:
+    artifacts = tuple(
+        _artifact(
+            ArtifactKind.INVESTIGATION_TRACE,
+            f"trace_page_{index:05d}",
+            SCOPE_A,
+            {"scope_id": str(SCOPE_A)},
+            observed_at=NOW + timedelta(microseconds=index),
+        )
+        for index in range(10_001)
+    )
+    reader = ControlTowerReader(
+        FakeStore(artifacts),
+        evaluation_root=tmp_path,
+        now=lambda: NOW,
+    )
+    result = reader._list(ArtifactKind.INVESTIGATION_TRACE, SCOPE_A)
+    assert len(result) == 10_001
+    assert result[0].artifact_id == "trace_page_00000"
+    assert result[-1].artifact_id == "trace_page_10000"
 
 
 def test_overview_rejects_control_packet_that_disagrees_with_current_run(
@@ -568,6 +657,47 @@ def test_proof_list_and_detail_retain_exact_financial_fragments(tmp_path: Path) 
         "src_recon_setl_ui_break",
     )
     assert detail.reason_codes == ("SETTLEMENT_COMPOSITION_RESIDUAL",)
+
+
+def test_collection_pages_are_bounded_and_cursor_bound_to_scope_and_collection(
+    tmp_path: Path,
+) -> None:
+    reader = _reader(tmp_path)
+
+    first = reader.proofs_page(SCOPE_A, limit=1)
+    assert [item.proof_id for item in first.items] == ["proofv_ui_break"]
+    assert first.next_cursor is not None
+    second = reader.proofs_page(SCOPE_A, cursor=first.next_cursor, limit=1)
+    assert [item.proof_id for item in second.items] == ["proofv_ui_green"]
+    assert second.next_cursor is None
+
+    source_first = reader.sources_page(SCOPE_A, limit=1)
+    assert len(source_first.items) == 1
+    assert source_first.next_cursor is not None
+    source_second = reader.sources_page(
+        SCOPE_A, cursor=source_first.next_cursor, limit=1
+    )
+    assert len(source_second.items) == 1
+    assert source_second.next_cursor is None
+    assert source_first.items[0].manifest_id != source_second.items[0].manifest_id
+
+    with pytest.raises(ControlTowerCursorError, match="binding"):
+        reader.sources_page(SCOPE_A, cursor=first.next_cursor, limit=1)
+    with pytest.raises(ControlTowerCursorError, match="binding"):
+        reader.proofs_page(SCOPE_B, cursor=first.next_cursor, limit=1)
+    with pytest.raises(ControlTowerCursorError, match="invalid collection cursor"):
+        reader.proofs_page(SCOPE_A, cursor="not-a-valid-cursor", limit=1)
+    assert first.next_cursor is not None
+    raw = first.next_cursor + "=" * (-len(first.next_cursor) % 4)
+    cursor_payload = json.loads(base64.urlsafe_b64decode(raw).decode())
+    cursor_payload["v"] = True
+    bool_version = base64.urlsafe_b64encode(
+        json.dumps(cursor_payload, separators=(",", ":")).encode()
+    ).decode().rstrip("=")
+    with pytest.raises(ControlTowerCursorError, match="binding"):
+        reader.proofs_page(SCOPE_A, cursor=bool_version, limit=1)
+    with pytest.raises(ControlTowerCursorError, match="page limit"):
+        reader.proofs_page(SCOPE_A, limit=101)
 
 
 def test_proof_detail_rejects_cross_scope_artifact(tmp_path: Path) -> None:
@@ -1172,8 +1302,14 @@ def test_fastapi_access_boundary_authenticates_and_authorizes_exact_scope(tmp_pa
     )
     allowed = client.get(f"/api/v1/scopes/{SCOPE_A}/overview", headers=viewer_headers)
     denied = client.get(f"/api/v1/scopes/{SCOPE_B}/overview", headers=viewer_headers)
+    cursor_probe = client.get(
+        f"/api/v1/scopes/{SCOPE_B}/proofs/page",
+        params={"cursor": "not-a-valid-cursor"},
+        headers=viewer_headers,
+    )
     assert allowed.status_code == 200
     assert denied.status_code == 403
+    assert cursor_probe.status_code == 403
     evaluation_denied = client.get("/api/v1/evaluation", headers=viewer_headers)
     assert evaluation_denied.status_code == 403
 
@@ -1181,18 +1317,21 @@ def test_fastapi_access_boundary_authenticates_and_authorizes_exact_scope(tmp_pa
     evaluation_allowed = client.get("/api/v1/evaluation", headers=reviewer_headers)
     assert evaluation_allowed.status_code == 200
 
-    assert len(records) == 4
+    assert len(records) == 5
     assert records[0].request_id == allowed.headers["x-request-id"]
     assert records[0].scope_id == SCOPE_A
     assert records[0].decision.value == "allowed"
     assert records[1].request_id == denied.headers["x-request-id"]
     assert records[1].scope_id == SCOPE_B
     assert records[1].decision.value == "denied"
-    assert records[2].request_id == evaluation_denied.headers["x-request-id"]
-    assert records[2].scope_id is None
+    assert records[2].request_id == cursor_probe.headers["x-request-id"]
+    assert records[2].scope_id == SCOPE_B
     assert records[2].decision.value == "denied"
-    assert records[3].request_id == evaluation_allowed.headers["x-request-id"]
-    assert records[3].decision.value == "allowed"
+    assert records[3].request_id == evaluation_denied.headers["x-request-id"]
+    assert records[3].scope_id is None
+    assert records[3].decision.value == "denied"
+    assert records[4].request_id == evaluation_allowed.headers["x-request-id"]
+    assert records[4].decision.value == "allowed"
     assert all(len(item.principal_subject_sha256) == 64 for item in records)
     serialized = repr(records) + repr(telemetry)
     assert "viewer@example.com" not in serialized
@@ -1272,6 +1411,24 @@ def test_fastapi_proof_case_source_and_evaluation_routes(tmp_path: Path) -> None
     client = TestClient(create_control_tower_app(_reader(tmp_path)))
 
     assert client.get(f"/api/v1/scopes/{SCOPE_A}/proofs").status_code == 200
+    proof_page = client.get(f"/api/v1/scopes/{SCOPE_A}/proofs/page?limit=1")
+    assert proof_page.status_code == 200
+    assert len(proof_page.json()["items"]) == 1
+    assert proof_page.json()["next_cursor"]
+    next_proof_page = client.get(
+        f"/api/v1/scopes/{SCOPE_A}/proofs/page",
+        params={"limit": 1, "cursor": proof_page.json()["next_cursor"]},
+    )
+    assert next_proof_page.status_code == 200
+    assert len(next_proof_page.json()["items"]) == 1
+    assert next_proof_page.json()["next_cursor"] is None
+    bad_cursor = client.get(
+        f"/api/v1/scopes/{SCOPE_A}/proofs/page",
+        params={"cursor": "not-a-valid-cursor"},
+    )
+    assert bad_cursor.status_code == 400
+    assert bad_cursor.json()["error"] == "invalid_collection_cursor"
+
     proof = client.get(f"/api/v1/scopes/{SCOPE_A}/proofs/proofv_ui_break")
     assert proof.status_code == 200
     assert proof.json()["composition"]["residual"]["amount_paise"] == "500"
@@ -1279,6 +1436,9 @@ def test_fastapi_proof_case_source_and_evaluation_routes(tmp_path: Path) -> None
     queue = client.get(f"/api/v1/scopes/{SCOPE_A}/exceptions")
     assert queue.status_code == 200
     assert queue.json()[0]["workflow_status"] == "awaiting_source"
+    queue_page = client.get(f"/api/v1/scopes/{SCOPE_A}/exceptions/page?limit=1")
+    assert queue_page.status_code == 200
+    assert queue_page.json()["items"][0]["workflow_status"] == "awaiting_source"
 
     case = client.get(f"/api/v1/scopes/{SCOPE_A}/cases/case_ui_break")
     assert case.status_code == 200
@@ -1287,6 +1447,10 @@ def test_fastapi_proof_case_source_and_evaluation_routes(tmp_path: Path) -> None
     sources = client.get(f"/api/v1/scopes/{SCOPE_A}/sources")
     assert sources.status_code == 200
     assert {item["source_kind"] for item in sources.json()} == {"bank", "razorpay_recon"}
+    source_page = client.get(f"/api/v1/scopes/{SCOPE_A}/sources/page?limit=1")
+    assert source_page.status_code == 200
+    assert len(source_page.json()["items"]) == 1
+    assert source_page.json()["next_cursor"]
 
     evaluation = client.get("/api/v1/evaluation")
     assert evaluation.status_code == 200

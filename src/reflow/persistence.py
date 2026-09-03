@@ -24,6 +24,8 @@ __all__ = [
     "POSTGRES_SCHEMA_VERSION",
     "ApplicationCapabilities",
     "ArtifactKind",
+    "ArtifactPage",
+    "ArtifactPageCursor",
     "ArtifactWriteDisposition",
     "ArtifactWriteResult",
     "CurrentPointer",
@@ -183,6 +185,23 @@ def _decode_json_object(value: object, label: str) -> dict[str, object]:
     if not isinstance(decoded, dict) or any(not isinstance(key, str) for key in decoded):
         raise PersistenceIntegrityError(f"{label} JSON root must be an object")
     return decoded
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactPageCursor:
+    observed_at: datetime | None
+    artifact_id: str
+
+    def __post_init__(self) -> None:
+        if self.observed_at is not None:
+            _aware(self.observed_at, "artifact page cursor observed_at")
+        _text(self.artifact_id, "artifact page cursor artifact id")
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactPage:
+    items: tuple[StoredArtifact, ...]
+    next_cursor: ArtifactPageCursor | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1060,6 +1079,65 @@ class PostgresApplicationStore(Journal):
         finally:
             connection.close()
 
+    def list_artifact_page(
+        self,
+        *,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId | None,
+        limit: int = 100,
+        after: ArtifactPageCursor | None = None,
+    ) -> ArtifactPage:
+        if not isinstance(kind, ArtifactKind):
+            raise TypeError("artifact kind must be ArtifactKind")
+        if scope_id is not None and not isinstance(scope_id, domain.ReconciliationScopeId):
+            raise TypeError("artifact scope must be ReconciliationScopeId")
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10_000:
+            raise PersistenceError("artifact page limit must be between 1 and 10000")
+        if after is not None and not isinstance(after, ArtifactPageCursor):
+            raise TypeError("artifact page cursor must be ArtifactPageCursor")
+
+        scope_value = None if scope_id is None else str(scope_id)
+        query = """
+            SELECT artifact_id, artifact_kind, scope_id, observed_at,
+                   payload_sha256, payload_json::text
+            FROM reflow_artifacts
+            WHERE artifact_kind = %s
+              AND scope_id IS NOT DISTINCT FROM %s
+        """
+        params: list[object] = [kind.value, scope_value]
+        if after is not None:
+            if after.observed_at is None:
+                query += " AND observed_at IS NULL AND artifact_id > %s"
+                params.append(after.artifact_id)
+            else:
+                query += """
+                    AND (
+                        observed_at > %s
+                        OR (observed_at = %s AND artifact_id > %s)
+                        OR observed_at IS NULL
+                    )
+                """
+                params.extend((after.observed_at, after.observed_at, after.artifact_id))
+        query += " ORDER BY observed_at NULLS LAST, artifact_id LIMIT %s"
+        params.append(limit + 1)
+
+        connection = self._connect()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(query, tuple(params))
+                rows = cursor.fetchall()
+            artifacts = tuple(self._row_to_artifact(row) for row in rows[:limit])
+            next_cursor = None
+            if len(rows) > limit and artifacts:
+                last = artifacts[-1]
+                next_cursor = ArtifactPageCursor(
+                    observed_at=last.observed_at,
+                    artifact_id=last.artifact_id,
+                )
+            return ArtifactPage(items=artifacts, next_cursor=next_cursor)
+        finally:
+            connection.close()
+
     def list_artifacts(
         self,
         *,
@@ -1067,30 +1145,11 @@ class PostgresApplicationStore(Journal):
         scope_id: domain.ReconciliationScopeId | None,
         limit: int = 100,
     ) -> tuple[StoredArtifact, ...]:
-        if not isinstance(kind, ArtifactKind):
-            raise TypeError("artifact kind must be ArtifactKind")
-        if scope_id is not None and not isinstance(scope_id, domain.ReconciliationScopeId):
-            raise TypeError("artifact scope must be ReconciliationScopeId")
-        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 10_000:
-            raise PersistenceError("artifact query limit must be between 1 and 10000")
-        connection = self._connect()
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT artifact_id, artifact_kind, scope_id, observed_at,
-                           payload_sha256, payload_json::text
-                    FROM reflow_artifacts
-                    WHERE artifact_kind = %s
-                      AND scope_id IS NOT DISTINCT FROM %s
-                    ORDER BY observed_at NULLS LAST, artifact_id
-                    LIMIT %s
-                    """,
-                    (kind.value, None if scope_id is None else str(scope_id), limit),
-                )
-                return tuple(self._row_to_artifact(row) for row in cursor.fetchall())
-        finally:
-            connection.close()
+        return self.list_artifact_page(
+            kind=kind,
+            scope_id=scope_id,
+            limit=limit,
+        ).items
 
     def count_artifacts(
         self,
@@ -1814,6 +1873,21 @@ class ReflowApplicationService:
 
     def artifact(self, artifact_id: str) -> StoredArtifact | None:
         return self._store.get_artifact(artifact_id)
+
+    def artifact_page(
+        self,
+        *,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId | None,
+        limit: int = 100,
+        after: ArtifactPageCursor | None = None,
+    ) -> ArtifactPage:
+        return self._store.list_artifact_page(
+            kind=kind,
+            scope_id=scope_id,
+            limit=limit,
+            after=after,
+        )
 
     def artifacts(
         self,

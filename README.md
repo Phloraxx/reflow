@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: production observability/operator-audit Gate 49 is merged green on `main` as `bd3efd7319af088943561d202ac3385eeb389c86` via PR #38; exact merge-triggered CI `33795431092` passed the full 535-test recovery-enabled gate. ReFlow now has generated request correlation, secret-minimized JSON telemetry, bounded local metrics, and append-only pseudonymous authenticated-operator access auditing without changing financial truth. Centralized telemetry/alerts/SLOs, a public production deployment, and a non-empty authenticated Razorpay Test Mode settlement/recon corpus remain unclaimed. See `docs/49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`.**
+> **Current phase: Control Tower long-history pagination Gate 50 is active on `hardening/control-tower-pagination` from green `main` `dfd8c943aae80ffb2184f1c9df718d1922175ad9`. The branch replaces the legacy 10,000-artifact read ceiling with fail-closed PostgreSQL keyset traversal and moves Proofs, Exceptions and Sources to bounded cursor pages while preserving legacy API routes and financial semantics. Snapshot-pinned cross-request pages, materialized exception read models, centralized observability, a public production deployment, and a non-empty authenticated Razorpay settlement/recon corpus remain unclaimed. See `docs/50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -640,6 +640,9 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [x] generated request correlation + secret-minimized JSON HTTP telemetry
 - [x] bounded token-gated local metrics with public tunnel path blocked
 - [x] append-only pseudonymous authenticated-operator access audit + local inspection CLI
+- [x] PostgreSQL keyset traversal beyond 10,000 scoped artifacts
+- [x] bounded cursor pages for Proofs, Exceptions and Sources + paged React UI
+- [ ] snapshot-pinned cross-request pages/materialized long-history read models
 - [ ] centralized/off-host telemetry, alert routing and measured production SLOs
 - [ ] provisioned off-host WAL archive, monitored retention, production host/tunnel and measured RPO/RTO
 

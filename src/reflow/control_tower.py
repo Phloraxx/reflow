@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -8,28 +11,39 @@ from typing import Protocol
 
 from . import domain
 from .evaluation.benchmark_artifacts import load_verified_benchmark
-from .persistence import ArtifactKind, CurrentPointer, PointerKind, StoredArtifact
+from .persistence import (
+    ArtifactKind,
+    ArtifactPage,
+    ArtifactPageCursor,
+    CurrentPointer,
+    PointerKind,
+    StoredArtifact,
+)
 
 __all__ = [
     "BankProofView",
     "CaseFileView",
     "CaseObservationView",
     "CompositionProofView",
+    "ControlTowerCursorError",
     "ControlTowerIntegrityError",
     "ControlTowerNotFound",
     "ControlTowerReader",
     "DispositionView",
     "EvaluationArtifactView",
     "EvaluationLabView",
+    "ExceptionPage",
     "ExceptionQueueItem",
     "MoneyView",
     "OverviewView",
     "ProofDetailView",
     "ProofListItem",
+    "ProofPage",
     "ProofStatusSummary",
     "ReadArtifactStore",
     "RunOverviewView",
     "SourceLabItem",
+    "SourcePage",
     "SourceStateView",
 ]
 
@@ -42,10 +56,23 @@ class ControlTowerNotFound(LookupError):
     """A requested scoped immutable artifact is unavailable."""
 
 
+class ControlTowerCursorError(ValueError):
+    """A collection cursor is malformed, stale or bound to another collection."""
+
+
 class ReadArtifactStore(Protocol):
     def artifact(self, artifact_id: str) -> StoredArtifact | None: ...
 
     def current(self, *, kind: PointerKind, stream_key: str) -> CurrentPointer | None: ...
+
+    def artifact_page(
+        self,
+        *,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId | None,
+        limit: int = 100,
+        after: ArtifactPageCursor | None = None,
+    ) -> ArtifactPage: ...
 
     def artifacts(
         self,
@@ -94,6 +121,12 @@ class SourceLabItem:
 
 
 @dataclass(frozen=True, slots=True)
+class SourcePage:
+    items: tuple[SourceLabItem, ...]
+    next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class RunOverviewView:
     run_id: str
     outcome: str
@@ -137,6 +170,12 @@ class ProofListItem:
     knowledge_cutoff: str
     generated_at: str
     reopened: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ProofPage:
+    items: tuple[ProofListItem, ...]
+    next_cursor: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +251,12 @@ class ExceptionQueueItem:
 
 
 @dataclass(frozen=True, slots=True)
+class ExceptionPage:
+    items: tuple[ExceptionQueueItem, ...]
+    next_cursor: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class CaseObservationView:
     observation_id: str
     run_id: str
@@ -272,6 +317,108 @@ class EvaluationArtifactView:
 @dataclass(frozen=True, slots=True)
 class EvaluationLabView:
     artifacts: tuple[EvaluationArtifactView, ...]
+
+
+_COLLECTION_CURSOR_VERSION = 1
+_MAX_COLLECTION_CURSOR_BYTES = 1024
+_MAX_COLLECTION_PAGE_SIZE = 100
+
+
+def _encode_collection_cursor(
+    *, collection: str, scope_id: domain.ReconciliationScopeId, item_id: str
+) -> str:
+    payload = json.dumps(
+        {
+            "v": _COLLECTION_CURSOR_VERSION,
+            "collection": collection,
+            "scope_id": str(scope_id),
+            "item_id": item_id,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+
+def _decode_collection_cursor(
+    value: str, *, collection: str, scope_id: domain.ReconciliationScopeId
+) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or len(value.encode("utf-8")) > _MAX_COLLECTION_CURSOR_BYTES
+    ):
+        raise ControlTowerCursorError("invalid collection cursor")
+    try:
+        encoded = value.encode("ascii")
+        encoded += b"=" * (-len(encoded) % 4)
+        raw = base64.b64decode(encoded, altchars=b"-_", validate=True)
+        decoded = json.loads(raw.decode("utf-8"))
+    except (UnicodeError, ValueError, binascii.Error, json.JSONDecodeError) as exc:
+        raise ControlTowerCursorError("invalid collection cursor") from exc
+    if not isinstance(decoded, dict) or set(decoded) != {
+        "v",
+        "collection",
+        "scope_id",
+        "item_id",
+    }:
+        raise ControlTowerCursorError("invalid collection cursor")
+    version = decoded.get("v")
+    if (
+        isinstance(version, bool)
+        or not isinstance(version, int)
+        or version != _COLLECTION_CURSOR_VERSION
+        or decoded.get("collection") != collection
+        or decoded.get("scope_id") != str(scope_id)
+    ):
+        raise ControlTowerCursorError("collection cursor binding is invalid")
+    item_id = decoded.get("item_id")
+    if (
+        not isinstance(item_id, str)
+        or not item_id
+        or item_id != item_id.strip()
+        or len(item_id.encode("utf-8")) > 512
+    ):
+        raise ControlTowerCursorError("invalid collection cursor")
+    return item_id
+
+
+def _page_items[PageItem](
+    items: Sequence[PageItem],
+    *,
+    collection: str,
+    scope_id: domain.ReconciliationScopeId,
+    cursor: str | None,
+    limit: int,
+    item_id: Callable[[PageItem], str],
+) -> tuple[tuple[PageItem, ...], str | None]:
+    if (
+        isinstance(limit, bool)
+        or not isinstance(limit, int)
+        or not 1 <= limit <= _MAX_COLLECTION_PAGE_SIZE
+    ):
+        raise ControlTowerCursorError("collection page limit must be between 1 and 100")
+    start = 0
+    if cursor is not None:
+        cursor_item_id = _decode_collection_cursor(
+            cursor, collection=collection, scope_id=scope_id
+        )
+        for index, item in enumerate(items):
+            if item_id(item) == cursor_item_id:
+                start = index + 1
+                break
+        else:
+            raise ControlTowerCursorError("collection cursor item is unavailable")
+    page = tuple(items[start : start + limit])
+    next_cursor = None
+    if start + len(page) < len(items) and page:
+        next_cursor = _encode_collection_cursor(
+            collection=collection,
+            scope_id=scope_id,
+            item_id=item_id(page[-1]),
+        )
+    return page, next_cursor
 
 
 def _mapping(value: object, label: str) -> Mapping[str, object]:
@@ -435,19 +582,46 @@ class ControlTowerReader:
         kind: ArtifactKind,
         scope_id: domain.ReconciliationScopeId,
     ) -> tuple[StoredArtifact, ...]:
-        limit = 10_000
-        artifacts = self._store.artifacts(kind=kind, scope_id=scope_id, limit=limit)
-        total = self._store.artifact_count(kind=kind, scope_id=scope_id)
-        if total > limit or total != len(artifacts):
-            raise ControlTowerIntegrityError(
-                f"{kind.value} history is incomplete for scope {scope_id}; "
-                "pagination/read model required"
+        page_size = 1_000
+        expected_total = self._store.artifact_count(kind=kind, scope_id=scope_id)
+        after: ArtifactPageCursor | None = None
+        collected: list[StoredArtifact] = []
+        while True:
+            page = self._store.artifact_page(
+                kind=kind,
+                scope_id=scope_id,
+                limit=page_size,
+                after=after,
             )
-        for artifact in artifacts:
-            if artifact.kind is not kind:
-                raise ControlTowerIntegrityError("artifact query returned the wrong artifact kind")
-            _scope_payload_matches(artifact, scope_id)
-        return artifacts
+            if not isinstance(page, ArtifactPage):
+                raise ControlTowerIntegrityError("artifact page query returned invalid page data")
+            if len(page.items) > page_size:
+                raise ControlTowerIntegrityError("artifact page exceeded requested page size")
+            for artifact in page.items:
+                if artifact.kind is not kind:
+                    raise ControlTowerIntegrityError(
+                        "artifact query returned the wrong artifact kind"
+                    )
+                _scope_payload_matches(artifact, scope_id)
+            collected.extend(page.items)
+            if page.next_cursor is None:
+                final_total = self._store.artifact_count(kind=kind, scope_id=scope_id)
+                if final_total != expected_total or final_total != len(collected):
+                    raise ControlTowerIntegrityError(
+                        f"{kind.value} history changed or pagination was incomplete "
+                        f"for scope {scope_id}"
+                    )
+                return tuple(collected)
+            if not page.items:
+                raise ControlTowerIntegrityError("artifact page cursor advanced without items")
+            last = page.items[-1]
+            expected = ArtifactPageCursor(
+                observed_at=last.observed_at,
+                artifact_id=last.artifact_id,
+            )
+            if page.next_cursor != expected or page.next_cursor == after:
+                raise ControlTowerIntegrityError("artifact page cursor is inconsistent")
+            after = page.next_cursor
 
     def _artifact(
         self,
@@ -571,6 +745,23 @@ class ControlTowerReader:
         )
         return tuple(sorted(items, key=lambda item: (item.source_kind, item.manifest_id)))
 
+    def sources_page(
+        self,
+        scope_id: domain.ReconciliationScopeId,
+        *,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> SourcePage:
+        items, next_cursor = _page_items(
+            self.sources(scope_id),
+            collection="sources",
+            scope_id=scope_id,
+            cursor=cursor,
+            limit=limit,
+            item_id=lambda item: item.manifest_id,
+        )
+        return SourcePage(items=items, next_cursor=next_cursor)
+
     def _scoped_run_proof_ids(self, scope_id: domain.ReconciliationScopeId) -> frozenset[str]:
         proof_ids: set[str] = set()
         for run in self._list(ArtifactKind.RECONCILIATION_RUN, scope_id):
@@ -612,6 +803,23 @@ class ControlTowerReader:
                 reverse=True,
             )
         )
+
+    def proofs_page(
+        self,
+        scope_id: domain.ReconciliationScopeId,
+        *,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> ProofPage:
+        items, next_cursor = _page_items(
+            self.proofs(scope_id),
+            collection="proofs",
+            scope_id=scope_id,
+            cursor=cursor,
+            limit=limit,
+            item_id=lambda item: item.proof_id,
+        )
+        return ProofPage(items=items, next_cursor=next_cursor)
 
     def proof_detail(
         self, scope_id: domain.ReconciliationScopeId, proof_id: str
@@ -1025,6 +1233,23 @@ class ControlTowerReader:
 
     def exceptions(self, scope_id: domain.ReconciliationScopeId) -> tuple[ExceptionQueueItem, ...]:
         return self._case_queue(scope_id)
+
+    def exceptions_page(
+        self,
+        scope_id: domain.ReconciliationScopeId,
+        *,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> ExceptionPage:
+        items, next_cursor = _page_items(
+            self.exceptions(scope_id),
+            collection="exceptions",
+            scope_id=scope_id,
+            cursor=cursor,
+            limit=limit,
+            item_id=lambda item: item.case_id,
+        )
+        return ExceptionPage(items=items, next_cursor=next_cursor)
 
     def _investigation(
         self,

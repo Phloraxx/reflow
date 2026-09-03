@@ -1,8 +1,9 @@
 import { ChevronRight, Filter } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { scopedPath, useApi } from '../api'
+import { scopedPath, usePagedApi } from '../api'
 import { ArtifactId } from '../components/ArtifactId'
+import { PaginationFooter } from '../components/PaginationFooter'
 import { DataState } from '../components/StateView'
 import { StatusPill } from '../components/StatusPill'
 import { useScope } from '../scope'
@@ -16,11 +17,11 @@ function age(seconds: number): string {
 
 export function ExceptionsPage() {
   const { scopeId } = useScope()
-  const state = useApi<ExceptionItem[]>(scopedPath(scopeId, '/exceptions'))
+  const { state, loadMore } = usePagedApi<ExceptionItem>(scopedPath(scopeId, '/exceptions/page'))
   const [status, setStatus] = useState('all')
   const [materiality, setMateriality] = useState('all')
   const [blocker, setBlocker] = useState('')
-  return <section className="page-stack"><div className="page-heading"><div><span className="eyebrow">Exception Queue</span><h1>Unproven money stays explicit.</h1></div><p>Priority is workflow metadata; proof status remains untouched.</p></div><DataState state={state} empty={(data) => data.length === 0}>{(items) => <ExceptionBody items={items} scopeId={scopeId} status={status} materiality={materiality} blocker={blocker} setStatus={setStatus} setMateriality={setMateriality} setBlocker={setBlocker} />}</DataState></section>
+  return <section className="page-stack"><div className="page-heading"><div><span className="eyebrow">Exception Queue</span><h1>Unproven money stays explicit.</h1></div><p>Priority is workflow metadata; proof status remains untouched.</p></div><DataState state={state} empty={(data) => data.length === 0}>{(items) => <ExceptionBody items={items} scopeId={scopeId} status={status} materiality={materiality} blocker={blocker} setStatus={setStatus} setMateriality={setMateriality} setBlocker={setBlocker} />}</DataState>{state.status === 'success' && <PaginationFooter hasMore={state.nextCursor !== null} loading={state.loadingMore} error={state.loadMoreError} onLoadMore={loadMore} />}</section>
 }
 
 function ExceptionBody({ items, scopeId, status, materiality, blocker, setStatus, setMateriality, setBlocker }: { items: ExceptionItem[]; scopeId: string; status: string; materiality: string; blocker: string; setStatus: (value: string) => void; setMateriality: (value: string) => void; setBlocker: (value: string) => void }) {

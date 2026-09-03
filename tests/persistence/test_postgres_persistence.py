@@ -13,6 +13,7 @@ from reflow.journal import AppendDisposition, Journal, JournalConflictError, mak
 from reflow.persistence import (
     POSTGRES_SCHEMA_VERSION,
     ArtifactKind,
+    ArtifactPageCursor,
     ArtifactWriteDisposition,
     PersistenceConflictError,
     PersistenceError,
@@ -77,6 +78,44 @@ def _source(record_id: str, *, amount: int = 12345, received_at: datetime = NOW)
         },
     )
 
+
+
+def test_postgres_artifact_keyset_page_handles_equal_times_and_null_tail(store) -> None:
+    scope = _scope("artifact_page")
+    kind = ArtifactKind.INVESTIGATION_TRACE
+    for artifact_id, observed_at in (
+        ("page_a", NOW),
+        ("page_b", NOW),
+        ("page_c", NOW + timedelta(seconds=1)),
+        ("page_d", None),
+        ("page_e", None),
+    ):
+        store.put_artifact(
+            kind=kind,
+            artifact_id=artifact_id,
+            payload={"id": artifact_id, "scope_id": str(scope)},
+            scope_id=scope,
+            observed_at=observed_at,
+        )
+
+    first = store.list_artifact_page(kind=kind, scope_id=scope, limit=2)
+    assert tuple(item.artifact_id for item in first.items) == ("page_a", "page_b")
+    assert first.next_cursor == ArtifactPageCursor(observed_at=NOW, artifact_id="page_b")
+
+    second = store.list_artifact_page(
+        kind=kind, scope_id=scope, limit=2, after=first.next_cursor
+    )
+    assert tuple(item.artifact_id for item in second.items) == ("page_c", "page_d")
+    assert second.next_cursor == ArtifactPageCursor(observed_at=None, artifact_id="page_d")
+
+    third = store.list_artifact_page(
+        kind=kind, scope_id=scope, limit=2, after=second.next_cursor
+    )
+    assert tuple(item.artifact_id for item in third.items) == ("page_e",)
+    assert third.next_cursor is None
+
+    with pytest.raises(PersistenceError, match="page limit"):
+        store.list_artifact_page(kind=kind, scope_id=scope, limit=0)
 
 def test_postgres_schema_migration_is_idempotent_and_versioned(store) -> None:
     store.migrate()
