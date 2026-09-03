@@ -93,9 +93,7 @@ class FakeStore:
         scope_id: domain.ReconciliationScopeId | None,
     ) -> int:
         return sum(
-            1
-            for item in self._by_id.values()
-            if item.kind is kind and item.scope_id == scope_id
+            1 for item in self._by_id.values() if item.kind is kind and item.scope_id == scope_id
         )
 
 
@@ -520,8 +518,7 @@ def test_overview_rejects_control_packet_that_disagrees_with_current_run(
         payload=payload,
     )
     replaced = tuple(
-        tampered if item.artifact_id == coverage.artifact_id else item
-        for item in artifacts
+        tampered if item.artifact_id == coverage.artifact_id else item for item in artifacts
     )
     with pytest.raises(ControlTowerIntegrityError, match="coverage/proofs disagree"):
         _reader(tmp_path, replaced).overview(SCOPE_A)
@@ -681,8 +678,7 @@ def test_exception_queue_rejects_observation_financial_facts_that_disagree_with_
         payload=tampered_payload,
     )
     replaced = tuple(
-        tampered if item.artifact_id == current.artifact_id else item
-        for item in artifacts
+        tampered if item.artifact_id == current.artifact_id else item for item in artifacts
     )
     with pytest.raises(ControlTowerIntegrityError, match="financial status disagrees"):
         _reader(tmp_path, replaced).exceptions(SCOPE_A)
@@ -707,8 +703,7 @@ def test_exception_queue_rejects_observation_source_state_that_disagrees_with_ma
         payload=tampered_payload,
     )
     replaced = tuple(
-        tampered if item.artifact_id == current.artifact_id else item
-        for item in artifacts
+        tampered if item.artifact_id == current.artifact_id else item for item in artifacts
     )
     with pytest.raises(ControlTowerIntegrityError, match="source state disagrees"):
         _reader(tmp_path, replaced).exceptions(SCOPE_A)
@@ -739,8 +734,7 @@ def test_exception_queue_rejects_same_case_id_with_changed_economic_identity(
         payload=tampered_payload,
     )
     replaced = tuple(
-        tampered if item.artifact_id == current.artifact_id else item
-        for item in artifacts
+        tampered if item.artifact_id == current.artifact_id else item for item in artifacts
     )
     with pytest.raises(ControlTowerIntegrityError, match="economic identity changed"):
         _reader(tmp_path, replaced).exceptions(SCOPE_A)
@@ -762,8 +756,7 @@ def test_exception_queue_rejects_observation_materiality_that_disagrees_with_pol
         payload=tampered_payload,
     )
     replaced = tuple(
-        tampered if item.artifact_id == current.artifact_id else item
-        for item in artifacts
+        tampered if item.artifact_id == current.artifact_id else item for item in artifacts
     )
     with pytest.raises(ControlTowerIntegrityError, match="materiality disagrees"):
         _reader(tmp_path, replaced).exceptions(SCOPE_A)
@@ -871,9 +864,7 @@ def test_exception_queue_rejects_ambiguous_case_supersession_chronology(tmp_path
 
 def test_exception_queue_rejects_disposition_before_case_first_seen(tmp_path: Path) -> None:
     artifacts = tuple(
-        item
-        for item in _base_artifacts()
-        if item.kind is not ArtifactKind.CASE_DISPOSITION
+        item for item in _base_artifacts() if item.kind is not ArtifactKind.CASE_DISPOSITION
     )
     early = _artifact(
         ArtifactKind.CASE_DISPOSITION,
@@ -1098,6 +1089,7 @@ def test_fastapi_access_boundary_authenticates_and_authorizes_exact_scope(tmp_pa
         AuthorizationPolicy,
     )
     from reflow.control_tower_api import create_control_tower_app
+    from reflow.operator_audit import OperatorAccessAudit
 
     class StubVerifier:
         def verify(self, token: str) -> AuthenticatedPrincipal:
@@ -1127,7 +1119,40 @@ def test_fastapi_access_boundary_authenticates_and_authorizes_exact_scope(tmp_pa
     boundary = AccessAuthBoundary(verifier=StubVerifier(), policy=policy)  # type: ignore[arg-type]
     source = Path("data/eval/gate17/scale-50-clean.json")
     (tmp_path / source.name).write_text(source.read_text())
-    client = TestClient(create_control_tower_app(_reader(tmp_path), auth_boundary=boundary))
+    records: list[OperatorAccessAudit] = []
+    telemetry: list[dict[str, object]] = []
+
+    class StubAudit:
+        def record_access(
+            self,
+            *,
+            occurred_at,
+            request_id,
+            principal_subject_sha256,
+            action,
+            scope_id,
+            decision,
+        ):
+            event = OperatorAccessAudit(
+                audit_id=len(records) + 1,
+                occurred_at=occurred_at,
+                request_id=request_id,
+                principal_subject_sha256=principal_subject_sha256,
+                action=action,
+                scope_id=scope_id,
+                decision=decision,
+            )
+            records.append(event)
+            return event
+
+    client = TestClient(
+        create_control_tower_app(
+            _reader(tmp_path),
+            auth_boundary=boundary,
+            operator_audit=StubAudit(),  # type: ignore[arg-type]
+            event_sink=telemetry.append,
+        )
+    )
 
     assert client.get("/api/v1/health").status_code == 200
     assert client.get("/api/v1/ready").status_code == 503
@@ -1143,17 +1168,98 @@ def test_fastapi_access_boundary_authenticates_and_authorizes_exact_scope(tmp_pa
 
     viewer_headers = {"Cf-Access-Jwt-Assertion": "viewer-token"}
     assert (
-        client.get("/api/v1/scopes/not-a-scope/overview", headers=viewer_headers).status_code
-        == 422
+        client.get("/api/v1/scopes/not-a-scope/overview", headers=viewer_headers).status_code == 422
     )
     allowed = client.get(f"/api/v1/scopes/{SCOPE_A}/overview", headers=viewer_headers)
     denied = client.get(f"/api/v1/scopes/{SCOPE_B}/overview", headers=viewer_headers)
     assert allowed.status_code == 200
     assert denied.status_code == 403
-    assert client.get("/api/v1/evaluation", headers=viewer_headers).status_code == 403
+    evaluation_denied = client.get("/api/v1/evaluation", headers=viewer_headers)
+    assert evaluation_denied.status_code == 403
 
     reviewer_headers = {"Cf-Access-Jwt-Assertion": "reviewer-token"}
-    assert client.get("/api/v1/evaluation", headers=reviewer_headers).status_code == 200
+    evaluation_allowed = client.get("/api/v1/evaluation", headers=reviewer_headers)
+    assert evaluation_allowed.status_code == 200
+
+    assert len(records) == 4
+    assert records[0].request_id == allowed.headers["x-request-id"]
+    assert records[0].scope_id == SCOPE_A
+    assert records[0].decision.value == "allowed"
+    assert records[1].request_id == denied.headers["x-request-id"]
+    assert records[1].scope_id == SCOPE_B
+    assert records[1].decision.value == "denied"
+    assert records[2].request_id == evaluation_denied.headers["x-request-id"]
+    assert records[2].scope_id is None
+    assert records[2].decision.value == "denied"
+    assert records[3].request_id == evaluation_allowed.headers["x-request-id"]
+    assert records[3].decision.value == "allowed"
+    assert all(len(item.principal_subject_sha256) == 64 for item in records)
+    serialized = repr(records) + repr(telemetry)
+    assert "viewer@example.com" not in serialized
+    assert "reviewer@example.com" not in serialized
+    assert "viewer-token" not in serialized
+    assert "reviewer-token" not in serialized
+
+
+def test_fastapi_authenticated_access_requires_durable_operator_audit(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from reflow.access_auth import (
+        AccessAuthBoundary,
+        AuthenticatedPrincipal,
+        AuthorizationPolicy,
+    )
+    from reflow.control_tower_api import create_control_tower_app
+
+    class StubVerifier:
+        def verify(self, _token: str) -> AuthenticatedPrincipal:
+            return AuthenticatedPrincipal(
+                subject="sub-audit-failure",
+                email="viewer@example.com",
+            )
+
+    policy = AuthorizationPolicy.from_mapping(
+        {
+            "schema_version": 1,
+            "principals": [
+                {
+                    "email": "viewer@example.com",
+                    "roles": ["scope_viewer"],
+                    "scopes": [str(SCOPE_A)],
+                }
+            ],
+        }
+    )
+    boundary = AccessAuthBoundary(verifier=StubVerifier(), policy=policy)  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError, match="requires operator audit persistence"):
+        create_control_tower_app(_reader(tmp_path), auth_boundary=boundary)
+
+    class FailingAudit:
+        def record_access(self, **_kwargs):
+            raise RuntimeError("postgresql://secret-user:secret-pass@example.invalid/private")
+
+    telemetry: list[dict[str, object]] = []
+    client = TestClient(
+        create_control_tower_app(
+            _reader(tmp_path),
+            auth_boundary=boundary,
+            operator_audit=FailingAudit(),  # type: ignore[arg-type]
+            event_sink=telemetry.append,
+        )
+    )
+    response = client.get(
+        f"/api/v1/scopes/{SCOPE_A}/overview",
+        headers={"Cf-Access-Jwt-Assertion": "viewer-token"},
+    )
+    assert response.status_code == 503
+    assert response.json() == {"detail": "operator audit unavailable"}
+    assert "secret-pass" not in response.text
+    assert any(
+        event.get("event.name") == "reflow.operator.audit.persistence_failure"
+        for event in telemetry
+    )
+    assert "secret-pass" not in repr(telemetry)
 
 
 def test_fastapi_proof_case_source_and_evaluation_routes(tmp_path: Path) -> None:

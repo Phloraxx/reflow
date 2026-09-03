@@ -11,6 +11,14 @@ These files describe the supported single-host application layout. They are temp
 
 The two application services use different environment files. Provider webhook secrets never belong in the Control Tower environment.
 
+## Observability boundary
+
+Both services emit one-line JSON request telemetry to stdout/stderr for journald collection. Each request receives a server-generated `X-Request-ID`; logs use the route template rather than the concrete URL, so scope IDs, proof IDs, query strings and authorization headers are not copied into generic HTTP telemetry. Stable systemd `SyslogIdentifier` values separate the two streams.
+
+Each process also exposes `/internal/metrics` in Prometheus text format only when `REFLOW_METRICS_TOKEN` is configured with a 32+ byte bearer token. The checked-in Cloudflare Tunnel template rejects `/internal/metrics` before hostname routing, so metrics remain a local scrape surface. Do not publish that endpoint through another reverse proxy without preserving both the route block and bearer authentication.
+
+The Control Tower additionally requires append-only PostgreSQL operator auditing whenever Cloudflare Access authentication is enabled. The durable record stores a SHA-256 pseudonym of the immutable Access subject plus action, scope, decision, time and generated request ID; it does not retain email addresses, JWTs, IP addresses, query strings or finance payloads.
+
 ## Host layout
 
 ```text

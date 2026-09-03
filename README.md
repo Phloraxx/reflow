@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: production deployment/PITR hardening is merged green on `main` as `e047f8ae251857709a81309fe5f1c99465a83849` after PR #35 plus the F-0125 promotion-readiness fix in PR #36; exact `main` CI run `33786427178` passed the full 524-test gate. Single-host loopback/systemd/Cloudflare templates and real PostgreSQL 16.15 named-target PITR mechanics are verified. Off-host WAL storage, a deployed production host/tunnel, measured RPO/RTO, and a non-empty authenticated Razorpay Test Mode settlement/recon corpus remain unclaimed. See `docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`.**
+> **Current phase: production observability/operator-audit hardening is active on `hardening/observability-operator-audit` from green `main` `788258401bcbe948c014909ed7ee1f0524c0937c`. The branch adds generated request correlation, secret-minimized JSON telemetry, bounded local metrics, and append-only pseudonymous authenticated-operator access auditing without changing financial truth. Centralized telemetry/alerts/SLOs, a public production deployment, and a non-empty authenticated Razorpay Test Mode settlement/recon corpus remain unclaimed. See `docs/49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -637,7 +637,25 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [ ] tenant onboarding/provisioning and authenticated operator write permissions
 - [x] restore-tested PostgreSQL logical backup/recovery drill
 - [x] tested PostgreSQL PITR mechanics + single-host systemd/Cloudflare deployment runbook/templates
+- [x] generated request correlation + secret-minimized JSON HTTP telemetry
+- [x] bounded token-gated local metrics with public tunnel path blocked
+- [x] append-only pseudonymous authenticated-operator access audit + local inspection CLI
+- [ ] centralized/off-host telemetry, alert routing and measured production SLOs
 - [ ] provisioned off-host WAL archive, monitored retention, production host/tunnel and measured RPO/RTO
+
+### Operational observability
+
+The supported deployment emits JSON telemetry to journald under `reflow-control-tower` and `reflow-webhook`. Every normal HTTP response includes a generated `X-Request-ID`. Generic HTTP telemetry uses route templates rather than concrete URLs.
+
+If `REFLOW_METRICS_TOKEN` is configured in a service env file, local operators can scrape `http://127.0.0.1:<service-port>/internal/metrics` with `Authorization: Bearer <token>`. The checked-in Cloudflare Tunnel configuration blocks that path from public routing.
+
+Recent authenticated operator decisions can be inspected locally with:
+
+```bash
+python -m reflow.operator_audit_cli --limit 50
+```
+
+That output contains only pseudonymous subject hashes and bounded audit metadata; it never prints the PostgreSQL DSN.
 
 ### AI / product surface
 

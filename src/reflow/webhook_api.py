@@ -5,8 +5,18 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
+from .observability import (
+    EventSink,
+    MetricsRegistry,
+    install_http_observability,
+    json_event_sink,
+    metrics_response,
+    metrics_token_from_env,
+    normalize_metrics_token,
+    request_id,
+)
 from .persistence import PostgresApplicationStore
 from .webhook_ingress import (
     MAX_WEBHOOK_BODY_BYTES,
@@ -44,12 +54,20 @@ def create_webhook_app(
     ingress: RazorpayWebhookIngress,
     *,
     readiness_probe: Callable[[], None],
+    metrics: MetricsRegistry | None = None,
+    metrics_token: str | None = None,
+    event_sink: EventSink | None = None,
 ) -> FastAPI:
+    metrics_token = normalize_metrics_token(metrics_token)
+
     app = FastAPI(
         title="ReFlow Razorpay Webhook Ingress",
         version="0.1.0",
         description="Public provider-authenticated receipt boundary; no reconciliation authority.",
     )
+    metrics_registry = metrics if metrics is not None else MetricsRegistry()
+    sink = event_sink if event_sink is not None else json_event_sink("reflow-webhook")
+    install_http_observability(app, metrics=metrics_registry, event_sink=sink)
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -57,6 +75,8 @@ def create_webhook_app(
             "status": "ok",
             "provider": "razorpay",
             "financial_truth_mutation": False,
+            "request_correlation": "generated",
+            "metrics": "token_gated" if metrics_token is not None else "disabled",
         }
 
     @app.get("/ready")
@@ -72,6 +92,10 @@ def create_webhook_app(
             status_code=200,
             content={"status": "ready", "dependency": "postgresql"},
         )
+
+    @app.get("/internal/metrics", include_in_schema=False)
+    def internal_metrics(request: Request) -> PlainTextResponse:
+        return metrics_response(request, metrics=metrics_registry, token=metrics_token)
 
     @app.post("/api/v1/webhooks/razorpay")
     async def razorpay_webhook(request: Request) -> JSONResponse:
@@ -96,6 +120,20 @@ def create_webhook_app(
             ) from exc
         except WebhookIngressError as exc:
             raise HTTPException(status_code=400, detail="invalid webhook request") from exc
+        metrics_registry.record_webhook(
+            disposition=result.disposition.value,
+            processing_outcome=result.outcome.value,
+            processing_code=result.outcome_code,
+        )
+        sink(
+            {
+                "event.name": "reflow.webhook.ingress",
+                "reflow.request_id": request_id(request),
+                "reflow.webhook.disposition": result.disposition.value,
+                "reflow.webhook.processing_outcome": result.outcome.value,
+                "reflow.webhook.processing_code": result.outcome_code,
+            }
+        )
         return JSONResponse(
             status_code=202 if result.disposition.value == "stored" else 200,
             content={
@@ -119,12 +157,15 @@ def app_from_env() -> FastAPI:
         journal=application_store,
     )
     if ingress is None or webhook_readiness is None:
-        raise RuntimeError(
-            "REFLOW_RAZORPAY_WEBHOOK_MODE=enabled is required for webhook serving"
-        )
+        raise RuntimeError("REFLOW_RAZORPAY_WEBHOOK_MODE=enabled is required for webhook serving")
+    metrics_token = metrics_token_from_env()
 
     def readiness() -> None:
         application_store.check_ready()
         webhook_readiness()
 
-    return create_webhook_app(ingress, readiness_probe=readiness)
+    return create_webhook_app(
+        ingress,
+        readiness_probe=readiness,
+        metrics_token=metrics_token,
+    )
