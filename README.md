@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: durable authenticated Razorpay webhook ingress is merged green as `41f62d9fd07a8f232f3e77476e516d4b666e6d96` (PR #33; exact `main` CI run `33781209886` passed), including PostgreSQL-backed immutable receipts, replay attempts and restore verification. The next external acceptance dependency is a non-empty authenticated Razorpay Test Mode settlement/recon corpus; WAL/PITR remains explicitly unclaimed. See `docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`.**
+> **Current phase: production deployment/PITR hardening is under review on `hardening/production-deployment-pitr`: single-host loopback/systemd/Cloudflare templates plus a real PostgreSQL 16.15 base-backup + archived-WAL + named-restore-point drill are locally green. Off-host WAL storage, a deployed production host/tunnel, RPO/RTO, and a non-empty authenticated Razorpay Test Mode settlement/recon corpus remain unclaimed. See `docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -385,7 +385,7 @@ Gate 17 measured the one-process proof engine before adding infrastructure. The 
 
 Gate 17 also adds a PostgreSQL 16 durability boundary: append-only raw evidence with conflict retention, immutable canonical JSON product/audit artifacts with digest verification, optimistic compare-and-swap current pointers, and a deliberately small `ReflowApplicationService` with no generic SQL or financial-truth mutation surface. Real PostgreSQL integration tests run in CI.
 
-The reference PostgreSQL path is durability-first rather than bulk optimized: the checked-in 1k cold/warm benchmark measures roughly 76 source writes/s and 87–90 artifact writes/s at fine transaction granularity. No 100k/1M, high-throughput PostgreSQL, HA, RBAC or production-readiness claim is made.
+The reference PostgreSQL path is durability-first rather than bulk optimized: the checked-in 1k cold/warm benchmark measures roughly 76 source writes/s and 87–90 artifact writes/s at fine transaction granularity. No 100k/1M, high-throughput PostgreSQL, HA/failover or production-capacity claim is made. Later gates add exact-scope read authorization and tested recovery/deployment boundaries without changing those scale non-claims.
 
 See [`docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](docs/35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md), [`docs/36_GATE_17_CHECKPOINT.md`](docs/36_GATE_17_CHECKPOINT.md), and the self-verifying artifacts under [`data/eval/gate17/`](data/eval/gate17/).
 
@@ -580,6 +580,7 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [`docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged Cloudflare Access authentication and exact-scope authorization
 - [`docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged logical backup/restore verification contract
 - [`docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable Razorpay webhook ingress and replay contract
+- [`docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — active production deployment/PITR acceptance gate
 
 ---
 
@@ -635,7 +636,8 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [x] Cloudflare Access human authentication + exact-scope read authorization/RBAC
 - [ ] tenant onboarding/provisioning and authenticated operator write permissions
 - [x] restore-tested PostgreSQL logical backup/recovery drill
-- [ ] WAL archiving/PITR and production deployment runbook
+- [x] tested PostgreSQL PITR mechanics + single-host systemd/Cloudflare deployment runbook/templates
+- [ ] provisioned off-host WAL archive, monitored retention, production host/tunnel and measured RPO/RTO
 
 ### AI / product surface
 
