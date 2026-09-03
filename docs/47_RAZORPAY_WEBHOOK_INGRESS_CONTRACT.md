@@ -89,6 +89,24 @@ The generic financial recovery verifier remains responsible only for financial a
 10. a real PostgreSQL 16 logical backup/restore drill preserves and revalidates webhook tables;
 11. full PostgreSQL reviewer suite and frozen evaluation evidence remain green.
 
+## Validation checkpoint
+
+Exact implementation/environment-contract head `5db4ecc1f7fbec2789cab6051534861ee8a5ed67` passed PR #33 CI run `33779934431`.
+
+The required submission check reported:
+
+- Ruff: passed;
+- strict mypy: passed across 72 source modules;
+- Python/PostgreSQL: **520 tests passed with no skips**;
+- TypeScript project check: passed;
+- React/Vitest: **5/5 tests passed**;
+- Vite production build: passed;
+- frozen Gate 17/Gate 19 artifacts and generated `EVALUATION.md`: verified unchanged.
+
+Because the CI-only webhook recovery test is gated on the PostgreSQL DSN plus `REFLOW_RECOVERY_DOCKER_DRILL=1`, the no-skip 520-test result confirms that the digest-pinned PostgreSQL 16.15 dump -> fresh database -> restore -> webhook schema/integrity verification drill executed successfully on that head.
+
+Merge and exact merge-triggered `main` CI remain required before this gate is fully closed.
+
 ## Non-claims
 
 This gate does not claim a distributed queue, cross-region webhook ingestion, provider IP allowlisting, unlimited throughput, authenticated webhook-operator UI, or live settlement accuracy. Production Cloudflare/reverse-proxy configuration must route Razorpay only to the dedicated webhook service while preserving Access protection for human Control Tower routes.
