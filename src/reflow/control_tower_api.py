@@ -10,6 +10,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import domain
+from .access_auth import (
+    AccessAuthBoundary,
+    AccessAuthenticationError,
+    AccessAuthorizationError,
+    AuthenticatedPrincipal,
+    auth_boundary_from_env,
+)
 from .control_tower import ControlTowerIntegrityError, ControlTowerNotFound, ControlTowerReader
 from .persistence import PostgresApplicationStore, ReflowApplicationService
 
@@ -28,6 +35,7 @@ def create_control_tower_app(
     *,
     web_dist: Path | None = None,
     readiness_probe: Callable[[], None] | None = None,
+    auth_boundary: AccessAuthBoundary | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="ReFlow Operator Control Tower",
@@ -53,7 +61,37 @@ def create_control_tower_app(
             "mode": "read_only",
             "financial_truth_mutation": False,
             "generic_sql": False,
+            "authentication": "cloudflare_access" if auth_boundary is not None else "disabled",
         }
+
+    def authenticated_principal(request: Request) -> AuthenticatedPrincipal | None:
+        if auth_boundary is None:
+            return None
+        assertion = request.headers.get("Cf-Access-Jwt-Assertion")
+        try:
+            return auth_boundary.authenticate(assertion)
+        except AccessAuthenticationError as exc:
+            raise HTTPException(status_code=401, detail="authentication required") from exc
+
+    def authorized_scope(request: Request, scope_id: str) -> domain.ReconciliationScopeId:
+        principal = authenticated_principal(request)
+        scope = _scope(scope_id)
+        if auth_boundary is None or principal is None:
+            return scope
+        try:
+            auth_boundary.policy.require_scope(principal, scope)
+        except AccessAuthorizationError as exc:
+            raise HTTPException(status_code=403, detail="forbidden") from exc
+        return scope
+
+    def authorize_evaluation(request: Request) -> None:
+        principal = authenticated_principal(request)
+        if auth_boundary is None or principal is None:
+            return
+        try:
+            auth_boundary.policy.require_evaluation(principal)
+        except AccessAuthorizationError as exc:
+            raise HTTPException(status_code=403, detail="forbidden") from exc
 
     @app.get("/api/v1/ready")
     def ready() -> JSONResponse:
@@ -75,31 +113,32 @@ def create_control_tower_app(
         )
 
     @app.get("/api/v1/scopes/{scope_id}/overview")
-    def overview(scope_id: str) -> dict[str, object]:
-        return asdict(reader.overview(_scope(scope_id)))
+    def overview(request: Request, scope_id: str) -> dict[str, object]:
+        return asdict(reader.overview(authorized_scope(request, scope_id)))
 
     @app.get("/api/v1/scopes/{scope_id}/proofs")
-    def proofs(scope_id: str) -> list[dict[str, object]]:
-        return [asdict(item) for item in reader.proofs(_scope(scope_id))]
+    def proofs(request: Request, scope_id: str) -> list[dict[str, object]]:
+        return [asdict(item) for item in reader.proofs(authorized_scope(request, scope_id))]
 
     @app.get("/api/v1/scopes/{scope_id}/proofs/{proof_id}")
-    def proof(scope_id: str, proof_id: str) -> dict[str, object]:
-        return asdict(reader.proof_detail(_scope(scope_id), proof_id))
+    def proof(request: Request, scope_id: str, proof_id: str) -> dict[str, object]:
+        return asdict(reader.proof_detail(authorized_scope(request, scope_id), proof_id))
 
     @app.get("/api/v1/scopes/{scope_id}/exceptions")
-    def exceptions(scope_id: str) -> list[dict[str, object]]:
-        return [asdict(item) for item in reader.exceptions(_scope(scope_id))]
+    def exceptions(request: Request, scope_id: str) -> list[dict[str, object]]:
+        return [asdict(item) for item in reader.exceptions(authorized_scope(request, scope_id))]
 
     @app.get("/api/v1/scopes/{scope_id}/cases/{case_id}")
-    def case_file(scope_id: str, case_id: str) -> dict[str, object]:
-        return asdict(reader.case_file(_scope(scope_id), case_id))
+    def case_file(request: Request, scope_id: str, case_id: str) -> dict[str, object]:
+        return asdict(reader.case_file(authorized_scope(request, scope_id), case_id))
 
     @app.get("/api/v1/scopes/{scope_id}/sources")
-    def sources(scope_id: str) -> list[dict[str, object]]:
-        return [asdict(item) for item in reader.sources(_scope(scope_id))]
+    def sources(request: Request, scope_id: str) -> list[dict[str, object]]:
+        return [asdict(item) for item in reader.sources(authorized_scope(request, scope_id))]
 
     @app.get("/api/v1/evaluation")
-    def evaluation() -> dict[str, object]:
+    def evaluation(request: Request) -> dict[str, object]:
+        authorize_evaluation(request)
         return asdict(reader.evaluation())
 
     if web_dist is not None:
@@ -143,6 +182,7 @@ def app_from_env() -> FastAPI:
     )
     store = PostgresApplicationStore(dsn)
     service = ReflowApplicationService(store)
+    auth_boundary = auth_boundary_from_env()
     web_dist_value = os.getenv("REFLOW_WEB_DIST")
     if web_dist_value is None:
         candidate = Path.cwd() / "web" / "dist"
@@ -157,4 +197,5 @@ def app_from_env() -> FastAPI:
         ),
         web_dist=web_dist,
         readiness_probe=store.check_ready,
+        auth_boundary=auth_boundary,
     )

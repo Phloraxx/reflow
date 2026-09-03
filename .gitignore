@@ -22,3 +22,5 @@ data/eval/tmp/
 web/node_modules/
 web/dist/
 web/*.tsbuildinfo
+
+config/authz.local.json

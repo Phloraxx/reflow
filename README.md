@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gates 1–19 and the third whole-codebase audit are merged green. Audit PR #27 merged as `e2c8a2f33bbf7506257a9a8cfda4349d838a60ac` and exact merge-triggered `main` CI run `33744722448` passed. The audit fixed F-0098 through F-0123 without changing the frozen Gate 19 held-out v1; the repaired tree passes 469 PostgreSQL-enabled Python tests with 80% source-package branch coverage. See `docs/43_THIRD_WHOLE_CODEBASE_AUDIT.md`.**
+> **Current phase: Production Readiness Phase 1 is merged green as `c4922b8c466656bea3c9ee9016818e1fd7235ea7` (PR #29; exact `main` CI run `33763965048` passed). The active next gate adds Cloudflare Access origin JWT verification plus exact server-side scope authorization without changing financial truth or frozen Gate 19 evidence. See `docs/44_PRODUCTION_READINESS_PHASE1.md` and `docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -455,6 +455,7 @@ docker run --rm -d --name reflow-demo-postgres \
 
 until docker exec reflow-demo-postgres pg_isready -U reflow_demo -d reflow_demo >/dev/null 2>&1; do sleep 1; done
 export REFLOW_POSTGRES_DSN='postgresql://reflow_demo:reflow_demo@127.0.0.1:55432/reflow_demo'
+export REFLOW_AUTH_MODE=disabled  # explicit synthetic/local-reviewer opt-in
 SCOPE=$(python -m reflow.evaluation.control_tower_demo --dsn "$REFLOW_POSTGRES_DSN")
 cd web && npm run build && cd ..
 python -m uvicorn reflow.control_tower_api:app_from_env --factory --host 127.0.0.1 --port 8000
@@ -479,6 +480,22 @@ python -m reflow.razorpay_acceptance \
 ```
 
 Live mode additionally requires `--allow-live`. See [`docs/44_PRODUCTION_READINESS_PHASE1.md`](docs/44_PRODUCTION_READINESS_PHASE1.md).
+
+### Enable authenticated production Control Tower access
+
+The local/synthetic reviewer path keeps `REFLOW_AUTH_MODE=disabled`. For real merchant data, protect the public hostname with Cloudflare Access and make the origin independently verify the signed Access application JWT:
+
+```bash
+cp config/authz.example.json config/authz.local.json
+# Edit authz.local.json with exact verified user emails and permitted scope_... IDs.
+export REFLOW_AUTH_MODE=cloudflare_access
+export REFLOW_CF_ACCESS_ISSUER='https://<team>.cloudflareaccess.com'
+export REFLOW_CF_ACCESS_AUD='<Access application AUD tag>'
+export REFLOW_AUTHZ_POLICY='config/authz.local.json'
+python -m uvicorn reflow.control_tower_api:app_from_env --factory --host 127.0.0.1 --port 8000
+```
+
+`/api/v1/health` and `/api/v1/ready` remain infrastructure endpoints. Finance scope routes require the `scope_viewer` role plus an exact scope grant; `/api/v1/evaluation` requires `evaluation_reviewer`. A URL/query `scope_id` never grants access. See [`docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md).
 
 Equivalent explicit checks:
 
@@ -596,7 +613,8 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [x] privacy-preserving real-data acceptance report format
 - [ ] non-empty authenticated Test Mode settlement/recon corpus
 - [ ] public webhook HTTP ingress with durable operator-visible failure semantics
-- [ ] tenant authentication / authorization / RBAC
+- [x] Cloudflare Access human authentication + exact-scope read authorization/RBAC
+- [ ] tenant onboarding/provisioning and authenticated operator write permissions
 - [ ] backup/restore/PITR and production deployment runbook
 
 ### AI / product surface

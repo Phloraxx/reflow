@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "principals": [
+    {
+      "email": "finance-viewer@example.com",
+      "roles": ["scope_viewer"],
+      "scopes": ["scope_replace_with_real_scope_id"]
+    },
+    {
+      "email": "evaluation-reviewer@example.com",
+      "roles": ["evaluation_reviewer"],
+      "scopes": []
+    }
+  ]
+}

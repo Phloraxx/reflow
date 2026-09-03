@@ -24,6 +24,7 @@ postgres = [
 ]
 web = [
   "fastapi>=0.141,<0.142",
+  "PyJWT[crypto]>=2.13,<3",
   "uvicorn>=0.35,<1",
 ]
 

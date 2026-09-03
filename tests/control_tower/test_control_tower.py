@@ -1088,6 +1088,74 @@ def test_fastapi_readiness_is_fail_closed_without_probe_and_hides_probe_errors(
     assert "secret-pass" not in response.text
 
 
+def test_fastapi_access_boundary_authenticates_and_authorizes_exact_scope(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from reflow.access_auth import (
+        AccessAuthBoundary,
+        AccessAuthenticationError,
+        AuthenticatedPrincipal,
+        AuthorizationPolicy,
+    )
+    from reflow.control_tower_api import create_control_tower_app
+
+    class StubVerifier:
+        def verify(self, token: str) -> AuthenticatedPrincipal:
+            if token == "viewer-token":
+                return AuthenticatedPrincipal(subject="sub-viewer", email="viewer@example.com")
+            if token == "reviewer-token":
+                return AuthenticatedPrincipal(subject="sub-reviewer", email="reviewer@example.com")
+            raise AccessAuthenticationError("sensitive-token-detail")
+
+    policy = AuthorizationPolicy.from_mapping(
+        {
+            "schema_version": 1,
+            "principals": [
+                {
+                    "email": "viewer@example.com",
+                    "roles": ["scope_viewer"],
+                    "scopes": [str(SCOPE_A)],
+                },
+                {
+                    "email": "reviewer@example.com",
+                    "roles": ["scope_viewer", "evaluation_reviewer"],
+                    "scopes": [str(SCOPE_A)],
+                },
+            ],
+        }
+    )
+    boundary = AccessAuthBoundary(verifier=StubVerifier(), policy=policy)  # type: ignore[arg-type]
+    source = Path("data/eval/gate17/scale-50-clean.json")
+    (tmp_path / source.name).write_text(source.read_text())
+    client = TestClient(create_control_tower_app(_reader(tmp_path), auth_boundary=boundary))
+
+    assert client.get("/api/v1/health").status_code == 200
+    assert client.get("/api/v1/ready").status_code == 503
+    assert client.get(f"/api/v1/scopes/{SCOPE_A}/overview").status_code == 401
+    assert client.get("/api/v1/scopes/not-a-scope/overview").status_code == 401
+    bad = client.get(
+        f"/api/v1/scopes/{SCOPE_A}/overview",
+        headers={"Cf-Access-Jwt-Assertion": "bad-token"},
+    )
+    assert bad.status_code == 401
+    assert bad.json() == {"detail": "authentication required"}
+    assert "sensitive-token-detail" not in bad.text
+
+    viewer_headers = {"Cf-Access-Jwt-Assertion": "viewer-token"}
+    assert (
+        client.get("/api/v1/scopes/not-a-scope/overview", headers=viewer_headers).status_code
+        == 422
+    )
+    allowed = client.get(f"/api/v1/scopes/{SCOPE_A}/overview", headers=viewer_headers)
+    denied = client.get(f"/api/v1/scopes/{SCOPE_B}/overview", headers=viewer_headers)
+    assert allowed.status_code == 200
+    assert denied.status_code == 403
+    assert client.get("/api/v1/evaluation", headers=viewer_headers).status_code == 403
+
+    reviewer_headers = {"Cf-Access-Jwt-Assertion": "reviewer-token"}
+    assert client.get("/api/v1/evaluation", headers=reviewer_headers).status_code == 200
+
+
 def test_fastapi_proof_case_source_and_evaluation_routes(tmp_path: Path) -> None:
     from fastapi.testclient import TestClient
 
