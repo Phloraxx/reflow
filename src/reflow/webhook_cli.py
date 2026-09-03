@@ -5,6 +5,7 @@ import json
 import os
 from dataclasses import asdict
 from datetime import UTC, datetime
+from typing import Any
 
 from .persistence import PostgresApplicationStore
 from .webhook_ingress import RazorpayWebhookIngress, razorpay_webhook_ingress_from_env
@@ -41,6 +42,7 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> None:
     args = _parser().parse_args()
     ingress = _ingress_from_env()
+    payload: dict[str, Any] | list[dict[str, Any]]
     if args.command == "list":
         payload = [asdict(item) for item in ingress.list_receipts(limit=args.limit)]
     elif args.command == "attempts":
