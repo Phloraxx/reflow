@@ -119,3 +119,7 @@ On the exact auth-gate worktree after the explicit-mode hardening:
 - `pip check`: no broken requirements;
 - npm production/full audits: 0 vulnerabilities;
 - `git diff --check`: passed.
+
+## Merge closure
+
+This gate is closed. PR #30 merged as `7a5ebe7c17606aa7a171f3d43e62405dc095e48c`; exact merge-triggered `main` CI run `33767659563` completed successfully. Authentication/scope authorization is therefore a merged production-read boundary, while operator write authorization/provisioning remains deferred.

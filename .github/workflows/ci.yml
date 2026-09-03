@@ -48,4 +48,5 @@ jobs:
       - name: Submission check
         env:
           REFLOW_TEST_POSTGRES_DSN: postgresql://reflow_test:reflow_test@127.0.0.1:5432/reflow_ci
+          REFLOW_RECOVERY_DOCKER_DRILL: "1"
         run: make submission-check

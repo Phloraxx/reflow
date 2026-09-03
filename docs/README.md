@@ -6,20 +6,21 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — active production human-authentication and exact-scope authorization gate.
-2. [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — merged readiness and real-Razorpay acceptance foundation.
-3. [`43_THIRD_WHOLE_CODEBASE_AUDIT.md`](43_THIRD_WHOLE_CODEBASE_AUDIT.md) — latest closed whole-codebase audit and merge evidence.
-4. [`../EVALUATION.md`](../EVALUATION.md) — frozen evaluation metrics, denominators, exception list and reproduction commands.
-5. [`40_GATE_19_CHECKPOINT.md`](40_GATE_19_CHECKPOINT.md) — final held-out evidence and submission-hardening checkpoint.
-6. [`39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md) — pre-execution frozen Gate 19 seeds/scorer/campaign contract.
-7. [`41_FINAL_5_MINUTE_PITCH.md`](41_FINAL_5_MINUTE_PITCH.md) — final timed pitch script and recording runbook.
-8. [`38_GATE_18_CHECKPOINT.md`](38_GATE_18_CHECKPOINT.md) / [`37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Operator Control Tower implementation and contract.
-9. [`36_GATE_17_CHECKPOINT.md`](36_GATE_17_CHECKPOINT.md) / [`35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — measured scale and PostgreSQL durability.
-10. [`34_GATE_16_CHECKPOINT.md`](34_GATE_16_CHECKPOINT.md) / [`33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) — bounded investigation agent.
-11. [`32_GATE_15_CHECKPOINT.md`](32_GATE_15_CHECKPOINT.md) / [`31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Razorpay provider boundary.
-12. [`30_GATE_14_CHECKPOINT.md`](30_GATE_14_CHECKPOINT.md) / [`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — exception lifecycle and incident grouping.
-13. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) + [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — post-Gate-12 architecture and deterministic control plane.
-14. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — historical comprehensive build plan; later checkpoints supersede its status.
+1. [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — active restore-tested PostgreSQL logical-backup gate; PITR remains unclaimed.
+2. [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged Cloudflare Access authentication and exact-scope authorization boundary.
+3. [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — merged readiness and real-Razorpay acceptance foundation.
+4. [`43_THIRD_WHOLE_CODEBASE_AUDIT.md`](43_THIRD_WHOLE_CODEBASE_AUDIT.md) — latest closed whole-codebase audit and merge evidence.
+5. [`../EVALUATION.md`](../EVALUATION.md) — frozen evaluation metrics, denominators, exception list and reproduction commands.
+6. [`40_GATE_19_CHECKPOINT.md`](40_GATE_19_CHECKPOINT.md) — final held-out evidence and submission-hardening checkpoint.
+7. [`39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md) — pre-execution frozen Gate 19 seeds/scorer/campaign contract.
+8. [`41_FINAL_5_MINUTE_PITCH.md`](41_FINAL_5_MINUTE_PITCH.md) — final timed pitch script and recording runbook.
+9. [`38_GATE_18_CHECKPOINT.md`](38_GATE_18_CHECKPOINT.md) / [`37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`](37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Operator Control Tower implementation and contract.
+10. [`36_GATE_17_CHECKPOINT.md`](36_GATE_17_CHECKPOINT.md) / [`35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`](35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md) — measured scale and PostgreSQL durability.
+11. [`34_GATE_16_CHECKPOINT.md`](34_GATE_16_CHECKPOINT.md) / [`33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`](33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md) — bounded investigation agent.
+12. [`32_GATE_15_CHECKPOINT.md`](32_GATE_15_CHECKPOINT.md) / [`31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`](31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md) — Razorpay provider boundary.
+13. [`30_GATE_14_CHECKPOINT.md`](30_GATE_14_CHECKPOINT.md) / [`29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`](29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md) — exception lifecycle and incident grouping.
+14. [`27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md`](27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md) + [`28_GATE_13_CHECKPOINT.md`](28_GATE_13_CHECKPOINT.md) — post-Gate-12 architecture and deterministic control plane.
+15. [`16_MASTER_BUILD_PLAN.md`](16_MASTER_BUILD_PLAN.md) — historical comprehensive build plan; later checkpoints supersede its status.
 
 ---
 
@@ -68,7 +69,9 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`../EVALUATION.md`](../EVALUATION.md) — generated final evaluation report backed by checked-in artifacts.
 - [`42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md`](42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md) — whole-repository post-final audit and repair evidence.
 - [`43_THIRD_WHOLE_CODEBASE_AUDIT.md`](43_THIRD_WHOLE_CODEBASE_AUDIT.md) — closed third whole-codebase audit and merge evidence.
-- [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — post-audit production-readiness and real-Razorpay acceptance contract.
+- [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — merged readiness and real-Razorpay acceptance foundation.
+- [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged production human authentication and exact-scope authorization.
+- [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — active logical backup/restore verification contract.
 
 ## Execution and submission
 
@@ -84,24 +87,25 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. active authentication/scope-authorization contract (`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`)
-3. production-readiness foundation (`44_PRODUCTION_READINESS_PHASE1.md`)
-4. latest closed audit (`43_THIRD_WHOLE_CODEBASE_AUDIT.md`)
-5. frozen first-run Gate 19 artifacts + generated `EVALUATION.md`
-6. Gate 19 implementation checkpoint (`40_GATE_19_CHECKPOINT.md`)
-7. frozen Gate 19 pre-execution contract (`39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`)
-8. `38_GATE_18_CHECKPOINT.md` / `37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-9. `36_GATE_17_CHECKPOINT.md` / `35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-10. `34_GATE_16_CHECKPOINT.md` / `33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-11. `32_GATE_15_CHECKPOINT.md` / `31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-12. `30_GATE_14_CHECKPOINT.md` / `29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`
-13. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
-14. `28_GATE_13_CHECKPOINT.md` and earlier implemented checkpoints
-15. `16_MASTER_BUILD_PLAN.md`
-16. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
-17. `11`–`14` and `18`
-18. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
-19. `04`–`09` as earlier planning history
+2. active logical backup/recovery contract (`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`)
+3. merged authentication/scope-authorization contract (`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`)
+4. production-readiness foundation (`44_PRODUCTION_READINESS_PHASE1.md`)
+5. latest closed audit (`43_THIRD_WHOLE_CODEBASE_AUDIT.md`)
+6. frozen first-run Gate 19 artifacts + generated `EVALUATION.md`
+7. Gate 19 implementation checkpoint (`40_GATE_19_CHECKPOINT.md`)
+8. frozen Gate 19 pre-execution contract (`39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`)
+9. `38_GATE_18_CHECKPOINT.md` / `37_GATE_18_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+10. `36_GATE_17_CHECKPOINT.md` / `35_GATE_17_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+11. `34_GATE_16_CHECKPOINT.md` / `33_GATE_16_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+12. `32_GATE_15_CHECKPOINT.md` / `31_GATE_15_REAL_RAZORPAY_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+13. `30_GATE_14_CHECKPOINT.md` / `29_GATE_14_CONTRACT_AND_ACCEPTANCE_PLAN.md`
+14. `27_STRATEGIC_PAUSE_CURRENT_STATE_AND_REVISED_PLAN.md` for the revised post-Gate-12 architecture/sequence
+15. `28_GATE_13_CHECKPOINT.md` and earlier implemented checkpoints
+16. `16_MASTER_BUILD_PLAN.md`
+17. `15_RAZORPAY_ALIGNMENT_AND_JUDGING_STRATEGY.md`
+18. `11`–`14` and `18`
+19. `17_RESEARCH_SOURCEBOOK.md` for sourced facts
+20. `04`–`09` as earlier planning history
 
 If implementation/evaluation contradicts any document, update the plan and preserve the finding in `FAILURE_LOG.md` where appropriate.
 

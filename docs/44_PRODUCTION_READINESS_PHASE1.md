@@ -82,7 +82,7 @@ A `scope_id` is never authorization. Real merchant data must not be exposed thro
 
 ## Current connected-account observation
 
-On 2026-09-03, the connected Razorpay account still returned zero standard settlements and zero September 2026 settlement-recon rows. That is a valid empty observation, not a real-settlement acceptance corpus.
+On 2026-09-03, authenticated Test Mode acceptance was executed with privately supplied credentials. The account returned zero orders, zero payments, zero standard settlements, and zero Settlement Recon rows for every month January through September 2026. The harness correctly failed closed and wrote no acceptance report. The connected Razorpay account independently returned zero settlements/recon rows. This is authenticated empty-corpus evidence, not a real-settlement accuracy corpus.
 
 ## Implemented checkpoint
 
