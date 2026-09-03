@@ -95,7 +95,8 @@ def create_control_tower_app(
 
         @app.get("/{client_path:path}", include_in_schema=False)
         def web_client_route(client_path: str) -> FileResponse:
-            if client_path == "api" or client_path.startswith("api/"):
+            normalized = client_path.lstrip("/")
+            if normalized == "api" or normalized.startswith("api/"):
                 raise HTTPException(status_code=404, detail="Not Found")
             return FileResponse(index_path)
 

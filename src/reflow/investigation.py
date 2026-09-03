@@ -24,6 +24,11 @@ GATE16_INVESTIGATION_RULESET_VERSION = "gate16-investigation-v1"
 MAX_INVESTIGATION_TOOL_CALLS = 16
 MAX_INVESTIGATION_SOURCE_IDS = 64
 MAX_INVESTIGATION_HYPOTHESIS_CHARS = 600
+MAX_UNTRUSTED_TEXT_FIELDS = 16
+MAX_UNTRUSTED_TEXT_VALUE_CHARS = 240
+MAX_UNTRUSTED_TEXT_PATH_CHARS = 240
+MAX_UNTRUSTED_TEXT_DEPTH = 8
+MAX_UNTRUSTED_COLLECTION_ITEMS = 16
 
 __all__ = [
     "GATE16_INVESTIGATION_RULESET_VERSION",
@@ -163,7 +168,9 @@ class UntrustedTextField:
         _text(self.path, "untrusted text path")
         if not isinstance(self.value, str):
             raise TypeError("untrusted text value must be string")
-        if len(self.value) > 240:
+        if len(self.path) > MAX_UNTRUSTED_TEXT_PATH_CHARS:
+            raise InvestigationError("untrusted text path exceeds bounded length")
+        if len(self.value) > MAX_UNTRUSTED_TEXT_VALUE_CHARS:
             raise InvestigationError("untrusted text value exceeds bounded length")
 
 
@@ -372,25 +379,33 @@ def _trace_entry(
 def _extract_untrusted_text(payload: Mapping[str, object]) -> tuple[UntrustedTextField, ...]:
     found: list[UntrustedTextField] = []
 
-    def walk(value: object, path: str) -> None:
-        if len(found) >= 16:
+    def child_path(path: str, suffix: str) -> str:
+        return f"{path}{suffix}"[:MAX_UNTRUSTED_TEXT_PATH_CHARS]
+
+    def walk(value: object, path: str, depth: int) -> None:
+        if len(found) >= MAX_UNTRUSTED_TEXT_FIELDS:
             return
         if isinstance(value, str):
-            bounded = value[:240]
+            bounded = value[:MAX_UNTRUSTED_TEXT_VALUE_CHARS]
             found.append(UntrustedTextField(path=path, value=bounded))
             return
+        if depth >= MAX_UNTRUSTED_TEXT_DEPTH:
+            return
         if isinstance(value, Mapping):
-            for key, item in sorted(value.items(), key=lambda pair: str(pair[0])):
-                walk(item, f"{path}.{key}")
-                if len(found) >= 16:
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))[
+                :MAX_UNTRUSTED_COLLECTION_ITEMS
+            ]:
+                bounded_key = str(key)[:MAX_UNTRUSTED_TEXT_PATH_CHARS]
+                walk(item, child_path(path, f".{bounded_key}"), depth + 1)
+                if len(found) >= MAX_UNTRUSTED_TEXT_FIELDS:
                     return
         elif isinstance(value, (tuple, list)):
-            for index, item in enumerate(value[:16]):
-                walk(item, f"{path}[{index}]")
-                if len(found) >= 16:
+            for index, item in enumerate(value[:MAX_UNTRUSTED_COLLECTION_ITEMS]):
+                walk(item, child_path(path, f"[{index}]"), depth + 1)
+                if len(found) >= MAX_UNTRUSTED_TEXT_FIELDS:
                     return
 
-    walk(payload, "payload")
+    walk(payload, "payload", 0)
     return tuple(found)
 
 
@@ -439,6 +454,10 @@ class ReadOnlyInvestigationTools:
             raise InvestigationError("case observation/proof settlement UTR mismatch")
         if as_of < case_state.first_seen_at:
             raise InvestigationError("investigation as_of predates case first seen")
+        if as_of < observation.observed_at or as_of < case_state.last_seen_at:
+            raise InvestigationError("investigation as_of predates latest case observation")
+        if as_of < proof.generated_at:
+            raise InvestigationError("investigation as_of predates bound proof generation")
         if len(proof.source_envelope_ids) > MAX_INVESTIGATION_SOURCE_IDS:
             raise InvestigationError("proof exceeds bounded investigation source-evidence budget")
         for envelope_id in proof.source_envelope_ids:

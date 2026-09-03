@@ -18,7 +18,7 @@ from .journal import (
     JournalConflictError,
 )
 
-POSTGRES_SCHEMA_VERSION = 1
+POSTGRES_SCHEMA_VERSION = 2
 
 __all__ = [
     "POSTGRES_SCHEMA_VERSION",
@@ -35,6 +35,7 @@ __all__ = [
     "ReflowApplicationService",
     "StalePointerError",
     "StoredArtifact",
+    "approved_adapter_artifact_id",
     "canonical_artifact_json",
     "canonical_artifact_sha256",
 ]
@@ -363,6 +364,198 @@ _SCHEMA_STATEMENTS = (
 )
 
 
+def _preflight_v1_latest_proof_pointers(cursor: _Cursor) -> None:
+    cursor.execute(
+        """
+        SELECT pointer.stream_key, artifact.artifact_kind, artifact.scope_id,
+               artifact.payload_sha256, artifact.payload_json::text
+        FROM reflow_current_pointers AS pointer
+        LEFT JOIN reflow_artifacts AS artifact
+          ON artifact.artifact_id = pointer.artifact_id
+        WHERE pointer.pointer_kind = 'latest_proof'
+        ORDER BY pointer.stream_key
+        """
+    )
+    for row in cursor.fetchall():
+        if len(row) != 5:
+            raise PersistenceIntegrityError(
+                "legacy latest_proof pointer cannot be migrated safely"
+            )
+        stream_key, artifact_kind, scope_id, stored_digest, payload_json = row
+        if (
+            not isinstance(stream_key, str)
+            or artifact_kind != ArtifactKind.PROOF_VERSION.value
+            or not isinstance(scope_id, str)
+            or not scope_id
+            or not isinstance(stored_digest, str)
+            or not isinstance(payload_json, str)
+        ):
+            raise PersistenceIntegrityError(
+                "legacy latest_proof pointer cannot be migrated safely"
+            )
+        payload = _decode_json_object(payload_json, "legacy latest_proof payload")
+        if canonical_artifact_sha256(payload) != stored_digest:
+            raise PersistenceIntegrityError(
+                "legacy latest_proof payload digest does not match stored content"
+            )
+        settlement_id = payload.get("settlement_id")
+        if (
+            not isinstance(settlement_id, str)
+            or not settlement_id
+            or stream_key != settlement_id
+        ):
+            raise PersistenceIntegrityError(
+                "legacy latest_proof pointer cannot be migrated safely"
+            )
+
+
+def _migrate_v1_approved_adapter_identities(cursor: _Cursor) -> None:
+    cursor.execute(
+        """
+        SELECT artifact_id, payload_sha256, payload_json::text
+        FROM reflow_artifacts
+        WHERE artifact_kind = 'approved_adapter'
+        ORDER BY artifact_id
+        """
+    )
+    plans: list[tuple[str, str]] = []
+    target_digests: dict[str, str] = {}
+    for row in cursor.fetchall():
+        if len(row) != 3 or not all(isinstance(value, str) for value in row):
+            raise PersistenceIntegrityError(
+                "legacy approved_adapter row contains invalid identity fields"
+            )
+        artifact_id, stored_digest, payload_json = cast(tuple[str, str, str], row)
+        payload = _decode_json_object(payload_json, "legacy approved_adapter payload")
+        actual_digest = canonical_artifact_sha256(payload)
+        if stored_digest != actual_digest:
+            raise PersistenceIntegrityError(
+                "legacy approved_adapter payload digest does not match stored content"
+            )
+        target_id = f"adapterv_{actual_digest[:24]}"
+        planned_digest = target_digests.get(target_id)
+        if planned_digest is not None and planned_digest != actual_digest:
+            raise PersistenceIntegrityError(
+                "legacy approved_adapter identity cannot be migrated safely"
+            )
+        target_digests[target_id] = actual_digest
+        cursor.execute(
+            """
+            SELECT artifact_kind, payload_sha256, payload_json::text
+            FROM reflow_artifacts
+            WHERE artifact_id = %s
+            """,
+            (target_id,),
+        )
+        target = cursor.fetchone()
+        if target is not None:
+            if len(target) != 3 or not all(isinstance(value, str) for value in target):
+                raise PersistenceIntegrityError(
+                    "legacy approved_adapter canonical target contains invalid fields"
+                )
+            target_kind, target_digest, target_json = cast(tuple[str, str, str], target)
+            target_payload = _decode_json_object(
+                target_json, "legacy approved_adapter canonical target payload"
+            )
+            if (
+                target_kind != ArtifactKind.APPROVED_ADAPTER.value
+                or target_digest != actual_digest
+                or canonical_artifact_sha256(target_payload) != actual_digest
+            ):
+                raise PersistenceIntegrityError(
+                    "legacy approved_adapter identity cannot be migrated safely"
+                )
+        plans.append((artifact_id, target_id))
+
+    cursor.execute(
+        """
+        SELECT pointer.pointer_kind, pointer.stream_key, artifact.artifact_kind,
+               artifact.payload_json -> 'spec' ->> 'adapter_id'
+        FROM reflow_current_pointers AS pointer
+        LEFT JOIN reflow_artifacts AS artifact
+          ON artifact.artifact_id = pointer.artifact_id
+        WHERE pointer.pointer_kind = 'latest_adapter'
+           OR artifact.artifact_kind = 'approved_adapter'
+        """
+    )
+    for pointer_row in cursor.fetchall():
+        if len(pointer_row) != 4:
+            raise PersistenceIntegrityError(
+                "legacy approved_adapter pointer cannot be migrated safely"
+            )
+        pointer_kind, stream_key, artifact_kind, adapter_id = pointer_row
+        if (
+            pointer_kind != PointerKind.LATEST_ADAPTER.value
+            or artifact_kind != ArtifactKind.APPROVED_ADAPTER.value
+            or not isinstance(stream_key, str)
+            or not isinstance(adapter_id, str)
+            or not adapter_id
+            or stream_key != adapter_id
+        ):
+            raise PersistenceIntegrityError(
+                "legacy approved_adapter pointer cannot be migrated safely"
+            )
+
+    for artifact_id, target_id in plans:
+        if artifact_id == target_id:
+            continue
+        cursor.execute(
+            """
+            INSERT INTO reflow_artifacts (
+                artifact_id, artifact_kind, scope_id, observed_at,
+                payload_sha256, payload_json, stored_at
+            )
+            SELECT %s, artifact_kind, NULL, NULL, payload_sha256, payload_json, stored_at
+            FROM reflow_artifacts
+            WHERE artifact_id = %s
+            ON CONFLICT (artifact_id) DO NOTHING
+            """,
+            (target_id, artifact_id),
+        )
+        cursor.execute(
+            "UPDATE reflow_current_pointers SET artifact_id = %s WHERE artifact_id = %s",
+            (target_id, artifact_id),
+        )
+        cursor.execute("DELETE FROM reflow_artifacts WHERE artifact_id = %s", (artifact_id,))
+
+
+_MIGRATION_1_TO_2_STATEMENTS = (
+    # These artifact families have no intrinsic domain observation timestamp. Older
+    # application callers supplied convenience timestamps; v2 removes that caller
+    # metadata so replay equality is based only on durable domain/audit content.
+    """
+    UPDATE reflow_artifacts
+    SET observed_at = NULL
+    WHERE artifact_kind IN (
+        'reconciliation_scope',
+        'policy_version',
+        'evidence_coverage',
+        'balance_control',
+        'close_readiness',
+        'approved_adapter'
+    )
+    """,
+    # Policy and approved-adapter definitions are reusable configuration, not
+    # reconciliation-scope state. Their immutable IDs are globally unique.
+    """
+    UPDATE reflow_artifacts
+    SET scope_id = NULL
+    WHERE artifact_kind IN ('policy_version', 'approved_adapter')
+    """,
+    # Gate 17 originally keyed latest proofs only by settlement ID. Qualify legacy
+    # pointers with the proof artifact's retained scope to avoid cross-scope collisions.
+    """
+    UPDATE reflow_current_pointers AS pointer
+    SET stream_key = artifact.scope_id || ':' || (artifact.payload_json ->> 'settlement_id')
+    FROM reflow_artifacts AS artifact
+    WHERE pointer.pointer_kind = 'latest_proof'
+      AND pointer.artifact_id = artifact.artifact_id
+      AND artifact.scope_id IS NOT NULL
+      AND artifact.payload_json ? 'settlement_id'
+    """,
+)
+
+
 class PostgresApplicationStore(Journal):
     """PostgreSQL-backed Gate 17 raw journal plus immutable application state."""
 
@@ -387,22 +580,82 @@ class PostgresApplicationStore(Journal):
             with connection.cursor() as cursor:
                 for statement in _SCHEMA_STATEMENTS:
                     cursor.execute(statement)
-                cursor.execute(
-                    """
-                    INSERT INTO reflow_schema_meta (singleton, schema_version)
-                    VALUES (1, %s)
-                    ON CONFLICT (singleton) DO NOTHING
-                    """,
-                    (POSTGRES_SCHEMA_VERSION,),
-                )
                 cursor.execute("SELECT schema_version FROM reflow_schema_meta WHERE singleton = 1")
                 row = cursor.fetchone()
+                if row is None:
+                    cursor.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1 FROM reflow_source_envelopes
+                            UNION ALL
+                            SELECT 1 FROM reflow_source_identity
+                            UNION ALL
+                            SELECT 1 FROM reflow_artifacts
+                            UNION ALL
+                            SELECT 1 FROM reflow_current_pointers
+                        )
+                        """
+                    )
+                    populated = cursor.fetchone()
+                    if populated is None or not isinstance(populated[0], bool):
+                        raise PersistenceIntegrityError(
+                            "persistence schema population check returned invalid data"
+                        )
+                    if populated[0]:
+                        raise PersistenceIntegrityError(
+                            "persistence schema metadata is missing for non-empty database"
+                        )
+                    cursor.execute(
+                        """
+                        INSERT INTO reflow_schema_meta (singleton, schema_version)
+                        VALUES (1, %s)
+                        ON CONFLICT (singleton) DO NOTHING
+                        """,
+                        (POSTGRES_SCHEMA_VERSION,),
+                    )
+                    cursor.execute(
+                        "SELECT schema_version FROM reflow_schema_meta WHERE singleton = 1"
+                    )
+                    row = cursor.fetchone()
                 if row is None or not isinstance(row[0], int):
                     raise PersistenceIntegrityError("persistence schema metadata is missing")
-                if row[0] != POSTGRES_SCHEMA_VERSION:
+                version = row[0]
+                if version == 1 and POSTGRES_SCHEMA_VERSION >= 2:
+                    _preflight_v1_latest_proof_pointers(cursor)
+                    _migrate_v1_approved_adapter_identities(cursor)
+                    for statement in _MIGRATION_1_TO_2_STATEMENTS:
+                        cursor.execute(statement)
+                    cursor.execute(
+                        """
+                        SELECT pointer.stream_key
+                        FROM reflow_current_pointers AS pointer
+                        JOIN reflow_artifacts AS artifact
+                          ON artifact.artifact_id = pointer.artifact_id
+                        WHERE pointer.pointer_kind = 'latest_proof'
+                          AND (
+                              artifact.artifact_kind <> 'proof_version'
+                              OR artifact.scope_id IS NULL
+                              OR artifact.payload_json ->> 'settlement_id' IS NULL
+                              OR pointer.stream_key <> (
+                                  artifact.scope_id || ':' ||
+                                  (artifact.payload_json ->> 'settlement_id')
+                              )
+                          )
+                        LIMIT 1
+                        """
+                    )
+                    if cursor.fetchone() is not None:
+                        raise PersistenceIntegrityError(
+                            "legacy latest_proof pointer cannot be migrated safely"
+                        )
+                    cursor.execute(
+                        "UPDATE reflow_schema_meta SET schema_version = 2 WHERE singleton = 1"
+                    )
+                    version = 2
+                if version != POSTGRES_SCHEMA_VERSION:
                     raise PersistenceIntegrityError(
                         "unsupported persistence schema version "
-                        f"{row[0]} != {POSTGRES_SCHEMA_VERSION}"
+                        f"{version} != {POSTGRES_SCHEMA_VERSION}"
                     )
             connection.commit()
         except Exception:
@@ -507,9 +760,20 @@ class PostgresApplicationStore(Journal):
         inserted = cursor.fetchone() is not None
         if not inserted:
             existing = PostgresApplicationStore._fetch_envelope_by_id(cursor, envelope.id)
-            if existing != envelope:
+            if existing is None:
+                raise PersistenceIntegrityError("existing source envelope row disappeared")
+            # Envelope identity deliberately binds source kind/native record identity and
+            # raw payload digest. Local receipt time, derived occurrence time and adapter
+            # schema version are observation metadata, not a second economic/source fact.
+            # Keep the first retained metadata exactly as the in-memory journal does.
+            if (
+                existing.source_kind is not envelope.source_kind
+                or existing.source_record_id != envelope.source_record_id
+                or existing.payload_sha256 != envelope.payload_sha256
+                or existing.payload != envelope.payload
+            ):
                 raise PersistenceIntegrityError(
-                    "existing source envelope row differs from immutable envelope identity"
+                    "existing source envelope row disagrees with stable evidence identity"
                 )
         return inserted
 
@@ -809,6 +1073,80 @@ class PostgresApplicationStore(Journal):
         finally:
             connection.close()
 
+    def count_artifacts(
+        self,
+        *,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId | None,
+    ) -> int:
+        if not isinstance(kind, ArtifactKind):
+            raise TypeError("artifact kind must be ArtifactKind")
+        if scope_id is not None and not isinstance(scope_id, domain.ReconciliationScopeId):
+            raise TypeError("artifact scope must be ReconciliationScopeId")
+        connection = self._connect()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM reflow_artifacts
+                    WHERE artifact_kind = %s
+                      AND scope_id IS NOT DISTINCT FROM %s
+                    """,
+                    (kind.value, None if scope_id is None else str(scope_id)),
+                )
+                row = cursor.fetchone()
+                if row is None or not isinstance(row[0], int) or isinstance(row[0], bool):
+                    raise PersistenceIntegrityError("artifact count query returned invalid data")
+                return row[0]
+        finally:
+            connection.close()
+
+    def manifests_cover_source_ids(
+        self,
+        *,
+        scope_id: domain.ReconciliationScopeId,
+        source_ids: tuple[domain.SourceEnvelopeId, ...],
+    ) -> bool:
+        if not isinstance(scope_id, domain.ReconciliationScopeId):
+            raise TypeError("manifest coverage scope must be ReconciliationScopeId")
+        if not source_ids or any(
+            not isinstance(item, domain.SourceEnvelopeId) for item in source_ids
+        ):
+            raise PersistenceError("manifest coverage requires SourceEnvelopeId values")
+        connection = self._connect()
+        try:
+            with connection.cursor() as cursor:
+                for source_id in source_ids:
+                    cursor.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM reflow_artifacts
+                            WHERE artifact_kind = %s
+                              AND scope_id = %s
+                              AND payload_json ->> 'scope_id' = %s
+                              AND (payload_json -> 'effective_envelope_ids') ? %s
+                        )
+                        """,
+                        (
+                            ArtifactKind.SOURCE_DELIVERY_MANIFEST.value,
+                            str(scope_id),
+                            str(scope_id),
+                            str(source_id),
+                        ),
+                    )
+                    row = cursor.fetchone()
+                    if row is None or not isinstance(row[0], bool):
+                        raise PersistenceIntegrityError(
+                            "manifest coverage query returned invalid data"
+                        )
+                    if not row[0]:
+                        return False
+                return True
+        finally:
+            connection.close()
+
     @staticmethod
     def _row_to_pointer(row: tuple[object, ...]) -> CurrentPointer:
         if len(row) != 5:
@@ -1058,6 +1396,56 @@ def _application_artifact_type(kind: ArtifactKind) -> type[object]:
     }[kind]
 
 
+def approved_adapter_artifact_id(payload: object) -> str:
+    from .adapter_compiler.lifecycle import ApprovedAdapterVersion
+
+    if not isinstance(payload, ApprovedAdapterVersion):
+        raise TypeError("approved adapter identity requires ApprovedAdapterVersion")
+    return f"adapterv_{canonical_artifact_sha256(payload)[:24]}"
+
+
+def _application_storage_scope(
+    *, kind: ArtifactKind, scope_id: domain.ReconciliationScopeId | None
+) -> domain.ReconciliationScopeId | None:
+    if kind in {
+        ArtifactKind.POLICY_VERSION,
+        ArtifactKind.APPROVED_ADAPTER,
+    }:
+        return None
+    return scope_id
+
+
+def _canonical_application_observed_at(
+    *, kind: ArtifactKind, payload: object, observed_at: datetime | None
+) -> datetime | None:
+    typed = cast(Any, payload)
+    intrinsic_name = {
+        ArtifactKind.SOURCE_DELIVERY_MANIFEST: "evaluated_at",
+        ArtifactKind.RECONCILIATION_RUN: "completed_at",
+        ArtifactKind.PROOF_VERSION: "generated_at",
+        ArtifactKind.CASE_OBSERVATION: "observed_at",
+        ArtifactKind.CASE_DISPOSITION: "occurred_at",
+        ArtifactKind.INVESTIGATION_RESULT: "as_of",
+    }.get(kind)
+    if intrinsic_name is not None:
+        expected = cast(datetime, getattr(typed, intrinsic_name))
+        if observed_at is not None and observed_at != expected:
+            raise PersistenceIntegrityError(
+                f"{kind.value} observed_at must equal typed {intrinsic_name}"
+            )
+        return expected
+    if kind in {
+        ArtifactKind.RECONCILIATION_SCOPE,
+        ArtifactKind.POLICY_VERSION,
+        ArtifactKind.EVIDENCE_COVERAGE,
+        ArtifactKind.BALANCE_CONTROL,
+        ArtifactKind.CLOSE_READINESS,
+        ArtifactKind.APPROVED_ADAPTER,
+    }:
+        return None
+    return observed_at
+
+
 def _validated_application_artifact(
     *,
     kind: ArtifactKind,
@@ -1089,6 +1477,17 @@ def _validated_application_artifact(
         raise PersistenceIntegrityError(
             f"{kind.value} artifact scope disagrees with typed payload scope"
         )
+    if kind is ArtifactKind.RECONCILIATION_SCOPE and scope_id != cast(Any, payload).id:
+        raise PersistenceIntegrityError(
+            "reconciliation scope artifact storage scope must equal its typed identity"
+        )
+    if kind is ArtifactKind.APPROVED_ADAPTER:
+        expected_adapter_id = approved_adapter_artifact_id(payload)
+        if artifact_id != expected_adapter_id:
+            raise PersistenceIntegrityError(
+                "approved adapter artifact id must equal deterministic content identity "
+                f"{expected_adapter_id!r}"
+            )
     return payload
 
 
@@ -1106,7 +1505,9 @@ def _expected_application_stream_key(
     if pointer_kind is PointerKind.LATEST_RUN:
         return str(typed.scope_id)
     if pointer_kind is PointerKind.LATEST_PROOF:
-        return str(typed.settlement_id)
+        if scope_id is None:
+            raise PersistenceIntegrityError("latest_proof requires a reconciliation scope")
+        return f"{scope_id}:{typed.settlement_id}"
     if pointer_kind is PointerKind.LATEST_CASE_OBSERVATION:
         return str(typed.case_id)
     if pointer_kind is PointerKind.LATEST_ADAPTER:
@@ -1130,9 +1531,7 @@ class _JournalFacade:
     ) -> domain.SourceEnvelope | None:
         return self.__store.get(source_kind, source_record_id)
 
-    def get_by_id(
-        self, envelope_id: domain.SourceEnvelopeId
-    ) -> domain.SourceEnvelope | None:
+    def get_by_id(self, envelope_id: domain.SourceEnvelopeId) -> domain.SourceEnvelope | None:
         return self.__store.get_by_id(envelope_id)
 
     def entries(self) -> tuple[domain.SourceEnvelope, ...]:
@@ -1158,6 +1557,192 @@ class ReflowApplicationService:
     def append_source(self, envelope: domain.SourceEnvelope) -> AppendResult:
         return self._store.append(envelope)
 
+    def _policy_graph_artifact(self, artifact_id: object, *, label: str) -> StoredArtifact:
+        text_id = str(artifact_id)
+        artifact = self._store.get_artifact(text_id)
+        if artifact is None:
+            raise PersistenceIntegrityError(
+                f"{label} graph is missing policy_version artifact {text_id}"
+            )
+        if artifact.kind is not ArtifactKind.POLICY_VERSION:
+            raise PersistenceIntegrityError(
+                f"{label} graph artifact {text_id} has wrong kind {artifact.kind.value}"
+            )
+        if artifact.scope_id is not None:
+            raise PersistenceIntegrityError(f"{label} graph policy must use global storage scope")
+        payload_id = artifact.payload.get("id")
+        if payload_id is not None and payload_id != text_id:
+            raise PersistenceIntegrityError(
+                f"{label} graph policy {text_id} payload identity is inconsistent"
+            )
+        return artifact
+
+    def _graph_artifact(
+        self,
+        artifact_id: object,
+        *,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId | None,
+        label: str,
+    ) -> StoredArtifact:
+        text_id = str(artifact_id)
+        artifact = self._store.get_artifact(text_id)
+        if artifact is None:
+            raise PersistenceIntegrityError(
+                f"{label} graph is missing {kind.value} artifact {text_id}"
+            )
+        if artifact.kind is not kind:
+            raise PersistenceIntegrityError(
+                f"{label} graph artifact {text_id} has wrong kind {artifact.kind.value}"
+            )
+        if artifact.scope_id != scope_id:
+            raise PersistenceIntegrityError(
+                f"{label} graph artifact {text_id} has wrong storage scope"
+            )
+        payload_id = artifact.payload.get("id")
+        if payload_id is not None and payload_id != text_id:
+            raise PersistenceIntegrityError(
+                f"{label} graph artifact {text_id} payload identity is inconsistent"
+            )
+        payload_scope = artifact.payload.get("scope_id")
+        if payload_scope is not None and payload_scope != (
+            None if scope_id is None else str(scope_id)
+        ):
+            raise PersistenceIntegrityError(
+                f"{label} graph artifact {text_id} payload scope is inconsistent"
+            )
+        return artifact
+
+    @staticmethod
+    def _graph_ids(artifact: StoredArtifact, key: str, *, label: str) -> tuple[str, ...]:
+        value = artifact.payload.get(key)
+        if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+            raise PersistenceIntegrityError(f"{label} graph field {key} is invalid")
+        return tuple(value)
+
+    def _require_raw_source_evidence(
+        self, source_ids: tuple[object, ...], *, label: str
+    ) -> None:
+        for value in source_ids:
+            try:
+                envelope_id = (
+                    value
+                    if isinstance(value, domain.SourceEnvelopeId)
+                    else domain.SourceEnvelopeId(str(value))
+                )
+            except (TypeError, ValueError) as exc:
+                raise PersistenceIntegrityError(
+                    f"{label} contains invalid raw source evidence identity"
+                ) from exc
+            if self._store.get_by_id(envelope_id) is None:
+                raise PersistenceIntegrityError(
+                    f"{label} references missing raw source evidence {envelope_id}"
+                )
+
+    @classmethod
+    def _validate_proof_manifest_coverage(
+        cls,
+        proof: StoredArtifact,
+        manifests: tuple[StoredArtifact, ...],
+        *,
+        label: str,
+    ) -> None:
+        proof_sources = set(cls._graph_ids(proof, "source_envelope_ids", label=label))
+        covered: set[str] = set()
+        for manifest in manifests:
+            covered.update(cls._graph_ids(manifest, "effective_envelope_ids", label=label))
+        if not proof_sources or not proof_sources.issubset(covered):
+            raise PersistenceIntegrityError(
+                f"{label} graph proof evidence is outside its scoped source manifests"
+            )
+
+    def _validate_current_run_graph(
+        self, payload: object, scope_id: domain.ReconciliationScopeId | None
+    ) -> None:
+        if scope_id is None:
+            raise PersistenceIntegrityError("current run graph requires a reconciliation scope")
+        run = cast(Any, payload)
+        label = "current run"
+        self._policy_graph_artifact(run.policy_version_id, label=label)
+        manifests = tuple(
+            self._graph_artifact(
+                item,
+                kind=ArtifactKind.SOURCE_DELIVERY_MANIFEST,
+                scope_id=scope_id,
+                label=label,
+            )
+            for item in run.source_manifest_ids
+        )
+        proofs = tuple(
+            self._graph_artifact(
+                item,
+                kind=ArtifactKind.PROOF_VERSION,
+                scope_id=scope_id,
+                label=label,
+            )
+            for item in run.proof_version_ids
+        )
+        coverage = self._graph_artifact(
+            run.coverage_certificate_id,
+            kind=ArtifactKind.EVIDENCE_COVERAGE,
+            scope_id=scope_id,
+            label=label,
+        )
+        balance = self._graph_artifact(
+            run.balance_control_id,
+            kind=ArtifactKind.BALANCE_CONTROL,
+            scope_id=scope_id,
+            label=label,
+        )
+        close = self._graph_artifact(
+            run.close_readiness_id,
+            kind=ArtifactKind.CLOSE_READINESS,
+            scope_id=scope_id,
+            label=label,
+        )
+        manifest_ids = tuple(str(item) for item in run.source_manifest_ids)
+        proof_ids = tuple(str(item) for item in run.proof_version_ids)
+        if tuple(item.artifact_id for item in manifests) != manifest_ids:
+            raise PersistenceIntegrityError(
+                "current run graph source-manifest binding is inconsistent"
+            )
+        if tuple(item.artifact_id for item in proofs) != proof_ids:
+            raise PersistenceIntegrityError("current run graph proof binding is inconsistent")
+        for manifest in manifests:
+            delivered = self._graph_ids(manifest, "delivered_envelope_ids", label=label)
+            effective = self._graph_ids(manifest, "effective_envelope_ids", label=label)
+            self._require_raw_source_evidence(
+                tuple((*delivered, *effective)), label="current run source manifest"
+            )
+        for proof in proofs:
+            self._validate_proof_manifest_coverage(proof, manifests, label=label)
+            self._require_raw_source_evidence(
+                tuple(self._graph_ids(proof, "source_envelope_ids", label=label)),
+                label="current run proof",
+            )
+        if self._graph_ids(coverage, "manifest_ids", label=label) != manifest_ids:
+            raise PersistenceIntegrityError("current run graph coverage/manifests disagree")
+        if self._graph_ids(coverage, "proof_version_ids", label=label) != proof_ids:
+            raise PersistenceIntegrityError("current run graph coverage/proofs disagree")
+        if coverage.payload.get("scope_id") != str(scope_id):
+            raise PersistenceIntegrityError("current run graph coverage scope disagrees")
+        if balance.payload.get("scope_id") != str(scope_id) or balance.payload.get(
+            "policy_version_id"
+        ) != str(run.policy_version_id):
+            raise PersistenceIntegrityError("current run graph balance binding disagrees")
+        if close.payload.get("policy_version_id") != str(run.policy_version_id):
+            raise PersistenceIntegrityError("current run graph close policy disagrees")
+        if self._graph_ids(close, "manifest_ids", label=label) != manifest_ids:
+            raise PersistenceIntegrityError("current run graph close/manifests disagree")
+        if self._graph_ids(close, "proof_version_ids", label=label) != proof_ids:
+            raise PersistenceIntegrityError("current run graph close/proofs disagree")
+        if close.payload.get("coverage_certificate_id") != str(run.coverage_certificate_id):
+            raise PersistenceIntegrityError("current run graph close/coverage disagree")
+        if close.payload.get("balance_control_id") != str(run.balance_control_id):
+            raise PersistenceIntegrityError("current run graph close/balance disagree")
+        if close.payload.get("status") != run.outcome.value:
+            raise PersistenceIntegrityError("current run graph close outcome disagrees")
+
     def _validate_scope_context(
         self,
         *,
@@ -1165,32 +1750,20 @@ class ReflowApplicationService:
         payload: object,
         scope_id: domain.ReconciliationScopeId | None,
     ) -> None:
+        typed = cast(Any, payload)
+        if kind is ArtifactKind.SOURCE_DELIVERY_MANIFEST:
+            source_ids = tuple((*typed.delivered_envelope_ids, *typed.effective_envelope_ids))
+            self._require_raw_source_evidence(source_ids, label="source delivery manifest")
+            return
         if kind is not ArtifactKind.PROOF_VERSION:
             return
         if scope_id is None:
             raise PersistenceIntegrityError("proof version application writes require a scope")
-        proof = cast(Any, payload)
-        manifests = self._store.list_artifacts(
-            kind=ArtifactKind.SOURCE_DELIVERY_MANIFEST,
-            scope_id=scope_id,
-            limit=10_000,
-        )
-        covered_source_ids: set[str] = set()
-        for manifest in manifests:
-            if manifest.payload.get("scope_id") != str(scope_id):
-                raise PersistenceIntegrityError(
-                    "scoped source manifest payload disagrees with storage scope"
-                )
-            effective = manifest.payload.get("effective_envelope_ids")
-            if not isinstance(effective, list) or any(
-                not isinstance(item, str) for item in effective
-            ):
-                raise PersistenceIntegrityError(
-                    "scoped source manifest evidence IDs are invalid"
-                )
-            covered_source_ids.update(effective)
-        proof_source_ids = {str(item) for item in proof.source_envelope_ids}
-        if not proof_source_ids or not proof_source_ids.issubset(covered_source_ids):
+        source_ids = tuple(typed.source_envelope_ids)
+        self._require_raw_source_evidence(source_ids, label="proof version")
+        if not self._store.manifests_cover_source_ids(
+            scope_id=scope_id, source_ids=source_ids
+        ):
             raise PersistenceIntegrityError(
                 "proof evidence is not covered by scoped source manifests"
             )
@@ -1207,13 +1780,17 @@ class ReflowApplicationService:
         validated = _validated_application_artifact(
             kind=kind, artifact_id=artifact_id, payload=payload, scope_id=scope_id
         )
+        canonical_observed_at = _canonical_application_observed_at(
+            kind=kind, payload=validated, observed_at=observed_at
+        )
         self._validate_scope_context(kind=kind, payload=validated, scope_id=scope_id)
+        storage_scope = _application_storage_scope(kind=kind, scope_id=scope_id)
         return self._store.put_artifact(
             kind=kind,
             artifact_id=artifact_id,
             payload=validated,
-            scope_id=scope_id,
-            observed_at=observed_at,
+            scope_id=storage_scope,
+            observed_at=canonical_observed_at,
         )
 
     def artifact(self, artifact_id: str) -> StoredArtifact | None:
@@ -1227,6 +1804,14 @@ class ReflowApplicationService:
         limit: int = 100,
     ) -> tuple[StoredArtifact, ...]:
         return self._store.list_artifacts(kind=kind, scope_id=scope_id, limit=limit)
+
+    def artifact_count(
+        self,
+        *,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId | None,
+    ) -> int:
+        return self._store.count_artifacts(kind=kind, scope_id=scope_id)
 
     def current(self, *, kind: PointerKind, stream_key: str) -> CurrentPointer | None:
         return self._store.get_pointer(kind=kind, stream_key=stream_key)
@@ -1258,15 +1843,19 @@ class ReflowApplicationService:
                 f"{pointer_kind.value} stream key must equal typed artifact identity "
                 f"{expected_stream_key!r}"
             )
-        self._validate_scope_context(
-            kind=artifact_kind, payload=validated, scope_id=scope_id
+        canonical_observed_at = _canonical_application_observed_at(
+            kind=artifact_kind, payload=validated, observed_at=observed_at
         )
+        self._validate_scope_context(kind=artifact_kind, payload=validated, scope_id=scope_id)
+        if pointer_kind is PointerKind.LATEST_RUN:
+            self._validate_current_run_graph(validated, scope_id)
+        storage_scope = _application_storage_scope(kind=artifact_kind, scope_id=scope_id)
         return self._store.publish_artifact_and_pointer(
             artifact_kind=artifact_kind,
             artifact_id=artifact_id,
             payload=validated,
-            scope_id=scope_id,
-            observed_at=observed_at,
+            scope_id=storage_scope,
+            observed_at=canonical_observed_at,
             pointer_kind=pointer_kind,
             stream_key=stream_key,
             expected_generation=expected_generation,

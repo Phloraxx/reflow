@@ -55,10 +55,17 @@ class ReadArtifactStore(Protocol):
         limit: int = 100,
     ) -> tuple[StoredArtifact, ...]: ...
 
+    def artifact_count(
+        self,
+        *,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId | None,
+    ) -> int: ...
+
 
 @dataclass(frozen=True, slots=True)
 class MoneyView:
-    amount_paise: int
+    amount_paise: str
     currency: str
     display: str
 
@@ -330,7 +337,7 @@ def _money(value: object, label: str) -> MoneyView:
     whole, paise = divmod(abs(amount), 100)
     prefix = "₹" if currency == "INR" else f"{currency} "
     return MoneyView(
-        amount_paise=amount,
+        amount_paise=str(amount),
         currency=currency,
         display=f"{sign}{prefix}{whole:,}.{paise:02d}",
     )
@@ -344,7 +351,10 @@ def _sum_money(values: Sequence[MoneyView], label: str) -> MoneyView:
         raise ControlTowerIntegrityError(f"{label} cannot aggregate mixed currencies")
     currency = next(iter(currencies))
     return _money(
-        {"amount_paise": sum(value.amount_paise for value in values), "currency": currency},
+        {
+            "amount_paise": sum(int(value.amount_paise) for value in values),
+            "currency": currency,
+        },
         label,
     )
 
@@ -369,15 +379,34 @@ def _scope_payload_matches(
 
 
 def _artifact_time(artifact: StoredArtifact, payload_key: str) -> datetime:
+    value = artifact.payload.get(payload_key)
+    if value is not None:
+        return _timestamp(value, f"{artifact.artifact_id}.{payload_key}")
     if artifact.observed_at is not None:
         return artifact.observed_at
-    value = artifact.payload.get(payload_key)
-    if value is None:
-        return datetime.min.replace(tzinfo=UTC)
-    return _timestamp(value, f"{artifact.artifact_id}.{payload_key}")
+    return datetime.min.replace(tzinfo=UTC)
 
 
 _MATERIALITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+def _policy_materiality_band(policy: Mapping[str, object], amount: MoneyView) -> str:
+    raw = _sequence(policy.get("materiality_thresholds_paise"), "policy materiality thresholds")
+    if len(raw) != 3:
+        raise ControlTowerIntegrityError("policy materiality thresholds must contain three values")
+    low, medium, high = tuple(
+        _integer(item, "policy materiality threshold") for item in raw
+    )
+    if not 0 <= low < medium < high:
+        raise ControlTowerIntegrityError("policy materiality thresholds are invalid")
+    value = abs(int(amount.amount_paise))
+    if value <= low:
+        return "low"
+    if value <= medium:
+        return "medium"
+    if value <= high:
+        return "high"
+    return "critical"
 _PROOF_STATUS_ORDER = (
     "proven_reconciled",
     "pending_bank_credit",
@@ -406,7 +435,14 @@ class ControlTowerReader:
         kind: ArtifactKind,
         scope_id: domain.ReconciliationScopeId,
     ) -> tuple[StoredArtifact, ...]:
-        artifacts = self._store.artifacts(kind=kind, scope_id=scope_id, limit=10_000)
+        limit = 10_000
+        artifacts = self._store.artifacts(kind=kind, scope_id=scope_id, limit=limit)
+        total = self._store.artifact_count(kind=kind, scope_id=scope_id)
+        if total > limit or total != len(artifacts):
+            raise ControlTowerIntegrityError(
+                f"{kind.value} history is incomplete for scope {scope_id}; "
+                "pagination/read model required"
+            )
         for artifact in artifacts:
             if artifact.kind is not kind:
                 raise ControlTowerIntegrityError("artifact query returned the wrong artifact kind")
@@ -428,6 +464,69 @@ class ControlTowerReader:
             )
         _scope_payload_matches(artifact, scope_id)
         return artifact
+
+    def _policy_artifact(self, policy_id: str, *, owner: str) -> StoredArtifact:
+        artifact = self._store.artifact(policy_id)
+        if artifact is None:
+            raise ControlTowerIntegrityError(
+                f"{owner} references missing policy_version artifact {policy_id}"
+            )
+        if artifact.kind is not ArtifactKind.POLICY_VERSION:
+            raise ControlTowerIntegrityError(
+                f"artifact {policy_id} is {artifact.kind.value}, expected policy_version"
+            )
+        if artifact.scope_id is not None:
+            raise ControlTowerIntegrityError("policy artifact must use global storage scope")
+        payload_id = artifact.payload.get("id")
+        if payload_id is not None and payload_id != artifact.artifact_id:
+            raise ControlTowerIntegrityError(
+                f"policy artifact {policy_id} payload identity disagrees with storage identity"
+            )
+        return artifact
+
+    def _proof_artifact(
+        self,
+        proof_id: str,
+        scope_id: domain.ReconciliationScopeId,
+        *,
+        owner: str | None = None,
+    ) -> StoredArtifact:
+        artifact = self._store.artifact(proof_id)
+        if artifact is None:
+            if owner is None:
+                raise ControlTowerNotFound(f"unknown proof_version artifact {proof_id}")
+            raise ControlTowerIntegrityError(
+                f"{owner} references missing proof_version artifact {proof_id}"
+            )
+        if artifact.kind is not ArtifactKind.PROOF_VERSION:
+            raise ControlTowerIntegrityError(
+                f"artifact {proof_id} is {artifact.kind.value}, expected proof_version"
+            )
+        if artifact.scope_id != scope_id:
+            raise ControlTowerIntegrityError(
+                f"proof artifact {proof_id} belongs to another reconciliation scope"
+            )
+        payload_id = artifact.payload.get("id")
+        if payload_id is not None and payload_id != artifact.artifact_id:
+            raise ControlTowerIntegrityError(
+                f"proof artifact {proof_id} payload identity disagrees with storage identity"
+            )
+        return artifact
+
+    def _dependency_artifact(
+        self,
+        artifact_id: str,
+        kind: ArtifactKind,
+        scope_id: domain.ReconciliationScopeId,
+        *,
+        owner: str,
+    ) -> StoredArtifact:
+        try:
+            return self._artifact(artifact_id, kind, scope_id)
+        except ControlTowerNotFound as exc:
+            raise ControlTowerIntegrityError(
+                f"{owner} references missing {kind.value} artifact {artifact_id}"
+            ) from exc
 
     def _latest_run_artifact(self, scope_id: domain.ReconciliationScopeId) -> StoredArtifact | None:
         pointer = self._store.current(kind=PointerKind.LATEST_RUN, stream_key=str(scope_id))
@@ -472,9 +571,7 @@ class ControlTowerReader:
         )
         return tuple(sorted(items, key=lambda item: (item.source_kind, item.manifest_id)))
 
-    def _scoped_run_proof_ids(
-        self, scope_id: domain.ReconciliationScopeId
-    ) -> frozenset[str]:
+    def _scoped_run_proof_ids(self, scope_id: domain.ReconciliationScopeId) -> frozenset[str]:
         proof_ids: set[str] = set()
         for run in self._list(ArtifactKind.RECONCILIATION_RUN, scope_id):
             proof_ids.update(_strings(run.payload.get("proof_version_ids"), "run proof IDs"))
@@ -501,7 +598,7 @@ class ControlTowerReader:
         proof_ids = self._scoped_run_proof_ids(scope_id)
         items = tuple(
             self._proof_list_item(
-                self._artifact(proof_id, ArtifactKind.PROOF_VERSION, scope_id)
+                self._proof_artifact(proof_id, scope_id, owner="reconciliation run")
             )
             for proof_id in proof_ids
         )
@@ -519,7 +616,7 @@ class ControlTowerReader:
     def proof_detail(
         self, scope_id: domain.ReconciliationScopeId, proof_id: str
     ) -> ProofDetailView:
-        artifact = self._artifact(proof_id, ArtifactKind.PROOF_VERSION, scope_id)
+        artifact = self._proof_artifact(proof_id, scope_id)
         if proof_id not in self._scoped_run_proof_ids(scope_id):
             raise ControlTowerIntegrityError(
                 "proof is not referenced by any reconciliation run in requested scope"
@@ -634,34 +731,167 @@ class ControlTowerReader:
         settlement_for_case: dict[str, str] = {}
         tracking_for_case: dict[str, str] = {}
         utr_for_case: dict[str, str | None] = {}
+        identity_for_case: dict[str, tuple[str, str, str | None, MoneyView]] = {}
         for artifact in observation_artifacts:
             p = artifact.payload
             case_id = _text(p.get("case_id"), "observation case id")
-            view = self._observation_view(artifact)
-            observations.setdefault(case_id, []).append((artifact, view))
-            settlement_for_case[case_id] = _text(
-                p.get("settlement_id"), "observation settlement id"
+            run_id = _text(p.get("run_id"), "observation run id")
+            proof_id = _text(p.get("proof_version_id"), "observation proof id")
+            run = self._dependency_artifact(
+                run_id, ArtifactKind.RECONCILIATION_RUN, scope_id, owner="case observation"
             )
-            tracking_for_case[case_id] = _text(p.get("tracking_key"), "observation tracking key")
-            utr_for_case[case_id] = _optional_text(p.get("settlement_utr"), "settlement UTR")
+            proof = self._proof_artifact(proof_id, scope_id, owner="case observation")
+            run_proof_ids = _strings(run.payload.get("proof_version_ids"), "run proof IDs")
+            if proof_id not in run_proof_ids:
+                raise ControlTowerIntegrityError(
+                    "case observation proof is not referenced by its reconciliation run"
+                )
+            observation_policy_id = _text(
+                p.get("policy_version_id"), "observation policy id"
+            )
+            run_policy_id = _text(run.payload.get("policy_version_id"), "run policy id")
+            if observation_policy_id != run_policy_id:
+                raise ControlTowerIntegrityError(
+                    "case observation policy is not the policy bound to its run"
+                )
+            policy = self._policy_artifact(observation_policy_id, owner="case observation")
+            proof_payload = proof.payload
+            if _text(p.get("settlement_id"), "observation settlement id") != _text(
+                proof_payload.get("settlement_id"), "proof settlement id"
+            ):
+                raise ControlTowerIntegrityError(
+                    "case observation settlement identity disagrees with bound proof"
+                )
+            if _text(p.get("financial_status"), "observation financial status") != _text(
+                proof_payload.get("status"), "proof financial status"
+            ):
+                raise ControlTowerIntegrityError(
+                    "case observation financial status disagrees with bound proof"
+                )
+            if _strings(p.get("reason_codes"), "observation reason codes") != _strings(
+                proof_payload.get("reason_codes"), "proof reason codes"
+            ):
+                raise ControlTowerIntegrityError(
+                    "case observation reason codes disagree with bound proof"
+                )
+            observation_amount = _money(p.get("affected_amount"), "observation affected amount")
+            proof_composition = _mapping(proof_payload.get("composition"), "proof composition")
+            if observation_amount != _money(
+                proof_composition.get("settlement_amount"), "proof settlement amount"
+            ):
+                raise ControlTowerIntegrityError(
+                    "case observation affected amount disagrees with bound proof"
+                )
+            proof_bank = _mapping(proof_payload.get("bank"), "proof bank")
+            if _optional_text(p.get("settlement_utr"), "observation settlement UTR") != (
+                _optional_text(proof_bank.get("settlement_utr"), "proof settlement UTR")
+            ):
+                raise ControlTowerIntegrityError(
+                    "case observation settlement UTR disagrees with bound proof"
+                )
+            observation_time = _timestamp(p.get("observed_at"), "observation time")
+            run_time = _timestamp(run.payload.get("completed_at"), "run completion time")
+            if observation_time != run_time:
+                raise ControlTowerIntegrityError(
+                    "case observation time disagrees with reconciliation run completion"
+                )
+            expected_materiality = _policy_materiality_band(policy.payload, observation_amount)
+            if _text(p.get("materiality_band"), "observation materiality") != expected_materiality:
+                raise ControlTowerIntegrityError(
+                    "case observation materiality disagrees with bound policy"
+                )
+            run_manifest_ids = set(
+                _strings(run.payload.get("source_manifest_ids"), "run source manifest IDs")
+            )
+            state_manifest_ids: set[str] = set()
+            for state in _sequence(p.get("source_states"), "observation source states"):
+                state_payload = _mapping(state, "source state")
+                manifest_id = _text(state_payload.get("manifest_id"), "manifest id")
+                if manifest_id in state_manifest_ids:
+                    raise ControlTowerIntegrityError(
+                        "case observation contains duplicate source manifest state"
+                    )
+                state_manifest_ids.add(manifest_id)
+                if manifest_id not in run_manifest_ids:
+                    raise ControlTowerIntegrityError(
+                        "case observation source state is not referenced by its reconciliation run"
+                    )
+                manifest = self._dependency_artifact(
+                    manifest_id,
+                    ArtifactKind.SOURCE_DELIVERY_MANIFEST,
+                    scope_id,
+                    owner="case observation",
+                )
+                manifest_payload = manifest.payload
+                if (
+                    _text(state_payload.get("source_kind"), "source state kind")
+                    != _text(manifest_payload.get("source_kind"), "manifest source kind")
+                    or _text(state_payload.get("completeness"), "source state completeness")
+                    != _text(manifest_payload.get("completeness"), "manifest completeness")
+                    or _boolean(state_payload.get("received_late"), "source state received_late")
+                    != _boolean(manifest_payload.get("received_late"), "manifest received_late")
+                ):
+                    raise ControlTowerIntegrityError(
+                        "case observation source state disagrees with bound manifest"
+                    )
+            if state_manifest_ids != run_manifest_ids:
+                raise ControlTowerIntegrityError(
+                    "case observation source states do not exactly bind run manifests"
+                )
+            view = self._observation_view(artifact)
+            settlement_id = _text(p.get("settlement_id"), "observation settlement id")
+            tracking_key = _text(p.get("tracking_key"), "observation tracking key")
+            settlement_utr = _optional_text(p.get("settlement_utr"), "settlement UTR")
+            identity = (tracking_key, settlement_id, settlement_utr, observation_amount)
+            prior_identity = identity_for_case.get(case_id)
+            if prior_identity is not None and prior_identity != identity:
+                raise ControlTowerIntegrityError(
+                    "exception case economic identity changed without a new case ID"
+                )
+            identity_for_case[case_id] = identity
+            observations.setdefault(case_id, []).append((artifact, view))
+            settlement_for_case[case_id] = settlement_id
+            tracking_for_case[case_id] = tracking_key
+            utr_for_case[case_id] = settlement_utr
 
         dispositions: dict[str, list[DispositionView]] = {}
         for artifact in disposition_artifacts:
             case_id = _text(artifact.payload.get("case_id"), "disposition case id")
+            if case_id not in observations:
+                raise ControlTowerIntegrityError(
+                    "case disposition has no case observation in requested scope"
+                )
             dispositions.setdefault(case_id, []).append(self._disposition_view(artifact))
 
-        cluster_for_case: dict[str, str] = {}
+        cluster_for_case: dict[str, tuple[str, datetime, str]] = {}
         for artifact in cluster_artifacts:
+            run_id = _text(artifact.payload.get("run_id"), "incident cluster run id")
+            run = self._dependency_artifact(
+                run_id,
+                ArtifactKind.RECONCILIATION_RUN,
+                scope_id,
+                owner="incident cluster",
+            )
+            run_time = _timestamp(run.payload.get("completed_at"), "incident cluster run time")
             for case_id in _strings(artifact.payload.get("case_ids"), "incident case IDs"):
+                case_rows = observations.get(case_id)
+                if not case_rows or not any(view.run_id == run_id for _, view in case_rows):
+                    raise ControlTowerIntegrityError(
+                        "incident cluster case has no matching observation in its run"
+                    )
                 prior = cluster_for_case.get(case_id)
-                if prior is not None and prior != artifact.artifact_id:
-                    # Clusters are run-specific; keep the newest artifact by observed time/ID below.
-                    existing = self._store.artifact(prior)
-                    if existing is not None and _artifact_time(
-                        existing, "observed_at"
-                    ) > _artifact_time(artifact, "observed_at"):
+                if prior is not None and prior[0] != artifact.artifact_id:
+                    if prior[2] == run_id:
+                        raise ControlTowerIntegrityError(
+                            "one case cannot belong to multiple incident clusters in one run"
+                        )
+                    if prior[1] > run_time:
                         continue
-                cluster_for_case[case_id] = artifact.artifact_id
+                    if prior[1] == run_time:
+                        raise ControlTowerIntegrityError(
+                            "incident cluster run chronology is ambiguous"
+                        )
+                cluster_for_case[case_id] = (artifact.artifact_id, run_time, run_id)
 
         latest_case_by_settlement: dict[str, tuple[str, datetime]] = {}
         for case_id, rows in observations.items():
@@ -669,11 +899,11 @@ class ControlTowerReader:
             settlement_id = settlement_for_case[case_id]
             seen = latest_case_by_settlement.get(settlement_id)
             latest_time = _timestamp(latest.observed_at, "observed_at")
-            if (
-                seen is None
-                or latest_time > seen[1]
-                or (latest_time == seen[1] and case_id > seen[0])
-            ):
+            if seen is not None and latest_time == seen[1] and case_id != seen[0]:
+                raise ControlTowerIntegrityError(
+                    "exception case supersession chronology is ambiguous"
+                )
+            if seen is None or latest_time > seen[1]:
                 latest_case_by_settlement[settlement_id] = (case_id, latest_time)
 
         now = self._now()
@@ -685,6 +915,11 @@ class ControlTowerReader:
             first_payload = ordered[0][0].payload
             latest_payload = ordered[-1][0].payload
             latest_view = ordered[-1][1]
+            first_seen = _timestamp(first_payload.get("observed_at"), "first observation time")
+            last_seen = _timestamp(latest_payload.get("observed_at"), "latest observation time")
+            if last_seen < first_seen:
+                raise ControlTowerIntegrityError("case observation chronology moved backwards")
+
             case_dispositions = sorted(
                 dispositions.get(case_id, []), key=lambda item: item.sequence
             )
@@ -695,7 +930,18 @@ class ControlTowerReader:
             owner: str | None = None
             workflow = "open"
             resolution: str | None = None
+            prior_disposition_time: datetime | None = None
             for item in case_dispositions:
+                disposition_time = _timestamp(item.occurred_at, "disposition occurred_at")
+                if disposition_time < first_seen:
+                    raise ControlTowerIntegrityError("case disposition predates case first seen")
+                if prior_disposition_time is not None and disposition_time < prior_disposition_time:
+                    raise ControlTowerIntegrityError("case disposition time moved backwards")
+                if workflow == "closed" and item.kind != "reopen":
+                    raise ControlTowerIntegrityError(
+                        "closed case workflow requires explicit reopen before another transition"
+                    )
+                prior_disposition_time = disposition_time
                 if item.kind == "assign_owner":
                     owner = item.owner
                 elif item.kind == "acknowledge":
@@ -721,10 +967,6 @@ class ControlTowerReader:
             elif latest_view.financial_status == "proven_reconciled":
                 workflow, resolution = "closed", "proof_reconciled"
 
-            first_seen = _timestamp(first_payload.get("observed_at"), "first observation time")
-            last_seen = _timestamp(latest_payload.get("observed_at"), "latest observation time")
-            if last_seen < first_seen:
-                raise ControlTowerIntegrityError("case observation chronology moved backwards")
             age = max(0, int((now - first_seen).total_seconds()))
             blockers = tuple(
                 sorted(
@@ -752,7 +994,9 @@ class ControlTowerReader:
                     resolution=resolution,
                     owner=owner,
                     incident_fingerprint_id=latest_view.incident_fingerprint_id,
-                    incident_cluster_id=cluster_for_case.get(case_id),
+                    incident_cluster_id=(
+                        None if case_id not in cluster_for_case else cluster_for_case[case_id][0]
+                    ),
                     source_blockers=blockers,
                     first_seen_at=first_seen.isoformat(),
                     last_seen_at=last_seen.isoformat(),
@@ -790,6 +1034,19 @@ class ControlTowerReader:
         observation_id: str,
         proof_id: str,
     ) -> InvestigationView | None:
+        proof = self._proof_artifact(proof_id, scope_id, owner="investigation")
+        allowed_citations = frozenset(
+            _strings(proof.payload.get("source_envelope_ids"), "proof source envelope ids")
+        )
+        observation = self._dependency_artifact(
+            observation_id,
+            ArtifactKind.CASE_OBSERVATION,
+            scope_id,
+            owner="investigation",
+        )
+        observation_time = _timestamp(
+            observation.payload.get("observed_at"), "investigation observation time"
+        )
         candidates: list[tuple[StoredArtifact, InvestigationView]] = []
         for artifact in self._list(ArtifactKind.INVESTIGATION_RESULT, scope_id):
             p = artifact.payload
@@ -799,6 +1056,16 @@ class ControlTowerReader:
                 or p.get("proof_version_id") != proof_id
             ):
                 continue
+            citations = _strings(p.get("citations"), "investigation citations")
+            if not set(citations).issubset(allowed_citations):
+                raise ControlTowerIntegrityError(
+                    "investigation cites evidence outside bound proof"
+                )
+            as_of = _timestamp(p.get("as_of"), "investigation as_of")
+            if as_of < observation_time:
+                raise ControlTowerIntegrityError(
+                    "investigation as_of predates its bound observation"
+                )
             trace = _sequence(p.get("trace"), "investigation trace")
             candidates.append(
                 (
@@ -808,7 +1075,7 @@ class ControlTowerReader:
                         status=_text(p.get("status"), "investigation status"),
                         next_action=_text(p.get("next_action"), "investigation next action"),
                         hypothesis=_optional_text(p.get("hypothesis"), "investigation hypothesis"),
-                        citations=_strings(p.get("citations"), "investigation citations"),
+                        citations=citations,
                         request_source_kind=_optional_text(
                             p.get("request_source_kind"), "investigation request source kind"
                         ),
@@ -885,7 +1152,7 @@ class ControlTowerReader:
         run = run_artifact.payload
         proof_ids = _strings(run.get("proof_version_ids"), "run proof IDs")
         proof_artifacts = tuple(
-            self._artifact(proof_id, ArtifactKind.PROOF_VERSION, scope_id) for proof_id in proof_ids
+            self._proof_artifact(proof_id, scope_id, owner="current run") for proof_id in proof_ids
         )
         proof_items = tuple(self._proof_list_item(artifact) for artifact in proof_artifacts)
         amounts = [item.settlement_amount for item in proof_items]
@@ -908,16 +1175,49 @@ class ControlTowerReader:
         manifest_ids = _strings(run.get("source_manifest_ids"), "run source manifest IDs")
         source_items = tuple(
             self._source_item(
-                self._artifact(manifest_id, ArtifactKind.SOURCE_DELIVERY_MANIFEST, scope_id)
+                self._dependency_artifact(
+                    manifest_id,
+                    ArtifactKind.SOURCE_DELIVERY_MANIFEST,
+                    scope_id,
+                    owner="current run",
+                )
             )
             for manifest_id in manifest_ids
         )
         close_id = _text(run.get("close_readiness_id"), "run close readiness id")
         coverage_id = _text(run.get("coverage_certificate_id"), "run coverage id")
         balance_id = _text(run.get("balance_control_id"), "run balance id")
-        close = self._artifact(close_id, ArtifactKind.CLOSE_READINESS, scope_id).payload
-        coverage = self._artifact(coverage_id, ArtifactKind.EVIDENCE_COVERAGE, scope_id).payload
-        balance = self._artifact(balance_id, ArtifactKind.BALANCE_CONTROL, scope_id).payload
+        close = self._dependency_artifact(
+            close_id, ArtifactKind.CLOSE_READINESS, scope_id, owner="current run"
+        ).payload
+        coverage = self._dependency_artifact(
+            coverage_id, ArtifactKind.EVIDENCE_COVERAGE, scope_id, owner="current run"
+        ).payload
+        balance = self._dependency_artifact(
+            balance_id, ArtifactKind.BALANCE_CONTROL, scope_id, owner="current run"
+        ).payload
+
+        if _strings(coverage.get("manifest_ids"), "coverage manifest IDs") != manifest_ids:
+            raise ControlTowerIntegrityError("current run coverage/manifests disagree")
+        if _strings(coverage.get("proof_version_ids"), "coverage proof IDs") != proof_ids:
+            raise ControlTowerIntegrityError("current run coverage/proofs disagree")
+        if _text(coverage.get("scope_id"), "coverage scope") != str(scope_id):
+            raise ControlTowerIntegrityError("current run coverage scope disagrees")
+        run_policy_id = _text(run.get("policy_version_id"), "run policy id")
+        if _text(balance.get("scope_id"), "balance scope") != str(scope_id):
+            raise ControlTowerIntegrityError("current run balance scope disagrees")
+        if _text(balance.get("policy_version_id"), "balance policy id") != run_policy_id:
+            raise ControlTowerIntegrityError("current run balance policy disagrees")
+        if _text(close.get("policy_version_id"), "close policy id") != run_policy_id:
+            raise ControlTowerIntegrityError("current run close policy disagrees")
+        if _strings(close.get("manifest_ids"), "close manifest IDs") != manifest_ids:
+            raise ControlTowerIntegrityError("current run close/manifests disagree")
+        if _strings(close.get("proof_version_ids"), "close proof IDs") != proof_ids:
+            raise ControlTowerIntegrityError("current run close/proofs disagree")
+        if _text(close.get("coverage_certificate_id"), "close coverage id") != coverage_id:
+            raise ControlTowerIntegrityError("current run close/coverage disagree")
+        if _text(close.get("balance_control_id"), "close balance id") != balance_id:
+            raise ControlTowerIntegrityError("current run close/balance disagree")
 
         queue = self._case_queue(scope_id)
         active = tuple(item for item in queue if item.is_active)

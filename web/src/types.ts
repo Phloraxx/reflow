@@ -1,5 +1,5 @@
 export type Money = {
-  amount_paise: number
+  amount_paise: string
   currency: string
   display: string
 }

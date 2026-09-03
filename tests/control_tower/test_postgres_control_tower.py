@@ -44,6 +44,7 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
         )
 
     service = ReflowApplicationService(store)
+    policy_id = "policy_gate18_pg"
     manifest_id = "manifest_gate18_pg"
     proof_id = "proofv_gate18_pg"
     close_id = "close_gate18_pg"
@@ -51,6 +52,17 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
     balance_id = "balance_gate18_pg"
     run_id = "run_gate18_pg"
 
+    store.put_artifact(
+        kind=ArtifactKind.POLICY_VERSION,
+        artifact_id=policy_id,
+        scope_id=None,
+        observed_at=None,
+        payload={
+            "id": policy_id,
+            "version_label": "gate18-pg",
+            "materiality_thresholds_paise": [10_000, 100_000, 1_000_000],
+        },
+    )
     store.put_artifact(
         kind=ArtifactKind.SOURCE_DELIVERY_MANIFEST,
         artifact_id=manifest_id,
@@ -114,7 +126,16 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
         artifact_id=close_id,
         scope_id=SCOPE,
         observed_at=NOW,
-        payload={"id": close_id, "status": "ready", "reason_codes": []},
+        payload={
+            "id": close_id,
+            "status": "ready",
+            "reason_codes": [],
+            "policy_version_id": policy_id,
+            "manifest_ids": [manifest_id],
+            "proof_version_ids": [proof_id],
+            "coverage_certificate_id": coverage_id,
+            "balance_control_id": balance_id,
+        },
     )
     store.put_artifact(
         kind=ArtifactKind.EVIDENCE_COVERAGE,
@@ -125,6 +146,8 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
             "id": coverage_id,
             "scope_id": str(SCOPE),
             "status": "complete",
+            "manifest_ids": [manifest_id],
+            "proof_version_ids": [proof_id],
             "orphan_count": 0,
             "orphan_known_value": _money(0),
         },
@@ -137,6 +160,7 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
         payload={
             "id": balance_id,
             "scope_id": str(SCOPE),
+            "policy_version_id": policy_id,
             "status": "proven",
             "residual": _money(0),
         },
@@ -149,6 +173,7 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
         payload={
             "id": run_id,
             "scope_id": str(SCOPE),
+            "policy_version_id": policy_id,
             "outcome": "ready",
             "period_start": NOW.replace(hour=0).isoformat(),
             "period_end": NOW.isoformat(),
@@ -178,7 +203,7 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
     assert overview.run.run_id == run_id
     assert overview.run.close_status == "ready"
     assert overview.proof_status[0].status == "proven_reconciled"
-    assert overview.proof_status[0].amount.amount_paise == 12_345
+    assert overview.proof_status[0].amount.amount_paise == "12345"
 
     rebuilt = ReflowApplicationService(PostgresApplicationStore(_require_dsn()))
     assert ControlTowerReader(rebuilt, evaluation_root=tmp_path).overview(SCOPE) == overview

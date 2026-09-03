@@ -29,6 +29,7 @@ from .openai_transport_security import (
     open_no_redirect,
     read_bounded_openai_response,
     validate_openai_https_endpoint,
+    validate_openai_timeout_seconds,
 )
 
 
@@ -94,8 +95,8 @@ def _jsonable(value: object) -> object:
 
 
 _EMAIL_RE = re.compile(r"(?i)\b[a-z0-9._%+-]+@[a-z0-9.-]+\b")
-_SECRET_RE = re.compile(r"(?i)\b(?:sk|rzp_(?:live|test)|ghp|github_pat|npk)[-_][a-z0-9_-]{8,}\b")
-_LONG_NUMBER_RE = re.compile(r"(?<!\d)\d{8,19}(?!\d)")
+_SECRET_RE = re.compile(r"(?i)\b(?:sk|rzp_(?:live|test)|ghp|github_pat|npk)[-_][a-z0-9_-]{1,}\b")
+_LONG_NUMBER_RE = re.compile(r"(?<!\d)\d{8,}(?!\d)")
 _TRANSACTION_ID_RE = re.compile(
     r"(?i)\b(?:UTR[-_: ]*[A-Z0-9-]{4,}|(?:setl|pay|rfnd|trf|adj|order|recon|bank)_[A-Z0-9_-]{4,})\b"
 )
@@ -157,7 +158,10 @@ def _model_tool_output(value: object) -> object:
             "payload_sha256": value.payload_sha256,
             "trust_label": value.trust_label,
             "untrusted_text_fields": [
-                {"path": item.path, "value": _redact_untrusted_text(item.value)}
+                {
+                    "path": _redact_untrusted_text(item.path),
+                    "value": _redact_untrusted_text(item.value),
+                }
                 for item in value.untrusted_text_fields
             ],
         }
@@ -424,8 +428,7 @@ class OpenAIInvestigationProvider(InvestigationProvider):
         if not self.model or self.model != self.model.strip():
             raise ValueError("OpenAI model must be non-empty and trimmed")
         validate_openai_https_endpoint(self.base_url)
-        if self.timeout_seconds <= 0:
-            raise ValueError("OpenAI timeout must be positive")
+        validate_openai_timeout_seconds(self.timeout_seconds)
         if isinstance(self.max_tool_rounds, bool) or not isinstance(self.max_tool_rounds, int):
             raise TypeError("max_tool_rounds must be int")
         if self.max_tool_rounds < 0 or self.max_tool_rounds > 16:
