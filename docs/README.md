@@ -6,7 +6,7 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — active durable Razorpay webhook ingress gate; exact PR code CI is green, merge closure pending.
+1. [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable Razorpay webhook ingress gate with exact PR and `main` CI closure evidence.
 2. [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged restore-tested PostgreSQL logical-backup gate; PITR remains unclaimed.
 3. [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged Cloudflare Access authentication and exact-scope authorization boundary.
 4. [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — merged readiness and real-Razorpay acceptance foundation.
@@ -73,7 +73,7 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — merged readiness and real-Razorpay acceptance foundation.
 - [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged production human authentication and exact-scope authorization.
 - [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged logical backup/restore verification contract.
-- [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — active durable provider-authenticated webhook receipt/replay contract.
+- [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable provider-authenticated webhook receipt/replay contract.
 
 ## Execution and submission
 
@@ -89,7 +89,7 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. active durable webhook-ingress contract (`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`)
+2. merged durable webhook-ingress contract (`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`)
 3. merged logical backup/recovery contract (`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`)
 4. merged authentication/scope-authorization contract (`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`)
 5. production-readiness foundation (`44_PRODUCTION_READINESS_PHASE1.md`)

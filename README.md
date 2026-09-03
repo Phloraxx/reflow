@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: PostgreSQL logical backup/recovery is merged green as `fda3cbd43b3a8ea055f0d5934d0b2ab5de22f0f3` (PR #31; exact `main` CI run `33776336580` passed), including the real PostgreSQL 16.15 dump/restore drill. The next production gate is durable authenticated Razorpay webhook ingress; WAL/PITR remains explicitly unclaimed. See `docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`.**
+> **Current phase: durable authenticated Razorpay webhook ingress is merged green as `41f62d9fd07a8f232f3e77476e516d4b666e6d96` (PR #33; exact `main` CI run `33781209886` passed), including PostgreSQL-backed immutable receipts, replay attempts and restore verification. The next external acceptance dependency is a non-empty authenticated Razorpay Test Mode settlement/recon corpus; WAL/PITR remains explicitly unclaimed. See `docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -577,6 +577,9 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [`docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md`](docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md) — post-final audit and repair evidence
 - [`docs/43_THIRD_WHOLE_CODEBASE_AUDIT.md`](docs/43_THIRD_WHOLE_CODEBASE_AUDIT.md) — closed third whole-codebase audit and merge evidence
 - [`docs/44_PRODUCTION_READINESS_PHASE1.md`](docs/44_PRODUCTION_READINESS_PHASE1.md) — post-audit readiness and real-Razorpay acceptance gate
+- [`docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged Cloudflare Access authentication and exact-scope authorization
+- [`docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged logical backup/restore verification contract
+- [`docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable Razorpay webhook ingress and replay contract
 
 ---
 
@@ -628,7 +631,7 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [x] bounded HTTPS-only, no-redirect Razorpay acceptance client
 - [x] privacy-preserving real-data acceptance report format
 - [ ] non-empty authenticated Test Mode settlement/recon corpus
-- [ ] public webhook HTTP ingress with durable operator-visible failure semantics
+- [x] public webhook HTTP ingress with durable retained failure outcomes and privileged local replay/inspection
 - [x] Cloudflare Access human authentication + exact-scope read authorization/RBAC
 - [ ] tenant onboarding/provisioning and authenticated operator write permissions
 - [x] restore-tested PostgreSQL logical backup/recovery drill
