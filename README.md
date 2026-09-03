@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Production authentication/scope authorization is merged green as `7a5ebe7c17606aa7a171f3d43e62405dc095e48c` (PR #30; exact `main` CI run `33767659563` passed). PostgreSQL logical backup/recovery PR #31 has passed its exact code CI, including the real PostgreSQL 16.15 dump/restore drill; merge and `main` CI closure are pending. PITR remains explicitly unclaimed. See `docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md` and `docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`.**
+> **Current phase: PostgreSQL logical backup/recovery is merged green as `fda3cbd43b3a8ea055f0d5934d0b2ab5de22f0f3` (PR #31; exact `main` CI run `33776336580` passed), including the real PostgreSQL 16.15 dump/restore drill. The next production gate is durable authenticated Razorpay webhook ingress; WAL/PITR remains explicitly unclaimed. See `docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
