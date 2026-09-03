@@ -463,6 +463,23 @@ python -m uvicorn reflow.control_tower_api:app_from_env --factory --host 127.0.0
 
 The demo is synthetic regression/demo data. It is not a Razorpay Test Mode or live merchant accuracy claim.
 
+The API now separates liveness (`/api/v1/health`) from PostgreSQL/schema readiness (`/api/v1/ready`). The environment factory wires readiness to the durable store; a manually constructed app without a dependency probe fails readiness with HTTP 503.
+
+### Run the private real-Razorpay acceptance harness
+
+Use **Test Mode first** and place credentials only in the environment. The command emits a privacy-preserving aggregate report under the ignored `data/generated/` path; it never writes raw Razorpay payloads or Authorization headers into that report. It intentionally fails when either the settlement or Settlement Recon corpus is empty.
+
+```bash
+export RAZORPAY_KEY_ID='rzp_test_...'
+export RAZORPAY_KEY_SECRET='...'
+export REFLOW_RAZORPAY_ACCOUNT_ID='acc_...'
+python -m reflow.razorpay_acceptance \
+  --mode test --year 2026 --month 9 \
+  --output data/generated/razorpay-acceptance-2026-09.json
+```
+
+Live mode additionally requires `--allow-live`. See [`docs/44_PRODUCTION_READINESS_PHASE1.md`](docs/44_PRODUCTION_READINESS_PHASE1.md).
+
 Equivalent explicit checks:
 
 ```bash
@@ -524,6 +541,9 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [`docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md) — frozen final held-out/failure-campaign protocol
 - [`docs/40_GATE_19_CHECKPOINT.md`](docs/40_GATE_19_CHECKPOINT.md) — final held-out evidence and submission-hardening checkpoint
 - [`docs/41_FINAL_5_MINUTE_PITCH.md`](docs/41_FINAL_5_MINUTE_PITCH.md) — exact five-minute recording script/runbook
+- [`docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md`](docs/42_POST_FINAL_WHOLE_CODEBASE_AUDIT.md) — post-final audit and repair evidence
+- [`docs/43_THIRD_WHOLE_CODEBASE_AUDIT.md`](docs/43_THIRD_WHOLE_CODEBASE_AUDIT.md) — closed third whole-codebase audit and merge evidence
+- [`docs/44_PRODUCTION_READINESS_PHASE1.md`](docs/44_PRODUCTION_READINESS_PHASE1.md) — post-audit readiness and real-Razorpay acceptance gate
 
 ---
 
@@ -568,6 +588,16 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [x] provider-shaped Razorpay webhook / Settlement Recon / standard-settlement integration
 - [ ] authenticated real Test Mode settlement/recon corpus (none currently available in connected account)
 - [ ] Instant Settlement `setlod` / `setlodp` proof support
+
+### Production readiness
+
+- [x] PostgreSQL/schema-aware readiness separate from liveness
+- [x] bounded HTTPS-only, no-redirect Razorpay acceptance client
+- [x] privacy-preserving real-data acceptance report format
+- [ ] non-empty authenticated Test Mode settlement/recon corpus
+- [ ] public webhook HTTP ingress with durable operator-visible failure semantics
+- [ ] tenant authentication / authorization / RBAC
+- [ ] backup/restore/PITR and production deployment runbook
 
 ### AI / product surface
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -26,6 +27,7 @@ def create_control_tower_app(
     reader: ControlTowerReader,
     *,
     web_dist: Path | None = None,
+    readiness_probe: Callable[[], None] | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="ReFlow Operator Control Tower",
@@ -52,6 +54,25 @@ def create_control_tower_app(
             "financial_truth_mutation": False,
             "generic_sql": False,
         }
+
+    @app.get("/api/v1/ready")
+    def ready() -> JSONResponse:
+        if readiness_probe is None:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "not_ready", "dependency": "postgresql"},
+            )
+        try:
+            readiness_probe()
+        except Exception:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "not_ready", "dependency": "postgresql"},
+            )
+        return JSONResponse(
+            status_code=200,
+            content={"status": "ready", "dependency": "postgresql"},
+        )
 
     @app.get("/api/v1/scopes/{scope_id}/overview")
     def overview(scope_id: str) -> dict[str, object]:
@@ -135,4 +156,5 @@ def app_from_env() -> FastAPI:
             final_evaluation_summary=final_summary,
         ),
         web_dist=web_dist,
+        readiness_probe=store.check_ready,
     )
