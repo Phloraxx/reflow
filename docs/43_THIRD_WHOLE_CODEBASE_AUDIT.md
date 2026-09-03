@@ -3,7 +3,7 @@
 **Date:** 2026-09-03
 **Base `main`:** `61d8b305e1cf2b31fd68c5a3a332634a977938ff`
 **Audit branch:** `audit/third-whole-codebase-pass`
-**Status:** local whole-codebase audit complete and green; commit/PR/remote CI/merge evidence pending.
+**Status:** complete and merged green. Audit PR #27 merged as `e2c8a2f33bbf7506257a9a8cfda4349d838a60ac`; exact merge-triggered `main` CI run `33744722448` passed.
 
 ## 1. Purpose
 
@@ -150,6 +150,6 @@ Long histories now fail closed when the reference read window is insufficient; t
 
 The 46.91 MiB first-run held-out artifact remains unchanged and intentionally retained. Product evaluation reads the compact self-verifying summary instead.
 
-## 10. Merge rule
+## 10. Merge evidence
 
-This branch must not be considered closed until the exact branch head passes PR CI, is merged, and the exact merge-triggered `main` CI is green. Merge evidence will be appended here after that occurs.
+Audit commit `baa26b9` passed PR validation and PR #27 merged to `main` as `e2c8a2f33bbf7506257a9a8cfda4349d838a60ac`. The exact merge-triggered `main` CI run `33744722448` completed successfully. The third whole-codebase audit is therefore closed; any future changes require a new validation boundary rather than extending this evidence retroactively.
