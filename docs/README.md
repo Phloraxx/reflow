@@ -6,7 +6,7 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — active request telemetry, bounded metrics and durable operator-access audit gate; merge closure pending.
+1. [`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — merged request telemetry, bounded metrics and durable operator-access audit gate with exact PR/main CI closure evidence.
 2. [`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — merged single-host deployment and real PostgreSQL PITR mechanics gate with PR/main CI closure evidence.
 3. [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable Razorpay webhook ingress gate with exact PR and `main` CI closure evidence.
 4. [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged restore-tested PostgreSQL logical-backup gate; physical PITR mechanics are covered by doc 48.
@@ -76,7 +76,7 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged logical backup/restore verification contract.
 - [`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable provider-authenticated webhook receipt/replay contract.
 - [`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — merged production deployment/PITR contract with real recovery-drill and failed-main/fix evidence.
-- [`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — active production observability/operator-audit contract.
+- [`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — merged production observability/operator-audit contract.
 
 ## Execution and submission
 
@@ -92,7 +92,7 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. active production observability/operator-audit contract (`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`)
+2. merged production observability/operator-audit contract (`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`)
 3. merged production deployment/PITR contract (`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`)
 4. merged durable webhook-ingress contract (`47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`)
 5. merged logical backup/recovery contract (`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`)

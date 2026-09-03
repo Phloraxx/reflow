@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: production observability/operator-audit hardening is active on `hardening/observability-operator-audit` from green `main` `788258401bcbe948c014909ed7ee1f0524c0937c`. The branch adds generated request correlation, secret-minimized JSON telemetry, bounded local metrics, and append-only pseudonymous authenticated-operator access auditing without changing financial truth. Centralized telemetry/alerts/SLOs, a public production deployment, and a non-empty authenticated Razorpay Test Mode settlement/recon corpus remain unclaimed. See `docs/49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`.**
+> **Current phase: production observability/operator-audit Gate 49 is merged green on `main` as `bd3efd7319af088943561d202ac3385eeb389c86` via PR #38; exact merge-triggered CI `33795431092` passed the full 535-test recovery-enabled gate. ReFlow now has generated request correlation, secret-minimized JSON telemetry, bounded local metrics, and append-only pseudonymous authenticated-operator access auditing without changing financial truth. Centralized telemetry/alerts/SLOs, a public production deployment, and a non-empty authenticated Razorpay Test Mode settlement/recon corpus remain unclaimed. See `docs/49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
