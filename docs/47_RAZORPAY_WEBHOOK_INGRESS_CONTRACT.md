@@ -105,7 +105,11 @@ The required submission check reported:
 
 Because the CI-only webhook recovery test is gated on the PostgreSQL DSN plus `REFLOW_RECOVERY_DOCKER_DRILL=1`, the no-skip 520-test result confirms that the digest-pinned PostgreSQL 16.15 dump -> fresh database -> restore -> webhook schema/integrity verification drill executed successfully on that head.
 
-Merge and exact merge-triggered `main` CI remain required before this gate is fully closed.
+PR #33 final head `a41e8f976e5be64ae2b4d5dab963c18d6351107c` passed exact PR CI run `33780396829`, including the same 520-test PostgreSQL-enabled submission check and frozen-artifact verification.
+
+PR #33 was merged with head-SHA protection as `41f62d9fd07a8f232f3e77476e516d4b666e6d96`. Exact merge-triggered `main` CI run `33781209886` then passed the full required submission check.
+
+**Gate status: closed and merged green.**
 
 ## Non-claims
 
