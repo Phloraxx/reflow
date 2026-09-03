@@ -18,7 +18,12 @@ from .access_auth import (
     AuthenticatedPrincipal,
     auth_boundary_from_env,
 )
-from .control_tower import ControlTowerIntegrityError, ControlTowerNotFound, ControlTowerReader
+from .control_tower import (
+    ControlTowerCursorError,
+    ControlTowerIntegrityError,
+    ControlTowerNotFound,
+    ControlTowerReader,
+)
 from .observability import (
     EventSink,
     MetricsRegistry,
@@ -82,6 +87,13 @@ def create_control_tower_app(
         return JSONResponse(
             status_code=409,
             content={"detail": str(exc), "error": "control_tower_integrity_error"},
+        )
+
+    @app.exception_handler(ControlTowerCursorError)
+    async def cursor_error(_request: Request, exc: ControlTowerCursorError) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={"detail": str(exc), "error": "invalid_collection_cursor"},
         )
 
     @app.get("/api/v1/health")
@@ -243,6 +255,24 @@ def create_control_tower_app(
         )
         return [asdict(item) for item in reader.proofs(scope)]
 
+    @app.get("/api/v1/scopes/{scope_id}/proofs/page")
+    def proofs_page(
+        request: Request,
+        scope_id: str,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, object]:
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.LIST_SCOPE_PROOFS,
+        )
+        page = reader.proofs_page(scope, cursor=cursor, limit=limit)
+        return {
+            "items": [asdict(item) for item in page.items],
+            "next_cursor": page.next_cursor,
+        }
+
     @app.get("/api/v1/scopes/{scope_id}/proofs/{proof_id}")
     def proof(request: Request, scope_id: str, proof_id: str) -> dict[str, object]:
         scope = authorized_scope(
@@ -261,6 +291,24 @@ def create_control_tower_app(
         )
         return [asdict(item) for item in reader.exceptions(scope)]
 
+    @app.get("/api/v1/scopes/{scope_id}/exceptions/page")
+    def exceptions_page(
+        request: Request,
+        scope_id: str,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, object]:
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.LIST_SCOPE_EXCEPTIONS,
+        )
+        page = reader.exceptions_page(scope, cursor=cursor, limit=limit)
+        return {
+            "items": [asdict(item) for item in page.items],
+            "next_cursor": page.next_cursor,
+        }
+
     @app.get("/api/v1/scopes/{scope_id}/cases/{case_id}")
     def case_file(request: Request, scope_id: str, case_id: str) -> dict[str, object]:
         scope = authorized_scope(
@@ -278,6 +326,24 @@ def create_control_tower_app(
             action=OperatorAuditAction.LIST_SCOPE_SOURCES,
         )
         return [asdict(item) for item in reader.sources(scope)]
+
+    @app.get("/api/v1/scopes/{scope_id}/sources/page")
+    def sources_page(
+        request: Request,
+        scope_id: str,
+        cursor: str | None = None,
+        limit: int = 50,
+    ) -> dict[str, object]:
+        scope = authorized_scope(
+            request,
+            scope_id,
+            action=OperatorAuditAction.LIST_SCOPE_SOURCES,
+        )
+        page = reader.sources_page(scope, cursor=cursor, limit=limit)
+        return {
+            "items": [asdict(item) for item in page.items],
+            "next_cursor": page.next_cursor,
+        }
 
     @app.get("/api/v1/evaluation")
     def evaluation(request: Request) -> dict[str, object]:

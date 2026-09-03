@@ -280,3 +280,9 @@ a.table-row:hover { background: var(--panel-2); color: var(--text); }
   .case-status-stack { flex-wrap: wrap; }
   .eval-metrics { grid-template-columns: 1fr; }
 }
+
+.pagination-footer { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 8px 0 4px; }
+.pagination-footer button { border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 9px 14px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+.pagination-footer button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pagination-footer button:disabled { cursor: wait; opacity: .55; }
+.pagination-error { color: var(--danger); font-size: 12px; }

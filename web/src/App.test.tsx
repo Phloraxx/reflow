@@ -68,13 +68,30 @@ describe('ReFlow control tower', () => {
   })
 
   it('filters exception rows client-side without changing source data', async () => {
-    mockFetch({ '/exceptions': exceptions })
+    mockFetch({ '/exceptions/page': { items: exceptions, next_cursor: null } })
     renderAt('/exceptions?scope=scope_ui')
     expect((await screen.findAllByText('₹200.00')).length).toBeGreaterThan(0)
     expect(screen.getByText('₹900.00')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Materiality'), { target: { value: 'critical' } })
     expect(screen.queryAllByText('₹200.00')).toHaveLength(0)
     expect(screen.getByText('₹900.00')).toBeInTheDocument()
+  })
+
+  it('loads the next bounded proof page on demand', async () => {
+    const first = proof.version_timeline[0]
+    const second = { ...first, proof_id: 'proofv_green', settlement_id: 'setl_green', status: 'proven_reconciled' }
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const path = String(input)
+      const body = path.includes('cursor=next-proof-page')
+        ? { items: [second], next_cursor: null }
+        : { items: [first], next_cursor: 'next-proof-page' }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    }))
+    renderAt('/proofs?scope=scope_ui')
+    expect(await screen.findByText('setl_break')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }))
+    expect(await screen.findByText('setl_green')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
   })
 
   it('renders verified Gate 17 and final held-out evaluation metrics directly', async () => {

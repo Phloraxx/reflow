@@ -2543,3 +2543,27 @@ None. The defect was in final regression-campaign result detection only; no proo
 **Fix/regression:** the observability middleware now converts only otherwise-unhandled application exceptions into a generic `Internal Server Error` response itself, attaches the generated `X-Request-ID`, records bounded 500 metrics, and emits only `error.type=unhandled_exception` without the exception message. Registered FastAPI/domain exception handlers continue to produce their existing responses normally. A regression injects a secret-looking exception message and requires a generic 500, a matching response/log request ID, and no secret detail in either response or telemetry.
 
 **Financial truth impact:** none; this changes only generic error/correlation behavior and does not alter deterministic reconciliation or domain exception handling.
+
+## F-0128 — Control Tower legitimate history became unreadable above 10,000 artifacts
+
+**Date:** 2026-09-04
+**Area:** Control Tower / PostgreSQL long-history reads
+**Severity:** medium
+
+**Failure:** the Gate 18 reader intentionally requested at most 10,000 artifacts for each scoped history family and compared that window with `COUNT(*)`. This correctly prevented silent truncation, but any legitimate scope with 10,001 matching artifacts failed with `history is incomplete ... pagination/read model required`. Proofs, Exceptions and Sources also exposed monolithic collection responses, so browser payload size grew with loaded history.
+
+**Fix/regression:** PostgreSQL now exposes deterministic `(observed_at, artifact_id)` keyset pages over the existing kind/scope/time/id B-tree order. Complete Control Tower history traverses fixed 1,000-row pages and retains before/after count checks, kind/scope validation and cursor-chain validation. A real PostgreSQL regression bulk-loads 10,001 scoped artifacts and traverses all of them through `ReflowApplicationService` and `ControlTowerReader`. New Proof/Exception/Source page routes cap product pages at 100 items, and the React UI defaults to 50-item pages with explicit continuation.
+
+**Financial truth impact:** none; this removes a read-availability/scalability ceiling while preserving deterministic historical validation and existing financial semantics.
+
+## F-0129 — Cursor schema version accepted JSON boolean as integer version during Gate 50 review
+
+**Date:** 2026-09-04
+**Area:** Control Tower collection cursor validation
+**Severity:** low
+
+**Failure:** the first Gate 50 cursor decoder compared the decoded `v` field directly with integer `1`. In Python, `True == 1`, so a cursor containing JSON `"v": true` could pass the version equality check even though the contract requires an integer schema version. The cursor still carried no financial or authorization authority, but the input validator was weaker than its documented exact-type contract.
+
+**Fix/regression:** cursor decoding now rejects booleans explicitly, requires an integer version, exact key set, exact scope/collection binding and bounded item ID. A regression mutates a valid cursor to JSON boolean `true` and requires fail-closed rejection.
+
+**Financial truth impact:** none; cursors are read-navigation tokens only and authorization is checked separately before cursor resolution.
