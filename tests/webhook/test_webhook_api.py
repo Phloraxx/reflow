@@ -11,8 +11,8 @@ from reflow.webhook_ingress import (
     WebhookIngressResult,
     WebhookPersistenceError,
     WebhookProcessingOutcome,
-    WebhookReceiptDisposition,
     WebhookReceiptConflictError,
+    WebhookReceiptDisposition,
 )
 
 
