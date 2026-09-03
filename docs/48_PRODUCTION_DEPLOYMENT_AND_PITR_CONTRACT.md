@@ -119,7 +119,9 @@ On the isolated Oracle VM branch worktree, the implementation passed the full su
 
 PR #35 exact head `68c1d9e42856f959eb513efbda3cba4e9bbb4a29` passed CI run `33785178420` with **524 tests passed** and the frozen evaluation evidence green, then merged as `b5d88eef6d23f7e27b00850f367b2a74ef0f009e`. Merge-triggered `main` CI run `33785451379` exposed F-0125: the restored data was already exactly at the named recovery target, but the assertion queried `pg_is_in_recovery()` before asynchronous promotion completed. The follow-up fix explicitly waits for promotion completion. From that failed `main` plus the fix, the PITR drill passed **10 consecutive runs**, followed by the complete local submission gate with **524 tests passed**, frontend **5/5**, production build and all frozen evaluation checks green.
 
-A green exact fix PR CI and green merge-triggered `main` CI remain required before this gate is closed.
+PR #36 exact fix head `776df9c5fb868cff090e2b50bbf4d3645b59c427` passed CI run `33786167402` with **524 tests passed**, strict mypy across 72 source files, frontend **5/5**, production build and all frozen evaluation checks green. It merged as `e047f8ae251857709a81309fe5f1c99465a83849`. Exact merge-triggered `main` CI run `33786427178` then passed the same required submission gate with **524 tests passed** and all frozen evidence verified.
+
+**Gate status: closed and merged green.**
 
 ## Non-claims
 

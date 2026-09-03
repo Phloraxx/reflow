@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: production deployment/PITR hardening is under review on `hardening/production-deployment-pitr`: single-host loopback/systemd/Cloudflare templates plus a real PostgreSQL 16.15 base-backup + archived-WAL + named-restore-point drill are locally green. Off-host WAL storage, a deployed production host/tunnel, RPO/RTO, and a non-empty authenticated Razorpay Test Mode settlement/recon corpus remain unclaimed. See `docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`.**
+> **Current phase: production deployment/PITR hardening is merged green on `main` as `e047f8ae251857709a81309fe5f1c99465a83849` after PR #35 plus the F-0125 promotion-readiness fix in PR #36; exact `main` CI run `33786427178` passed the full 524-test gate. Single-host loopback/systemd/Cloudflare templates and real PostgreSQL 16.15 named-target PITR mechanics are verified. Off-host WAL storage, a deployed production host/tunnel, measured RPO/RTO, and a non-empty authenticated Razorpay Test Mode settlement/recon corpus remain unclaimed. See `docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -580,7 +580,7 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [`docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged Cloudflare Access authentication and exact-scope authorization
 - [`docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged logical backup/restore verification contract
 - [`docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable Razorpay webhook ingress and replay contract
-- [`docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — active production deployment/PITR acceptance gate
+- [`docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — merged production deployment/PITR acceptance gate with failed-main/fix closure evidence
 
 ---
 
