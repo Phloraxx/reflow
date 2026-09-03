@@ -82,7 +82,7 @@ Before push, the rebuilt branch also passed Ruff, strict mypy across 69 source m
 
 The recovery integration uses a digest-pinned PostgreSQL 16.15 Alpine client image, two disposable databases distinct from the normal `reflow_ci` database, a real custom-format `pg_dump`, archive verification, restore into the empty target, and ReFlow source/artifact/pointer integrity readback. The test drops both disposable databases in `finally`.
 
-Merge and exact merge-triggered `main` CI remain required before this gate is fully closed.
+PR #31 merged as `fda3cbd43b3a8ea055f0d5934d0b2ab5de22f0f3`; exact merge-triggered `main` CI run `33776336580` completed successfully. This logical backup/recovery gate is closed. WAL archiving/PITR remains a separate non-claim.
 
 ## Non-claims / next layer
 

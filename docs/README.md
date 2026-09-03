@@ -6,7 +6,7 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — active restore-tested PostgreSQL logical-backup gate; PITR remains unclaimed.
+1. [`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged restore-tested PostgreSQL logical-backup gate; PITR remains unclaimed.
 2. [`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`](45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md) — merged Cloudflare Access authentication and exact-scope authorization boundary.
 3. [`44_PRODUCTION_READINESS_PHASE1.md`](44_PRODUCTION_READINESS_PHASE1.md) — merged readiness and real-Razorpay acceptance foundation.
 4. [`43_THIRD_WHOLE_CODEBASE_AUDIT.md`](43_THIRD_WHOLE_CODEBASE_AUDIT.md) — latest closed whole-codebase audit and merge evidence.
@@ -87,7 +87,7 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. active logical backup/recovery contract (`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`)
+2. merged logical backup/recovery contract (`46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`)
 3. merged authentication/scope-authorization contract (`45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md`)
 4. production-readiness foundation (`44_PRODUCTION_READINESS_PHASE1.md`)
 5. latest closed audit (`43_THIRD_WHOLE_CODEBASE_AUDIT.md`)
