@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Production authentication/scope authorization is merged green as `7a5ebe7c17606aa7a171f3d43e62405dc095e48c` (PR #30; exact `main` CI run `33767659563` passed). The active recovery gate adds restore-tested PostgreSQL logical backups while explicitly preserving PITR as a non-claim. See `docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md` and `docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`.**
+> **Current phase: Production authentication/scope authorization is merged green as `7a5ebe7c17606aa7a171f3d43e62405dc095e48c` (PR #30; exact `main` CI run `33767659563` passed). PostgreSQL logical backup/recovery PR #31 has passed its exact code CI, including the real PostgreSQL 16.15 dump/restore drill; merge and `main` CI closure are pending. PITR remains explicitly unclaimed. See `docs/45_AUTH_AND_SCOPE_AUTHORIZATION_CONTRACT.md` and `docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -631,7 +631,7 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [ ] public webhook HTTP ingress with durable operator-visible failure semantics
 - [x] Cloudflare Access human authentication + exact-scope read authorization/RBAC
 - [ ] tenant onboarding/provisioning and authenticated operator write permissions
-- [ ] restore-tested PostgreSQL logical backup/recovery drill (pending exact PR CI)
+- [x] restore-tested PostgreSQL logical backup/recovery drill
 - [ ] WAL archiving/PITR and production deployment runbook
 
 ### AI / product surface

@@ -74,11 +74,15 @@ The normal `reflow_ci` database is not used as the restore target.
 9. real PostgreSQL 16 dump -> fresh database -> restore -> ReFlow verification passes in CI;
 10. the entire existing submission suite and frozen evaluation evidence remain unchanged and green.
 
-## Validation status before PR CI
+## Validation checkpoint
 
-On the rebuilt Mac branch, Ruff and strict mypy are green, nine focused recovery regressions pass, the full non-PostgreSQL local suite passes, frontend checks/build pass, frozen evaluation artifacts verify unchanged, optimized-mode tests pass, dependency/security scans are clean, and no high-confidence credentials are present in the working tree.
+The exact recovery implementation commit `c3de59e7cac1e0ffae68b41ced99875ef718b60f` passed PR #31 CI run `33775739678`. The required `Submission check` completed with **503 Python/PostgreSQL tests passed and no skips**, so the CI-only real recovery integration test executed rather than being skipped. TypeScript, 5/5 React tests, the Vite production build, frozen Gate 17/Gate 19 artifacts and generated `EVALUATION.md` also passed/verified unchanged.
 
-The PostgreSQL-backed recovery integration test is intentionally gated to CI because the Mac has no active local PostgreSQL/Docker engine. Completion remains unclaimed until the exact branch commit passes the digest-pinned PostgreSQL 16.15 dump -> fresh database -> restore -> ReFlow integrity drill in PR CI.
+Before push, the rebuilt branch also passed Ruff, strict mypy across 69 source modules, 458 local tests with only deployment/PostgreSQL-gated skips, the same local suite under `python -O`, `pip check`, Bandit medium/high with zero findings, `pip-audit` with no known vulnerabilities, npm production/full audits with zero vulnerabilities, a high-confidence working-tree credential scan with zero hits, and `git diff --check`.
+
+The recovery integration uses a digest-pinned PostgreSQL 16.15 Alpine client image, two disposable databases distinct from the normal `reflow_ci` database, a real custom-format `pg_dump`, archive verification, restore into the empty target, and ReFlow source/artifact/pointer integrity readback. The test drops both disposable databases in `finally`.
+
+Merge and exact merge-triggered `main` CI remain required before this gate is fully closed.
 
 ## Non-claims / next layer
 
