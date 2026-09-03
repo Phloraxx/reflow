@@ -84,6 +84,24 @@ def test_postgres_schema_migration_is_idempotent_and_versioned(store) -> None:
     assert store.capabilities().schema_version == POSTGRES_SCHEMA_VERSION
 
 
+def test_postgres_readiness_check_requires_current_schema(store) -> None:
+    dsn = _require_dsn()
+    psycopg = pytest.importorskip("psycopg")
+    store.check_ready()
+    with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
+        cursor.execute("UPDATE reflow_schema_meta SET schema_version = 999 WHERE singleton = 1")
+    try:
+        with pytest.raises(PersistenceIntegrityError, match="schema version"):
+            store.check_ready()
+    finally:
+        with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
+            cursor.execute(
+                "UPDATE reflow_schema_meta SET schema_version = %s WHERE singleton = 1",
+                (POSTGRES_SCHEMA_VERSION,),
+            )
+    store.check_ready()
+
+
 def test_postgres_missing_schema_metadata_initializes_only_when_database_is_empty(store) -> None:
     dsn = _require_dsn()
     psycopg = pytest.importorskip("psycopg")

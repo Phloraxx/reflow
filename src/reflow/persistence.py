@@ -574,6 +574,25 @@ class PostgresApplicationStore(Journal):
     def _connect(self) -> _Connection:
         return self._connection_factory(self._dsn)
 
+    def check_ready(self) -> None:
+        """Fail closed unless PostgreSQL is reachable at the exact supported schema."""
+        connection = self._connect()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT schema_version FROM reflow_schema_meta WHERE singleton = 1"
+                )
+                row = cursor.fetchone()
+            if row is None or not isinstance(row[0], int):
+                raise PersistenceIntegrityError("persistence schema metadata is missing")
+            if row[0] != POSTGRES_SCHEMA_VERSION:
+                raise PersistenceIntegrityError(
+                    "application schema version mismatch "
+                    f"{row[0]} != {POSTGRES_SCHEMA_VERSION}"
+                )
+        finally:
+            connection.close()
+
     def migrate(self) -> None:
         connection = self._connect()
         try:

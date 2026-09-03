@@ -1053,6 +1053,41 @@ def test_fastapi_surface_is_read_only_and_scope_explicit(tmp_path: Path) -> None
             assert not ({"POST", "PUT", "PATCH", "DELETE"} & methods)
 
 
+def test_fastapi_readiness_is_fail_closed_without_probe_and_hides_probe_errors(
+    tmp_path: Path,
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from reflow.control_tower_api import create_control_tower_app
+
+    no_probe = TestClient(create_control_tower_app(_reader(tmp_path)))
+    response = no_probe.get("/api/v1/ready")
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready", "dependency": "postgresql"}
+    assert no_probe.get("/api/v1/health").status_code == 200
+
+    calls = 0
+
+    def ready_probe() -> None:
+        nonlocal calls
+        calls += 1
+
+    ready = TestClient(create_control_tower_app(_reader(tmp_path), readiness_probe=ready_probe))
+    response = ready.get("/api/v1/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "dependency": "postgresql"}
+    assert calls == 1
+
+    def failed_probe() -> None:
+        raise RuntimeError("postgresql://secret-user:secret-pass@example.invalid/private")
+
+    failed = TestClient(create_control_tower_app(_reader(tmp_path), readiness_probe=failed_probe))
+    response = failed.get("/api/v1/ready")
+    assert response.status_code == 503
+    assert response.json() == {"status": "not_ready", "dependency": "postgresql"}
+    assert "secret-pass" not in response.text
+
+
 def test_fastapi_proof_case_source_and_evaluation_routes(tmp_path: Path) -> None:
     from fastapi.testclient import TestClient
 
