@@ -3,7 +3,7 @@
 **Started:** 2026-09-03
 **Base `main`:** `788258401bcbe948c014909ed7ee1f0524c0937c`
 **Working branch:** `hardening/observability-operator-audit`
-**Status:** active; local acceptance passed, merge evidence pending
+**Status:** merged and closed
 
 ## Purpose
 
@@ -166,7 +166,15 @@ After the final F-0126/F-0127 review fixes, the exact working tree passed:
 
 One earlier optimized-mode attempt used a disposable local PostgreSQL listener on port 55433 that disappeared during the run, causing a broad connection-refusal cascade. That result was discarded as environment failure rather than treated as code evidence. The complete normal-mode PostgreSQL/recovery gate was then repeated against the still-running isolated test PostgreSQL on port 55434 and passed all 535 tests.
 
-The local validation is not merge evidence. Required PR CI and merge-triggered `main` CI are still pending.
+The local validation was followed by the required repository closure:
+
+- implementation commit: `40cb8582308bf7a92a13e9ad7d71a7cf0f34a94e`;
+- PR: **#38**;
+- exact PR CI: **33795138071**, success with **535 tests**, strict mypy across **75 source files**, frontend **5/5**, production build and frozen Gate 17/19 verification;
+- merge commit: `bd3efd7319af088943561d202ac3385eeb389c86`;
+- exact merge-triggered `main` CI: **33795431092**, success with the same **535-test** recovery-enabled submission gate and frozen evidence checks.
+
+No PR/main CI failure occurred in Gate 49. F-0126 and F-0127 were found during the pre-commit local review and fixed before the implementation commit.
 
 ## Non-claims
 
@@ -184,6 +192,6 @@ Gate 49 does not provision or claim:
 
 The process-local metrics reset on service restart by design. Durable operator access decisions do not.
 
-## Merge rule
+## Merge rule — satisfied
 
-This gate is not closed until the exact branch head passes required PR CI, is merged, and the exact merge-triggered `main` CI is green. Any failure found by PR or merge CI must be recorded rather than hidden by a rerun.
+The exact implementation head passed required PR CI, PR #38 merged without head movement, and the exact merge-triggered `main` CI passed. Gate 49 is closed.
