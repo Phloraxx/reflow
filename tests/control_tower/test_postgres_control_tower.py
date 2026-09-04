@@ -38,7 +38,8 @@ def test_control_tower_reads_scoped_overview_through_real_postgres(tmp_path: Pat
     with psycopg.connect(_require_dsn()) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
-            TRUNCATE reflow_current_pointers,
+            TRUNCATE reflow_case_workflow_commands,
+                         reflow_current_pointers,
                      reflow_artifacts,
                      reflow_source_identity,
                      reflow_source_envelopes
@@ -221,7 +222,8 @@ def test_real_postgres_control_tower_traverses_more_than_10000_artifacts(
     with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
-            TRUNCATE reflow_current_pointers,
+            TRUNCATE reflow_case_workflow_commands,
+                         reflow_current_pointers,
                      reflow_artifacts,
                      reflow_source_identity,
                      reflow_source_envelopes

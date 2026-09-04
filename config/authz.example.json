@@ -7,6 +7,11 @@
       "scopes": ["scope_replace_with_real_scope_id"]
     },
     {
+      "email": "finance-operator@example.com",
+      "roles": ["scope_viewer", "case_operator"],
+      "scopes": ["scope_replace_with_real_scope_id"]
+    },
+    {
       "email": "evaluation-reviewer@example.com",
       "roles": ["evaluation_reviewer"],
       "scopes": []

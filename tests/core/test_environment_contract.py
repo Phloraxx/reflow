@@ -16,6 +16,7 @@ def test_root_env_example_matches_runtime_environment_contract() -> None:
         "REFLOW_AUTH_MODE",
         "REFLOW_CF_ACCESS_AUD",
         "REFLOW_CF_ACCESS_ISSUER",
+        "REFLOW_CASE_WORKFLOW_WRITES",
         "REFLOW_EVALUATION_ROOT",
         "REFLOW_FINAL_EVALUATION_SUMMARY",
         "REFLOW_INVESTIGATION_MODEL",

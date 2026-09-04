@@ -1604,3 +1604,209 @@ def test_exception_queue_rejects_low_level_orphan_observation(tmp_path: Path) ->
     reader = _reader(tmp_path, (*artifacts, orphan))
     with pytest.raises(ControlTowerIntegrityError, match="references missing reconciliation_run"):
         reader.exceptions(SCOPE_A)
+
+
+def test_fastapi_case_workflow_write_is_auth_first_scope_bound_and_body_bounded(
+    tmp_path: Path,
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from reflow.access_auth import (
+        AccessAuthBoundary,
+        AccessAuthenticationError,
+        AuthenticatedPrincipal,
+        AuthorizationPolicy,
+    )
+    from reflow.control_tower_api import create_control_tower_app
+    from reflow.operator_audit import OperatorAccessAudit, OperatorAuditAction
+    from reflow.operator_workflow import CaseDispositionCommandResult
+
+    class StubVerifier:
+        def verify(self, token: str) -> AuthenticatedPrincipal:
+            if token == "viewer-token":
+                return AuthenticatedPrincipal(subject="sub-viewer", email="viewer@example.com")
+            if token == "operator-token":
+                return AuthenticatedPrincipal(subject="sub-operator", email="operator@example.com")
+            raise AccessAuthenticationError("private verifier detail")
+
+    policy = AuthorizationPolicy.from_mapping(
+        {
+            "schema_version": 1,
+            "principals": [
+                {
+                    "email": "viewer@example.com",
+                    "roles": ["scope_viewer"],
+                    "scopes": [str(SCOPE_A)],
+                },
+                {
+                    "email": "operator@example.com",
+                    "roles": ["scope_viewer", "case_operator"],
+                    "scopes": [str(SCOPE_A)],
+                },
+            ],
+        }
+    )
+    boundary = AccessAuthBoundary(verifier=StubVerifier(), policy=policy)  # type: ignore[arg-type]
+    records: list[OperatorAccessAudit] = []
+
+    class StubAudit:
+        def record_access(
+            self,
+            *,
+            occurred_at,
+            request_id,
+            principal_subject_sha256,
+            action,
+            scope_id,
+            decision,
+        ):
+            event = OperatorAccessAudit(
+                audit_id=len(records) + 1,
+                occurred_at=occurred_at,
+                request_id=request_id,
+                principal_subject_sha256=principal_subject_sha256,
+                action=action,
+                scope_id=scope_id,
+                decision=decision,
+            )
+            records.append(event)
+            return event
+
+    calls: list[dict[str, object]] = []
+
+    class StubWorkflow:
+        def append_disposition(self, **kwargs):
+            calls.append(kwargs)
+            return CaseDispositionCommandResult(
+                disposition_id="disp_gate52_http",
+                case_id=str(kwargs["case_id"]),
+                sequence=int(kwargs["expected_generation"]) + 1,
+                committed_generation=int(kwargs["expected_generation"]) + 1,
+                replayed=False,
+                occurred_at="2026-09-04T08:30:00+00:00",
+                kind=str(kwargs["kind"].value),
+                owner=kwargs["owner"],
+                note=kwargs["note"],
+            )
+
+    with pytest.raises(RuntimeError, match="require authenticated"):
+        create_control_tower_app(
+            _reader(tmp_path), case_workflow=StubWorkflow()  # type: ignore[arg-type]
+        )
+
+    client = TestClient(
+        create_control_tower_app(
+            _reader(tmp_path),
+            auth_boundary=boundary,
+            operator_audit=StubAudit(),  # type: ignore[arg-type]
+            case_workflow=StubWorkflow(),  # type: ignore[arg-type]
+        )
+    )
+    path = f"/api/v1/scopes/{SCOPE_A}/cases/case_gate52_http/dispositions"
+    malformed = b"{not-json"
+    assert client.post(path, content=malformed).status_code == 401
+    assert (
+        client.post(
+            path,
+            content=malformed,
+            headers={"Cf-Access-Jwt-Assertion": "viewer-token"},
+        ).status_code
+        == 403
+    )
+    assert (
+        client.post(
+            f"/api/v1/scopes/{SCOPE_B}/cases/case_gate52_http/dispositions",
+            content=malformed,
+            headers={"Cf-Access-Jwt-Assertion": "operator-token"},
+        ).status_code
+        == 403
+    )
+
+    operator_headers = {
+        "Cf-Access-Jwt-Assertion": "operator-token",
+        "Idempotency-Key": "gate52-http-command-1",
+        "Content-Type": "application/json",
+    }
+    assert client.post(path, content=malformed, headers=operator_headers).status_code == 422
+    oversized = b"{" + b" " * 9000 + b"}"
+    assert client.post(path, content=oversized, headers=operator_headers).status_code == 413
+    missing_key = client.post(
+        path,
+        json={"expected_generation": 0, "kind": "acknowledge"},
+        headers={"Cf-Access-Jwt-Assertion": "operator-token"},
+    )
+    assert missing_key.status_code == 422
+    assert missing_key.json()["detail"] == "Idempotency-Key is required"
+
+    response = client.post(
+        path,
+        json={
+            "expected_generation": 0,
+            "kind": "assign_owner",
+            "owner": "finance-team",
+            "note": "triaged",
+        },
+        headers=operator_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["disposition_id"] == "disp_gate52_http"
+    assert response.json()["committed_generation"] == 1
+    assert len(calls) == 1
+    assert calls[0]["principal_subject"] == "sub-operator"
+    assert calls[0]["scope_id"] == SCOPE_A
+    assert calls[0]["idempotency_key"] == "gate52-http-command-1"
+    assert calls[0]["owner"] == "finance-team"
+    assert all(
+        item.action is OperatorAuditAction.APPEND_CASE_DISPOSITION for item in records
+    )
+    assert records[0].decision.value == "denied"
+    assert records[1].decision.value == "denied"
+    assert records[-1].decision.value == "allowed"
+    assert all("@" not in item.principal_subject_sha256 for item in records)
+
+
+def test_fastapi_case_workflow_route_is_absent_when_writes_are_disabled(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from reflow.access_auth import AccessAuthBoundary, AuthenticatedPrincipal, AuthorizationPolicy
+    from reflow.control_tower_api import create_control_tower_app
+    from reflow.operator_audit import OperatorAccessAudit
+
+    class StubVerifier:
+        def verify(self, _token: str) -> AuthenticatedPrincipal:
+            return AuthenticatedPrincipal(subject="sub", email="operator@example.com")
+
+    policy = AuthorizationPolicy.from_mapping(
+        {
+            "schema_version": 1,
+            "principals": [
+                {
+                    "email": "operator@example.com",
+                    "roles": ["scope_viewer", "case_operator"],
+                    "scopes": [str(SCOPE_A)],
+                }
+            ],
+        }
+    )
+    boundary = AccessAuthBoundary(verifier=StubVerifier(), policy=policy)  # type: ignore[arg-type]
+
+    class StubAudit:
+        def record_access(self, **kwargs):
+            return OperatorAccessAudit(audit_id=1, **kwargs)
+
+    client = TestClient(
+        create_control_tower_app(
+            _reader(tmp_path),
+            auth_boundary=boundary,
+            operator_audit=StubAudit(),  # type: ignore[arg-type]
+        )
+    )
+    response = client.post(
+        f"/api/v1/scopes/{SCOPE_A}/cases/case_disabled/dispositions",
+        json={"expected_generation": 0, "kind": "acknowledge"},
+        headers={
+            "Cf-Access-Jwt-Assertion": "token",
+            "Idempotency-Key": "gate52-disabled",
+        },
+    )
+    assert response.status_code == 404

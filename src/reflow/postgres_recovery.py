@@ -11,9 +11,14 @@ from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
-from .persistence import _POINTER_ARTIFACT_KIND, PointerKind, PostgresApplicationStore
+from .persistence import (
+    _POINTER_ARTIFACT_KIND,
+    ArtifactKind,
+    PointerKind,
+    PostgresApplicationStore,
+)
 
 BACKUP_SCHEMA_VERSION = "reflow-postgres-logical-backup-v1"
 MAX_MANIFEST_BYTES = 256 * 1024
@@ -50,6 +55,7 @@ class RestoreVerification:
     source_envelope_count: int
     artifact_count: int
     pointer_count: int
+    case_workflow_command_count: int = 0
 
 
 class CompletedTool(Protocol):
@@ -436,6 +442,16 @@ def inspect_restored_database(dsn: str) -> RestoreVerification:
                     """
                 )
                 pointer_rows = cursor.fetchall()
+                cursor.execute(
+                    """
+                    SELECT principal_subject_sha256, command_key_sha256, request_sha256,
+                           request_id, scope_id, case_id, disposition_id, expected_generation,
+                           committed_generation
+                    FROM reflow_case_workflow_commands
+                    ORDER BY principal_subject_sha256, command_key_sha256
+                    """
+                )
+                command_rows = cursor.fetchall()
                 cursor.execute("SELECT COUNT(*) FROM reflow_source_identity")
                 identity_row = cursor.fetchone()
         finally:
@@ -456,6 +472,69 @@ def inspect_restored_database(dsn: str) -> RestoreVerification:
             if store.get_artifact(row[0]) is None:
                 raise PostgresRecoveryError("restored artifact failed exact readback")
             artifact_count += 1
+
+        command_count = 0
+        for row in command_rows:
+            if len(row) != 9:
+                raise PostgresRecoveryError("restored case workflow command is invalid")
+            (
+                principal_digest,
+                command_digest,
+                request_digest,
+                request_id,
+                scope_value,
+                case_id,
+                disposition_id,
+                expected_generation,
+                committed_generation,
+            ) = row
+            digests = (principal_digest, command_digest, request_digest)
+            if any(
+                not isinstance(value, str)
+                or len(value) != 64
+                or any(char not in "0123456789abcdef" for char in value)
+                for value in digests
+            ):
+                raise PostgresRecoveryError("restored case workflow command digest is invalid")
+            if (
+                not isinstance(request_id, str)
+                or len(request_id) != 32
+                or any(char not in "0123456789abcdef" for char in request_id)
+            ):
+                raise PostgresRecoveryError("restored case workflow request id is invalid")
+            if not all(
+                isinstance(value, str) and value
+                for value in (scope_value, case_id, disposition_id)
+            ):
+                raise PostgresRecoveryError("restored case workflow command binding is invalid")
+            scope_text = cast(str, scope_value)
+            case_text = cast(str, case_id)
+            disposition_text = cast(str, disposition_id)
+            if (
+                isinstance(expected_generation, bool)
+                or not isinstance(expected_generation, int)
+                or expected_generation < 0
+                or isinstance(committed_generation, bool)
+                or not isinstance(committed_generation, int)
+                or committed_generation != expected_generation + 1
+            ):
+                raise PostgresRecoveryError(
+                    "restored case workflow command generation is invalid"
+                )
+            disposition = store.get_artifact(disposition_text)
+            if (
+                disposition is None
+                or disposition.kind is not ArtifactKind.CASE_DISPOSITION
+                or disposition.scope_id is None
+                or str(disposition.scope_id) != scope_text
+                or disposition.payload.get("case_id") != case_text
+                or disposition.payload.get("sequence") != committed_generation
+                or disposition.payload.get("actor_id") != principal_digest
+            ):
+                raise PostgresRecoveryError(
+                    "restored case workflow command disposition binding is invalid"
+                )
+            command_count += 1
 
         pointer_count = 0
         for row in pointer_rows:
@@ -480,7 +559,9 @@ def inspect_restored_database(dsn: str) -> RestoreVerification:
                 raise PostgresRecoveryError("restored pointer target kind is invalid")
             pointer_count += 1
 
-        return RestoreVerification(len(envelopes), artifact_count, pointer_count)
+        return RestoreVerification(
+            len(envelopes), artifact_count, pointer_count, command_count
+        )
     except PostgresRecoveryError:
         raise
     except Exception as exc:

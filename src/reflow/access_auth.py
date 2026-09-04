@@ -35,6 +35,7 @@ class AccessAuthorizationError(ValueError):
 
 class ControlTowerRole(StrEnum):
     SCOPE_VIEWER = "scope_viewer"
+    CASE_OPERATOR = "case_operator"
     EVALUATION_REVIEWER = "evaluation_reviewer"
 
 
@@ -125,6 +126,16 @@ class AuthorizationPolicy:
             raise AccessAuthorizationError("forbidden")
         return grant
 
+    def require_case_operator(
+        self,
+        principal: AuthenticatedPrincipal,
+        scope_id: ReconciliationScopeId,
+    ) -> PrincipalGrant:
+        grant = self._grant(principal)
+        if ControlTowerRole.CASE_OPERATOR not in grant.roles or scope_id not in grant.scopes:
+            raise AccessAuthorizationError("forbidden")
+        return grant
+
     def require_evaluation(self, principal: AuthenticatedPrincipal) -> PrincipalGrant:
         grant = self._grant(principal)
         if ControlTowerRole.EVALUATION_REVIEWER not in grant.roles:
@@ -167,10 +178,11 @@ def _parse_grant(value: object) -> PrincipalGrant:
             raise AccessAuthorizationError("authorization policy contains duplicate scope")
         scopes.add(scope)
 
-    if ControlTowerRole.SCOPE_VIEWER in roles and not scopes:
-        raise AccessAuthorizationError("scope viewer requires at least one scope")
-    if ControlTowerRole.SCOPE_VIEWER not in roles and scopes:
-        raise AccessAuthorizationError("scope grants require the scope viewer role")
+    scoped_roles = {ControlTowerRole.SCOPE_VIEWER, ControlTowerRole.CASE_OPERATOR}
+    if roles.intersection(scoped_roles) and not scopes:
+        raise AccessAuthorizationError("scoped role requires at least one scope")
+    if not roles.intersection(scoped_roles) and scopes:
+        raise AccessAuthorizationError("scope grants require a scoped role")
     return PrincipalGrant(email=email, roles=frozenset(roles), scopes=frozenset(scopes))
 
 

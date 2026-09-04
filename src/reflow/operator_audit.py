@@ -31,6 +31,7 @@ class OperatorAuditAction(StrEnum):
     VIEW_SCOPE_PROOF = "view_scope_proof"
     LIST_SCOPE_EXCEPTIONS = "list_scope_exceptions"
     VIEW_SCOPE_CASE = "view_scope_case"
+    APPEND_CASE_DISPOSITION = "append_case_disposition"
     LIST_SCOPE_SOURCES = "list_scope_sources"
     VIEW_EVALUATION = "view_evaluation"
 
@@ -47,6 +48,7 @@ _SCOPE_ACTIONS = frozenset(
         OperatorAuditAction.VIEW_SCOPE_PROOF,
         OperatorAuditAction.LIST_SCOPE_EXCEPTIONS,
         OperatorAuditAction.VIEW_SCOPE_CASE,
+        OperatorAuditAction.APPEND_CASE_DISPOSITION,
         OperatorAuditAction.LIST_SCOPE_SOURCES,
     }
 )

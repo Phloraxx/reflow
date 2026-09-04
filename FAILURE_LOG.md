@@ -2627,3 +2627,51 @@ None. The defect was in final regression-campaign result detection only; no proo
 **Fix/regression:** generic adapter-supported source kinds are now an explicit five-kind contract (`merchant`, Razorpay event/recon/standard settlement, bank). `AdapterSpec` and the parser reject provider-only Instant Settlement source kinds, and the model-facing JSON schema omits them. Gate 51 remains available only through its provider-specific journal-first integration boundary. A regression asserts the Instant source is absent from the generic schema and cannot be used to construct a generic adapter spec.
 
 **Financial truth impact:** none directly; the issue affected capability/schema correctness at the AI connector boundary and could otherwise have created unusable adapter proposals.
+
+## F-0135 — Persisted case-workflow replay compared incompatible binding tuples
+
+**Date:** 2026-09-04
+**Area:** Gate 52 / PostgreSQL idempotency replay
+**Severity:** high
+
+**Failure:** the first Gate 52 `publish_case_disposition_command()` replay branch constructed a six-field expected tuple that included `request_id`, but compared it with a five-field stored tuple that omitted `request_id`. The comparison could never succeed, so a retry of an already committed command would be rejected as conflicting instead of returning the committed immutable disposition. Strict mypy independently flagged the non-overlapping tuple comparison.
+
+**Fix/regression:** the replay binding now compares the same five semantic idempotency fields as the read-before-build replay path: request digest, scope, case, expected generation and committed generation. The stored request correlation ID is validated separately as bounded 32-hex metadata. Real PostgreSQL tests commit a command, retry the same principal/key/body/generation and require the original disposition with `replayed=True`; same key with different content still conflicts.
+
+**Financial truth impact:** no proof or money value was changed, but broken idempotent retry semantics could have made an otherwise successful operator workflow command appear failed and encouraged unsafe manual retry behavior.
+
+## F-0136 — Case-workflow command INSERT declared nine columns but supplied eight values
+
+**Date:** 2026-09-04
+**Area:** Gate 52 / PostgreSQL command persistence
+**Severity:** high
+
+**Failure:** the first command-table INSERT declared `request_id` and nine placeholders but its Python parameter tuple omitted `request_id`. The path had not yet been exercised against real PostgreSQL, so the mismatch survived initial code construction and would fail every first-time committed operator command at the database boundary.
+
+**Fix/regression:** the validated 32-hex request correlation ID is now supplied in the exact declared column order. Gate 52 tests were corrected to provide realistic request IDs, and the real PostgreSQL workflow suite now exercises first commit, idempotent replay, conflicting replay and stale-generation rollback. The complete recovery-enabled submission suite passes with this path active.
+
+**Financial truth impact:** none; the defect prevented workflow persistence rather than corrupting financial truth, but it made the new production write path unusable.
+
+## F-0137 — Initial case-disposition route required an extra undocumented intent header
+
+**Date:** 2026-09-04
+**Area:** Gate 52 / authenticated HTTP command contract
+**Severity:** medium
+
+**Failure:** the first route required `X-Reflow-Workflow-Intent: case-disposition-v1` in addition to Cloudflare Access authentication, exact-scope `case_operator`, `Idempotency-Key`, JSON content type and the bounded command body. That header was not part of the minimal Gate 52 acceptance contract and caused otherwise valid authenticated clients/tests to fail before body-size/JSON validation.
+
+**Fix/regression:** the redundant intent header was removed. The route remains explicitly identified by its URL and only accepts the narrow disposition schema; authorization still occurs before body parsing, `Idempotency-Key` remains mandatory, content type must be JSON and the body is capped at 8192 bytes. The auth-first/body-boundary test now sends the correct JSON content type and verifies 401/403/413/422/success ordering.
+
+**Financial truth impact:** none; this was an unnecessary API-contract obstacle, not a weakening of authentication or financial controls.
+
+## F-0138 — Logical restore verification omitted workflow request-correlation integrity
+
+**Date:** 2026-09-04
+**Area:** Gate 52 / PostgreSQL recovery verification
+**Severity:** medium
+
+**Failure:** the first Gate 52 restore inventory validated principal/idempotency/request SHA-256 digests, scope/case/disposition binding and generations but did not select or validate the persisted `request_id`. A restored command row with malformed request-correlation metadata could therefore pass the new workflow-state recovery check.
+
+**Fix/regression:** restore inspection now selects `request_id`, requires lowercase 32-hex form and includes a corruption regression that mutates only that field and requires fail-closed `PostgresRecoveryError`. The real PostgreSQL 16 logical dump/restore drill also seeds and verifies a complete workflow command row.
+
+**Financial truth impact:** none; request IDs are correlation metadata rather than financial authority, but durable workflow recovery must verify every bounded field it claims to restore safely.

@@ -18,7 +18,7 @@ from .journal import (
     JournalConflictError,
 )
 
-POSTGRES_SCHEMA_VERSION = 2
+POSTGRES_SCHEMA_VERSION = 3
 
 __all__ = [
     "POSTGRES_SCHEMA_VERSION",
@@ -28,6 +28,7 @@ __all__ = [
     "ArtifactPageCursor",
     "ArtifactWriteDisposition",
     "ArtifactWriteResult",
+    "CaseWorkflowCommandResult",
     "CurrentPointer",
     "PersistenceConflictError",
     "PersistenceError",
@@ -86,6 +87,7 @@ class PointerKind(StrEnum):
     LATEST_RUN = "latest_run"
     LATEST_PROOF = "latest_proof"
     LATEST_CASE_OBSERVATION = "latest_case_observation"
+    LATEST_CASE_DISPOSITION = "latest_case_disposition"
     LATEST_ADAPTER = "latest_adapter"
     LATEST_INVESTIGATION = "latest_investigation"
 
@@ -95,6 +97,7 @@ _POINTER_ARTIFACT_KIND: dict[PointerKind, ArtifactKind] = {
     PointerKind.LATEST_RUN: ArtifactKind.RECONCILIATION_RUN,
     PointerKind.LATEST_PROOF: ArtifactKind.PROOF_VERSION,
     PointerKind.LATEST_CASE_OBSERVATION: ArtifactKind.CASE_OBSERVATION,
+    PointerKind.LATEST_CASE_DISPOSITION: ArtifactKind.CASE_DISPOSITION,
     PointerKind.LATEST_ADAPTER: ArtifactKind.APPROVED_ADAPTER,
     PointerKind.LATEST_INVESTIGATION: ArtifactKind.INVESTIGATION_RESULT,
 }
@@ -112,6 +115,26 @@ def _text(value: str, label: str) -> str:
         raise PersistenceError(f"{label} must be a non-empty string")
     if value != value.strip():
         raise PersistenceError(f"{label} must be trimmed")
+    return value
+
+
+def _request_id_digest(value: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 32
+        or any(char not in "0123456789abcdef" for char in value)
+    ):
+        raise PersistenceError("case workflow request id must be lowercase 32-hex")
+    return value
+
+
+def _sha256_digest(value: str, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(char not in "0123456789abcdef" for char in value)
+    ):
+        raise PersistenceError(f"{label} must be lowercase SHA-256")
     return value
 
 
@@ -237,6 +260,29 @@ class StoredArtifact:
 class ArtifactWriteResult:
     disposition: ArtifactWriteDisposition
     artifact: StoredArtifact
+
+
+@dataclass(frozen=True, slots=True)
+class CaseWorkflowCommandResult:
+    artifact: StoredArtifact
+    committed_generation: int
+    replayed: bool
+
+    def __post_init__(self) -> None:
+        if self.artifact.kind is not ArtifactKind.CASE_DISPOSITION:
+            raise PersistenceIntegrityError(
+                "case workflow command must reference a case disposition"
+            )
+        if (
+            isinstance(self.committed_generation, bool)
+            or not isinstance(self.committed_generation, int)
+            or self.committed_generation < 1
+        ):
+            raise PersistenceIntegrityError(
+                "case workflow committed generation must be positive"
+            )
+        if not isinstance(self.replayed, bool):
+            raise TypeError("case workflow replayed must be bool")
 
 
 @dataclass(frozen=True, slots=True)
@@ -379,6 +425,25 @@ _SCHEMA_STATEMENTS = (
         updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (pointer_kind, stream_key)
     )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS reflow_case_workflow_commands (
+        principal_subject_sha256 CHAR(64) NOT NULL,
+        command_key_sha256 CHAR(64) NOT NULL,
+        request_sha256 CHAR(64) NOT NULL,
+        request_id CHAR(32) NOT NULL,
+        scope_id TEXT NOT NULL,
+        case_id TEXT NOT NULL,
+        disposition_id TEXT NOT NULL REFERENCES reflow_artifacts(artifact_id),
+        expected_generation BIGINT NOT NULL CHECK (expected_generation >= 0),
+        committed_generation BIGINT NOT NULL CHECK (committed_generation > 0),
+        committed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (principal_subject_sha256, command_key_sha256)
+    )
+    """,
+    """
+    CREATE INDEX IF NOT EXISTS reflow_case_workflow_commands_case_idx
+      ON reflow_case_workflow_commands(scope_id, case_id, committed_generation)
     """,
 )
 
@@ -538,6 +603,99 @@ def _migrate_v1_approved_adapter_identities(cursor: _Cursor) -> None:
         cursor.execute("DELETE FROM reflow_artifacts WHERE artifact_id = %s", (artifact_id,))
 
 
+def _migrate_v2_case_disposition_pointers(cursor: _Cursor) -> None:
+    """Backfill one optimistic-concurrency stream per persisted exception case."""
+    cursor.execute(
+        """
+        SELECT artifact_id, scope_id, payload_sha256, payload_json::text
+        FROM reflow_artifacts
+        WHERE artifact_kind = 'case_disposition'
+        ORDER BY artifact_id
+        """
+    )
+    by_case: dict[str, dict[int, tuple[str, str]]] = {}
+    for row in cursor.fetchall():
+        if len(row) != 4:
+            raise PersistenceIntegrityError(
+                "legacy case disposition cannot be migrated safely"
+            )
+        artifact_id, scope_id, stored_digest, payload_json = row
+        if not all(isinstance(value, str) for value in row):
+            raise PersistenceIntegrityError(
+                "legacy case disposition contains invalid identity fields"
+            )
+        payload = _decode_json_object(
+            cast(str, payload_json), "legacy case disposition payload"
+        )
+        if canonical_artifact_sha256(payload) != stored_digest:
+            raise PersistenceIntegrityError(
+                "legacy case disposition payload digest does not match stored content"
+            )
+        if payload.get("id") != artifact_id:
+            raise PersistenceIntegrityError(
+                "legacy case disposition artifact identity is inconsistent"
+            )
+        case_id = payload.get("case_id")
+        sequence = payload.get("sequence")
+        if (
+            not isinstance(case_id, str)
+            or not case_id
+            or isinstance(sequence, bool)
+            or not isinstance(sequence, int)
+            or sequence < 1
+            or not isinstance(scope_id, str)
+            or not scope_id
+        ):
+            raise PersistenceIntegrityError(
+                "legacy case disposition case/sequence/scope is invalid"
+            )
+        sequence_map = by_case.setdefault(case_id, {})
+        existing = sequence_map.get(sequence)
+        candidate = (cast(str, artifact_id), scope_id)
+        if existing is not None and existing != candidate:
+            raise PersistenceIntegrityError(
+                "legacy case disposition sequence is duplicated"
+            )
+        sequence_map[sequence] = candidate
+
+    for case_id, sequence_map in sorted(by_case.items()):
+        sequences = tuple(sorted(sequence_map))
+        if sequences != tuple(range(1, len(sequences) + 1)):
+            raise PersistenceIntegrityError(
+                "legacy case disposition sequence is not contiguous"
+            )
+        scopes = {scope for _, scope in sequence_map.values()}
+        if len(scopes) != 1:
+            raise PersistenceIntegrityError(
+                "legacy case disposition scope changes within one case"
+            )
+        latest_sequence = sequences[-1]
+        latest_artifact_id, _ = sequence_map[latest_sequence]
+        cursor.execute(
+            """
+            SELECT artifact_id, generation
+            FROM reflow_current_pointers
+            WHERE pointer_kind = 'latest_case_disposition' AND stream_key = %s
+            """,
+            (case_id,),
+        )
+        existing_pointer = cursor.fetchone()
+        if existing_pointer is not None:
+            if existing_pointer != (latest_artifact_id, latest_sequence):
+                raise PersistenceIntegrityError(
+                    "legacy case disposition pointer is inconsistent"
+                )
+            continue
+        cursor.execute(
+            """
+            INSERT INTO reflow_current_pointers(
+                pointer_kind, stream_key, artifact_id, generation
+            ) VALUES ('latest_case_disposition', %s, %s, %s)
+            """,
+            (case_id, latest_artifact_id, latest_sequence),
+        )
+
+
 _MIGRATION_1_TO_2_STATEMENTS = (
     # These artifact families have no intrinsic domain observation timestamp. Older
     # application callers supplied convenience timestamps; v2 removes that caller
@@ -690,6 +848,12 @@ class PostgresApplicationStore(Journal):
                         "UPDATE reflow_schema_meta SET schema_version = 2 WHERE singleton = 1"
                     )
                     version = 2
+                if version == 2 and POSTGRES_SCHEMA_VERSION >= 3:
+                    _migrate_v2_case_disposition_pointers(cursor)
+                    cursor.execute(
+                        "UPDATE reflow_schema_meta SET schema_version = 3 WHERE singleton = 1"
+                    )
+                    version = 3
                 if version != POSTGRES_SCHEMA_VERSION:
                     raise PersistenceIntegrityError(
                         "unsupported persistence schema version "
@@ -1342,6 +1506,263 @@ class PostgresApplicationStore(Journal):
             raise StalePointerError("current pointer compare-and-swap lost a concurrent race")
         return PostgresApplicationStore._row_to_pointer(row)
 
+    def replay_case_disposition_command(
+        self,
+        *,
+        scope_id: domain.ReconciliationScopeId,
+        case_id: str,
+        principal_subject_sha256: str,
+        command_key_sha256: str,
+        request_sha256: str,
+        expected_generation: int,
+    ) -> CaseWorkflowCommandResult | None:
+        if not isinstance(scope_id, domain.ReconciliationScopeId):
+            raise TypeError("case workflow command scope must be ReconciliationScopeId")
+        case_id = _text(case_id, "case workflow case id")
+        principal_subject_sha256 = _sha256_digest(
+            principal_subject_sha256, "case workflow principal digest"
+        )
+        command_key_sha256 = _sha256_digest(
+            command_key_sha256, "case workflow idempotency digest"
+        )
+        request_sha256 = _sha256_digest(request_sha256, "case workflow request digest")
+        if (
+            isinstance(expected_generation, bool)
+            or not isinstance(expected_generation, int)
+            or expected_generation < 0
+        ):
+            raise PersistenceError(
+                "case workflow expected generation must be non-negative int"
+            )
+        connection = self._connect()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT request_sha256, request_id, scope_id, case_id, disposition_id,
+                           expected_generation, committed_generation
+                    FROM reflow_case_workflow_commands
+                    WHERE principal_subject_sha256 = %s AND command_key_sha256 = %s
+                    """,
+                    (principal_subject_sha256, command_key_sha256),
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    return None
+                if len(row) != 7:
+                    raise PersistenceIntegrityError(
+                        "case workflow idempotency row shape is invalid"
+                    )
+                (
+                    stored_request_sha256,
+                    stored_request_id,
+                    stored_scope_id,
+                    stored_case_id,
+                    disposition_id,
+                    stored_expected_generation,
+                    committed_generation,
+                ) = row
+                if (
+                    stored_request_sha256,
+                    stored_scope_id,
+                    stored_case_id,
+                    stored_expected_generation,
+                ) != (request_sha256, str(scope_id), case_id, expected_generation):
+                    raise PersistenceConflictError(
+                        "case workflow idempotency key was reused with different content"
+                    )
+                if (
+                    not isinstance(disposition_id, str)
+                    or not isinstance(committed_generation, int)
+                    or isinstance(committed_generation, bool)
+                    or committed_generation != expected_generation + 1
+                ):
+                    raise PersistenceIntegrityError(
+                        "case workflow idempotency generation is invalid"
+                    )
+                _request_id_digest(cast(str, stored_request_id))
+                artifact = self._fetch_artifact(cursor, disposition_id)
+                if (
+                    artifact is None
+                    or artifact.kind is not ArtifactKind.CASE_DISPOSITION
+                    or artifact.scope_id != scope_id
+                    or artifact.payload.get("case_id") != case_id
+                    or artifact.payload.get("actor_id") != principal_subject_sha256
+                    or artifact.payload.get("sequence") != committed_generation
+                ):
+                    raise PersistenceIntegrityError(
+                        "case workflow idempotency record references invalid artifact"
+                    )
+                return CaseWorkflowCommandResult(
+                    artifact=artifact,
+                    committed_generation=committed_generation,
+                    replayed=True,
+                )
+        finally:
+            connection.close()
+
+    def publish_case_disposition_command(
+        self,
+        *,
+        disposition: object,
+        scope_id: domain.ReconciliationScopeId,
+        principal_subject_sha256: str,
+        command_key_sha256: str,
+        request_sha256: str,
+        request_id: str,
+        expected_generation: int,
+    ) -> CaseWorkflowCommandResult:
+        from .exception_cases import ExceptionCaseDisposition
+
+        if not isinstance(disposition, ExceptionCaseDisposition):
+            raise TypeError("case workflow command requires ExceptionCaseDisposition")
+        if not isinstance(scope_id, domain.ReconciliationScopeId):
+            raise TypeError("case workflow command scope must be ReconciliationScopeId")
+        principal_subject_sha256 = _sha256_digest(
+            principal_subject_sha256, "case workflow principal digest"
+        )
+        command_key_sha256 = _sha256_digest(
+            command_key_sha256, "case workflow idempotency digest"
+        )
+        request_sha256 = _sha256_digest(request_sha256, "case workflow request digest")
+        request_id = _request_id_digest(request_id)
+        if (
+            isinstance(expected_generation, bool)
+            or not isinstance(expected_generation, int)
+            or expected_generation < 0
+        ):
+            raise PersistenceError(
+                "case workflow expected generation must be non-negative int"
+            )
+        if disposition.sequence != expected_generation + 1:
+            raise PersistenceIntegrityError(
+                "case workflow disposition sequence disagrees with expected generation"
+            )
+        if disposition.actor_id != principal_subject_sha256:
+            raise PersistenceIntegrityError(
+                "case workflow disposition actor must equal authenticated subject digest"
+            )
+        case_id = str(disposition.case_id)
+        connection = self._connect()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT request_sha256, request_id, scope_id, case_id, disposition_id,
+                           expected_generation, committed_generation
+                    FROM reflow_case_workflow_commands
+                    WHERE principal_subject_sha256 = %s AND command_key_sha256 = %s
+                    FOR UPDATE
+                    """,
+                    (principal_subject_sha256, command_key_sha256),
+                )
+                existing = cursor.fetchone()
+                if existing is not None:
+                    if len(existing) != 7:
+                        raise PersistenceIntegrityError(
+                            "case workflow idempotency row shape is invalid"
+                        )
+                    (
+                        stored_request_sha256,
+                        stored_request_id,
+                        stored_scope_id,
+                        stored_case_id,
+                        stored_disposition_id,
+                        stored_expected_generation,
+                        stored_committed_generation,
+                    ) = existing
+                    expected_binding = (
+                        request_sha256,
+                        str(scope_id),
+                        case_id,
+                        expected_generation,
+                        expected_generation + 1,
+                    )
+                    actual_binding = (
+                        stored_request_sha256,
+                        stored_scope_id,
+                        stored_case_id,
+                        stored_expected_generation,
+                        stored_committed_generation,
+                    )
+                    if actual_binding != expected_binding:
+                        raise PersistenceConflictError(
+                            "case workflow idempotency key was reused with different content"
+                        )
+                    if not isinstance(stored_disposition_id, str):
+                        raise PersistenceIntegrityError(
+                            "case workflow idempotency disposition identity is invalid"
+                        )
+                    _request_id_digest(cast(str, stored_request_id))
+                    artifact = self._fetch_artifact(cursor, stored_disposition_id)
+                    if (
+                        artifact is None
+                        or artifact.kind is not ArtifactKind.CASE_DISPOSITION
+                        or artifact.scope_id != scope_id
+                        or artifact.payload.get("case_id") != case_id
+                        or artifact.payload.get("actor_id") != principal_subject_sha256
+                        or artifact.payload.get("sequence") != expected_generation + 1
+                    ):
+                        raise PersistenceIntegrityError(
+                            "case workflow idempotency record references invalid artifact"
+                        )
+                    return CaseWorkflowCommandResult(
+                        artifact=artifact,
+                        committed_generation=expected_generation + 1,
+                        replayed=True,
+                    )
+
+                artifact_result = self._put_artifact_cursor(
+                    cursor,
+                    kind=ArtifactKind.CASE_DISPOSITION,
+                    artifact_id=str(disposition.id),
+                    payload=disposition,
+                    scope_id=scope_id,
+                    observed_at=disposition.occurred_at,
+                )
+                pointer = self._advance_pointer_cursor(
+                    cursor,
+                    kind=PointerKind.LATEST_CASE_DISPOSITION,
+                    stream_key=case_id,
+                    artifact_id=str(disposition.id),
+                    expected_generation=expected_generation,
+                )
+                if pointer.generation != expected_generation + 1:
+                    raise PersistenceIntegrityError(
+                        "case workflow pointer generation advanced unexpectedly"
+                    )
+                cursor.execute(
+                    """
+                    INSERT INTO reflow_case_workflow_commands(
+                        principal_subject_sha256, command_key_sha256, request_sha256,
+                        request_id, scope_id, case_id, disposition_id, expected_generation,
+                        committed_generation
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        principal_subject_sha256,
+                        command_key_sha256,
+                        request_sha256,
+                        request_id,
+                        str(scope_id),
+                        case_id,
+                        str(disposition.id),
+                        expected_generation,
+                        pointer.generation,
+                    ),
+                )
+            connection.commit()
+            return CaseWorkflowCommandResult(
+                artifact=artifact_result.artifact,
+                committed_generation=pointer.generation,
+                replayed=False,
+            )
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
     def get_pointer(self, *, kind: PointerKind, stream_key: str) -> CurrentPointer | None:
         if not isinstance(kind, PointerKind):
             raise TypeError("pointer kind must be PointerKind")
@@ -1587,6 +2008,8 @@ def _expected_application_stream_key(
             raise PersistenceIntegrityError("latest_proof requires a reconciliation scope")
         return f"{scope_id}:{typed.settlement_id}"
     if pointer_kind is PointerKind.LATEST_CASE_OBSERVATION:
+        return str(typed.case_id)
+    if pointer_kind is PointerKind.LATEST_CASE_DISPOSITION:
         return str(typed.case_id)
     if pointer_kind is PointerKind.LATEST_ADAPTER:
         return str(typed.spec.adapter_id)
@@ -1951,6 +2374,61 @@ class ReflowApplicationService:
             observed_at=canonical_observed_at,
             pointer_kind=pointer_kind,
             stream_key=stream_key,
+            expected_generation=expected_generation,
+        )
+
+    def replay_case_disposition_command(
+        self,
+        *,
+        scope_id: domain.ReconciliationScopeId,
+        case_id: str,
+        principal_subject_sha256: str,
+        command_key_sha256: str,
+        request_sha256: str,
+        expected_generation: int,
+    ) -> CaseWorkflowCommandResult | None:
+        return self._store.replay_case_disposition_command(
+            scope_id=scope_id,
+            case_id=case_id,
+            principal_subject_sha256=principal_subject_sha256,
+            command_key_sha256=command_key_sha256,
+            request_sha256=request_sha256,
+            expected_generation=expected_generation,
+        )
+
+    def publish_case_disposition_command(
+        self,
+        *,
+        disposition: object,
+        scope_id: domain.ReconciliationScopeId,
+        principal_subject_sha256: str,
+        command_key_sha256: str,
+        request_sha256: str,
+        request_id: str,
+        expected_generation: int,
+    ) -> CaseWorkflowCommandResult:
+        validated = _validated_application_artifact(
+            kind=ArtifactKind.CASE_DISPOSITION,
+            artifact_id=str(cast(Any, disposition).id),
+            payload=disposition,
+            scope_id=scope_id,
+        )
+        canonical_observed_at = _canonical_application_observed_at(
+            kind=ArtifactKind.CASE_DISPOSITION,
+            payload=validated,
+            observed_at=cast(Any, validated).occurred_at,
+        )
+        if canonical_observed_at != cast(Any, validated).occurred_at:
+            raise PersistenceIntegrityError(
+                "case disposition command timestamp binding is inconsistent"
+            )
+        return self._store.publish_case_disposition_command(
+            disposition=validated,
+            scope_id=scope_id,
+            principal_subject_sha256=principal_subject_sha256,
+            command_key_sha256=command_key_sha256,
+            request_sha256=request_sha256,
+            request_id=request_id,
             expected_generation=expected_generation,
         )
 

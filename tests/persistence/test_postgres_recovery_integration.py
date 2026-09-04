@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -10,6 +11,11 @@ from pathlib import Path
 import pytest
 
 from reflow import domain
+from reflow.exception_cases import (
+    CaseWorkflowStatus,
+    DispositionKind,
+    build_exception_case_disposition,
+)
 from reflow.journal import make_source_envelope
 from reflow.persistence import ArtifactKind, PointerKind, PostgresApplicationStore
 from reflow.postgres_recovery import (
@@ -118,6 +124,30 @@ def _seed_source_database(dsn: str) -> None:
         artifact_id="policy_ci_recovery_probe",
         expected_generation=0,
     )
+    scope_id = domain.ReconciliationScopeId("scope_ci_recovery_probe")
+    case_id = domain.ExceptionCaseId("case_ci_recovery_probe")
+    actor_digest = hashlib.sha256(b"ci-recovery-operator").hexdigest()
+    disposition = build_exception_case_disposition(
+        case_id=case_id,
+        sequence=1,
+        actor_id=actor_digest,
+        occurred_at=NOW,
+        kind=DispositionKind.ACKNOWLEDGE,
+        case_first_seen_at=NOW,
+        current_workflow_status=CaseWorkflowStatus.OPEN,
+        current_resolution=None,
+        prior_disposition_count=0,
+        prior_disposition_at=None,
+    )
+    store.publish_case_disposition_command(
+        disposition=disposition,
+        scope_id=scope_id,
+        principal_subject_sha256=actor_digest,
+        command_key_sha256=hashlib.sha256(b"ci-recovery-command").hexdigest(),
+        request_sha256=hashlib.sha256(b"ci-recovery-request").hexdigest(),
+        request_id="c" * 32,
+        expected_generation=0,
+    )
 
 
 def test_real_postgres16_dump_restore_integrity_drill() -> None:
@@ -151,8 +181,9 @@ def test_real_postgres16_dump_restore_integrity_drill() -> None:
             )
             assert result == RestoreVerification(
                 source_envelope_count=1,
-                artifact_count=1,
-                pointer_count=1,
+                artifact_count=2,
+                pointer_count=2,
+                case_workflow_command_count=1,
             )
     finally:
         _drop_database(admin_dsn, restore_name)

@@ -31,6 +31,7 @@ __all__ = [
     "InMemoryExceptionCaseLedger",
     "IncidentCluster",
     "SourceStateSnapshot",
+    "build_exception_case_disposition",
     "build_incident_clusters",
 ]
 
@@ -458,6 +459,108 @@ class ExceptionCaseDisposition:
             raise ValueError("disposition id does not match immutable content")
 
 
+def _make_exception_case_disposition(
+    *,
+    case_id: domain.ExceptionCaseId,
+    sequence: int,
+    actor_id: str,
+    occurred_at: datetime,
+    kind: DispositionKind,
+    owner: str | None,
+    note: str | None,
+) -> ExceptionCaseDisposition:
+    disposition_id = _disposition_id(
+        case_id=case_id,
+        sequence=sequence,
+        actor_id=actor_id,
+        occurred_at=occurred_at,
+        kind=kind,
+        owner=owner,
+        note=note,
+    )
+    return ExceptionCaseDisposition(
+        id=disposition_id,
+        case_id=case_id,
+        sequence=sequence,
+        actor_id=actor_id,
+        occurred_at=occurred_at,
+        kind=kind,
+        owner=owner,
+        note=note,
+        ruleset_version=GATE14_CASE_RULESET_VERSION,
+    )
+
+
+def build_exception_case_disposition(
+    *,
+    case_id: domain.ExceptionCaseId,
+    sequence: int,
+    actor_id: str,
+    occurred_at: datetime,
+    kind: DispositionKind,
+    case_first_seen_at: datetime,
+    current_workflow_status: CaseWorkflowStatus,
+    current_resolution: CaseResolution | None,
+    prior_disposition_count: int,
+    prior_disposition_at: datetime | None,
+    owner: str | None = None,
+    note: str | None = None,
+) -> ExceptionCaseDisposition:
+    """Build exactly one valid next disposition from validated current case state."""
+    if not isinstance(case_id, domain.ExceptionCaseId):
+        raise TypeError("case_id must be ExceptionCaseId")
+    actor_id = _text(actor_id, "disposition actor")
+    owner = _optional_text(owner, "disposition owner")
+    note = _optional_text(note, "disposition note")
+    _aware(occurred_at, "disposition time")
+    _aware(case_first_seen_at, "case first seen time")
+    if prior_disposition_at is not None:
+        _aware(prior_disposition_at, "prior disposition time")
+    if not isinstance(kind, DispositionKind):
+        raise TypeError("kind must be DispositionKind")
+    if not isinstance(current_workflow_status, CaseWorkflowStatus):
+        raise TypeError("current workflow status must be CaseWorkflowStatus")
+    if current_resolution is not None and not isinstance(current_resolution, CaseResolution):
+        raise TypeError("current resolution must be CaseResolution or None")
+    for label, value in (
+        ("sequence", sequence),
+        ("prior disposition count", prior_disposition_count),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise TypeError(f"{label} must be int")
+    if prior_disposition_count < 0:
+        raise ExceptionCaseError("prior disposition count cannot be negative")
+    if sequence != prior_disposition_count + 1:
+        raise ExceptionCaseError("disposition sequence must be contiguous and monotonic")
+    if occurred_at < case_first_seen_at:
+        raise ExceptionCaseError("disposition cannot predate the exception case")
+    if prior_disposition_at is not None and occurred_at < prior_disposition_at:
+        raise ExceptionCaseError("disposition time cannot move backwards")
+    if current_resolution in {
+        CaseResolution.PROOF_RECONCILED,
+        CaseResolution.ECONOMIC_IDENTITY_CHANGED,
+    }:
+        raise ExceptionCaseError(
+            "financially resolved/superseded case cannot accept new workflow"
+        )
+    if (
+        current_workflow_status is CaseWorkflowStatus.CLOSED
+        and kind is not DispositionKind.REOPEN
+    ):
+        raise ExceptionCaseError(
+            "closed workflow requires explicit REOPEN before another status change"
+        )
+    return _make_exception_case_disposition(
+        case_id=case_id,
+        sequence=sequence,
+        actor_id=actor_id,
+        occurred_at=occurred_at,
+        kind=kind,
+        owner=owner,
+        note=note,
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class CaseRunUpdate:
     created_observation_ids: tuple[domain.ExceptionCaseObservationId, ...]
@@ -877,64 +980,38 @@ class InMemoryExceptionCaseLedger:
         history = self._observations.get(case_id)
         if not history:
             raise ExceptionCaseError(f"unknown exception case {case_id}")
-        actor_id = _text(actor_id, "disposition actor")
-        owner = _optional_text(owner, "disposition owner")
-        note = _optional_text(note, "disposition note")
-        _aware(occurred_at, "disposition time")
-        if not isinstance(kind, DispositionKind):
-            raise TypeError("kind must be DispositionKind")
-        if isinstance(sequence, bool) or not isinstance(sequence, int):
-            raise TypeError("disposition sequence must be int")
-        if sequence < 1:
-            raise ExceptionCaseError("disposition sequence must be positive")
-        if occurred_at < history[0].observed_at:
-            raise ExceptionCaseError("disposition cannot predate the exception case")
-
-        disposition_id = _disposition_id(
-            case_id=case_id,
-            sequence=sequence,
-            actor_id=actor_id,
-            occurred_at=occurred_at,
-            kind=kind,
-            owner=owner,
-            note=note,
-        )
-        candidate = ExceptionCaseDisposition(
-            id=disposition_id,
-            case_id=case_id,
-            sequence=sequence,
-            actor_id=actor_id,
-            occurred_at=occurred_at,
-            kind=kind,
-            owner=owner,
-            note=note,
-            ruleset_version=GATE14_CASE_RULESET_VERSION,
-        )
         dispositions = self._dispositions.setdefault(case_id, [])
         if sequence <= len(dispositions):
+            replay = _make_exception_case_disposition(
+                case_id=case_id,
+                sequence=sequence,
+                actor_id=actor_id,
+                occurred_at=occurred_at,
+                kind=kind,
+                owner=owner,
+                note=note,
+            )
             existing = dispositions[sequence - 1]
-            if existing == candidate:
+            if existing == replay:
                 return existing
-            raise ExceptionCaseError("disposition sequence already contains conflicting record")
-        if sequence != len(dispositions) + 1:
-            raise ExceptionCaseError("disposition sequence must be contiguous and monotonic")
-        if dispositions and occurred_at < dispositions[-1].occurred_at:
-            raise ExceptionCaseError("disposition time cannot move backwards")
+            raise ExceptionCaseError(
+                "disposition sequence already contains conflicting record"
+            )
         current = self.state(case_id)
-        if current.resolution in {
-            CaseResolution.PROOF_RECONCILED,
-            CaseResolution.ECONOMIC_IDENTITY_CHANGED,
-        }:
-            raise ExceptionCaseError(
-                "financially resolved/superseded case cannot accept new workflow"
-            )
-        if (
-            current.workflow_status is CaseWorkflowStatus.CLOSED
-            and kind is not DispositionKind.REOPEN
-        ):
-            raise ExceptionCaseError(
-                "closed workflow requires explicit REOPEN before another status change"
-            )
+        candidate = build_exception_case_disposition(
+            case_id=case_id,
+            sequence=sequence,
+            actor_id=actor_id,
+            occurred_at=occurred_at,
+            kind=kind,
+            case_first_seen_at=history[0].observed_at,
+            current_workflow_status=current.workflow_status,
+            current_resolution=current.resolution,
+            prior_disposition_count=len(dispositions),
+            prior_disposition_at=(None if not dispositions else dispositions[-1].occurred_at),
+            owner=owner,
+            note=note,
+        )
         dispositions.append(candidate)
         return candidate
 
