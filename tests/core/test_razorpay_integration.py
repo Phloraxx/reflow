@@ -877,3 +877,151 @@ def test_gate15_module_does_not_import_simulator_truth() -> None:
     source = inspect.getsource(razorpay_module)
     assert "reflow.simulator" not in source
     assert "simulator.truth" not in source
+
+
+def _instant_settlement_entity() -> dict[str, object]:
+    return {
+        "id": "setlod_GATE51",
+        "entity": "settlement.ondemand",
+        "amount_requested": 200_000,
+        "amount_settled": 199_410,
+        "amount_pending": 0,
+        "amount_reversed": 0,
+        "fees": 590,
+        "tax": 90,
+        "currency": "INR",
+        "settle_full_balance": False,
+        "status": "processed",
+        "description": "Need stock",
+        "notes": {},
+        "created_at": 1_596_771_429,
+        "ondemand_payouts": {
+            "entity": "collection",
+            "count": 1,
+            "items": [
+                {
+                    "id": "setlodp_GATE51_A",
+                    "entity": "settlement.ondemand_payout",
+                    "initiated_at": 1_596_771_430,
+                    "processed_at": 1_596_778_752,
+                    "reversed_at": None,
+                    "amount": 200_000,
+                    "amount_settled": 199_410,
+                    "fees": 590,
+                    "tax": 90,
+                    "utr": "022011173948",
+                    "status": "processed",
+                    "created_at": 1_596_771_429,
+                }
+            ],
+        },
+    }
+
+
+def test_instant_settlement_api_compiles_explicit_parent_and_payout_topology() -> None:
+    from reflow.instant_settlement_integration import compile_instant_settlement_api_entity
+
+    journal = InMemoryJournal()
+    batch = compile_instant_settlement_api_entity(
+        entity=_instant_settlement_entity(),
+        context=_context(),
+        journal=journal,
+        received_at=RECEIVED,
+    )
+    assert len(journal) == 2
+    assert len(batch.instant_settlements) == 1
+    assert len(batch.instant_settlement_payouts) == 1
+    parent = batch.instant_settlements[0]
+    payout = batch.instant_settlement_payouts[0]
+    assert str(parent.id) == "setlod_GATE51"
+    assert parent.payout_ids == (payout.id,)
+    assert str(payout.id) == "setlodp_GATE51_A"
+    assert payout.utr == "022011173948"
+    assert payout.amount_settled.amount_paise == 199_410
+    assert {link.canonical_record_id for link in batch.source_links} == {
+        "setlod_GATE51",
+        "setlodp_GATE51_A",
+    }
+
+
+def test_instant_settlement_requires_expanded_payouts_after_retaining_parent() -> None:
+    from reflow.instant_settlement_integration import compile_instant_settlement_api_entity
+
+    entity = _instant_settlement_entity()
+    entity.pop("ondemand_payouts")
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="expanded ondemand_payouts"):
+        compile_instant_settlement_api_entity(
+            entity=entity,
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 1
+
+
+def test_instant_settlement_invalid_payout_prefix_is_retained_then_rejected() -> None:
+    from reflow.instant_settlement_integration import compile_instant_settlement_api_entity
+
+    entity = _instant_settlement_entity()
+    payouts = entity["ondemand_payouts"]
+    assert isinstance(payouts, dict)
+    items = payouts["items"]
+    assert isinstance(items, list)
+    payout = items[0]
+    assert isinstance(payout, dict)
+    payout["id"] = "setl_wrong_shape"
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="setlodp_"):
+        compile_instant_settlement_api_entity(
+            entity=entity,
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 2
+
+
+def test_instant_settlement_duplicate_payout_id_is_retained_then_rejected() -> None:
+    from copy import deepcopy
+
+    from reflow.instant_settlement_integration import compile_instant_settlement_api_entity
+
+    entity = _instant_settlement_entity()
+    payouts = entity["ondemand_payouts"]
+    assert isinstance(payouts, dict)
+    items = payouts["items"]
+    assert isinstance(items, list)
+    items.append(deepcopy(items[0]))
+    payouts["count"] = len(items)
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="duplicate payout id"):
+        compile_instant_settlement_api_entity(
+            entity=entity,
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 2
+
+
+def test_instant_settlement_processed_payout_arithmetic_is_provider_consistent() -> None:
+    from reflow.instant_settlement_integration import compile_instant_settlement_api_entity
+
+    entity = _instant_settlement_entity()
+    payouts = entity["ondemand_payouts"]
+    assert isinstance(payouts, dict)
+    items = payouts["items"]
+    assert isinstance(items, list)
+    payout = items[0]
+    assert isinstance(payout, dict)
+    payout["amount_settled"] = 199_409
+    journal = InMemoryJournal()
+    with pytest.raises(RazorpayIntegrationError, match="financial shape"):
+        compile_instant_settlement_api_entity(
+            entity=entity,
+            context=_context(),
+            journal=journal,
+            received_at=RECEIVED,
+        )
+    assert len(journal) == 2

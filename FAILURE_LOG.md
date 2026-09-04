@@ -2567,3 +2567,63 @@ None. The defect was in final regression-campaign result detection only; no proo
 **Fix/regression:** cursor decoding now rejects booleans explicitly, requires an integer version, exact key set, exact scope/collection binding and bounded item ID. A regression mutates a valid cursor to JSON boolean `true` and requires fail-closed rejection.
 
 **Financial truth impact:** none; cursors are read-navigation tokens only and authorization is checked separately before cursor resolution.
+
+## F-0130 — Gate 51 initially widened Gate 15's frozen public compile surface
+
+**Date:** 2026-09-04
+**Area:** Razorpay provider integration / compatibility
+**Severity:** low
+
+**Failure:** the first Instant Settlement compiler implementation added `compile_instant_settlement_api_entity` to `razorpay_integration.__all__`. The existing Gate 15 compatibility regression failed because that module's public journal-first compile surface is intentionally frozen. Shipping the change there would have silently broadened an older gate's API contract instead of making the new provider capability additive.
+
+**Fix/regression:** Gate 15's `__all__` remains byte-for-byte semantically unchanged. Gate 51 exposes its compiler through the separate `reflow.instant_settlement_integration` module, while reusing the already-tested provider helper implementation internally. The pre-existing public-surface regression remains green.
+
+**Financial truth impact:** none; this was an API-contract/versioning issue caught before merge.
+
+## F-0131 — New Instant Settlement source kind initially lacked provider-account binding
+
+**Date:** 2026-09-04
+**Area:** reconciliation scope / source completeness
+**Severity:** medium
+
+**Failure:** adding `RAZORPAY_INSTANT_SETTLEMENT` made enum-sensitive control-plane, exception and investigation fixtures fail because `ReconciliationScope.account_for()` mapped the existing Razorpay event/recon/settlement sources to `provider_account_id` but had no mapping for the new provider source. Any policy that included the source kind reached an assertion instead of a deterministic account binding.
+
+**Fix/regression:** reconciliation scopes now map `RAZORPAY_INSTANT_SETTLEMENT` to the same immutable Razorpay `provider_account_id` as the other Razorpay evidence families. The complete reconciliation-control-plane, exception-lifecycle and investigation regression sets pass with the expanded `SourceKind` enum.
+
+**Financial truth impact:** no existing standard proof changed, but the omission would have made Instant Settlement evidence unusable in scoped completeness/control-plane flows.
+
+## F-0132 — Duplicate payout identities could collapse through journal idempotency
+
+**Date:** 2026-09-04
+**Area:** Instant Settlement provider ingestion
+**Severity:** medium
+
+**Failure:** an expanded `ondemand_payouts` response containing the same exact `setlodp_...` item twice could append idempotently to the journal and then collapse into one canonical payout dictionary entry. Although the parent raw envelope retained the duplicated provider response, normalization could otherwise silently turn a provider collection with `count=2` duplicate identities into one canonical payout.
+
+**Fix/regression:** Gate 51 now tracks payout identities within each expanded response and rejects any duplicate payout ID after retaining the safely identifiable evidence. A regression supplies an exact duplicate payout, verifies the parent/payout evidence remains retained, and requires fail-closed rejection.
+
+**Financial truth impact:** without the fix, provider collection cardinality/identity corruption could have been normalized away before payout-level bank proof.
+
+## F-0133 — Processed payout arithmetic was initially under-constrained
+
+**Date:** 2026-09-04
+**Area:** Instant Settlement provider semantics / bank proof
+**Severity:** medium
+
+**Failure:** the first payout domain model only required `amount_settled <= amount`. Razorpay documents payout `amount_settled` as the payout amount after the combined `fees` deduction. A provider-shaped processed payout could therefore supply mutually inconsistent `amount`, `amount_settled` and `fees` values yet still reach the bank-proof layer if its parent repeated the same inconsistent settled total.
+
+**Fix/regression:** whenever payout `amount_settled` is positive, the domain now requires `amount_settled + fees == amount`. The provider compiler converts violations into a Gate 51 integration error after raw evidence retention. A regression mutates the documented processed payout arithmetic by one paise and requires fail-closed rejection.
+
+**Financial truth impact:** this prevents contradictory provider payout arithmetic from becoming eligible bank-proof truth.
+
+## F-0134 — Generic adapter schema accidentally advertised provider-only Instant Settlement evidence
+
+**Date:** 2026-09-04
+**Area:** Gate 12 adapter compiler / Gate 51 source taxonomy
+**Severity:** medium
+
+**Failure:** the generic adapter compiler generated its model-facing `source_kind` JSON-schema enum from every `SourceKind`. Adding `RAZORPAY_INSTANT_SETTLEMENT` therefore advertised a generic adapter source even though no `CanonicalRecordKind` or generic row compiler exists for Instant Settlement parent/payout entities. A model could be invited to propose a structurally impossible adapter that would only fail later during compilation.
+
+**Fix/regression:** generic adapter-supported source kinds are now an explicit five-kind contract (`merchant`, Razorpay event/recon/standard settlement, bank). `AdapterSpec` and the parser reject provider-only Instant Settlement source kinds, and the model-facing JSON schema omits them. Gate 51 remains available only through its provider-specific journal-first integration boundary. A regression asserts the Instant source is absent from the generic schema and cannot be used to construct a generic adapter spec.
+
+**Financial truth impact:** none directly; the issue affected capability/schema correctness at the AI connector boundary and could otherwise have created unusable adapter proposals.

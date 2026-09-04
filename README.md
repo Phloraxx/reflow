@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Control Tower long-history pagination Gate 50 is merged green on `main` as `8330a12f2bd170de4897ab483834d94943e603bd` via PR #40; exact merge-triggered CI `33800798991` passed the full 539-test recovery-enabled gate. ReFlow now replaces the legacy 10,000-artifact read ceiling with fail-closed PostgreSQL keyset traversal and serves Proofs, Exceptions and Sources through bounded cursor pages while preserving legacy API routes and financial semantics. Snapshot-pinned cross-request pages, materialized exception read models, centralized observability, a public production deployment, and a non-empty authenticated Razorpay settlement/recon corpus remain unclaimed. See `docs/50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`.**
+> **Current phase: Razorpay Instant Settlement payout-proof Gate 51 is active on `hardening/instant-settlement-proof` from green `main` `20a754be4aeb6ed85a13150918f2a43d2cc00dbb`. The branch models documented `setlod_...` parents and explicit `setlodp_...` payouts separately from standard `setl_...` settlements, retains provider evidence journal-first, and proves each processed payout to exactly one payout-UTR bank credit before a multi-credit parent can become green. Authenticated real Instant Settlement acceptance, Instant Settlement webhooks/recon composition, a public production deployment, and the still-empty standard settlement/recon real corpus remain unclaimed. See `docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -179,9 +179,7 @@ Gate 8 research exposed and corrected an important simulator assumption.
 
 Razorpay's standard settlement entity (`setl_...`) exposes a UTR that Razorpay documents for tracking that particular settlement in the bank account.
 
-Razorpay **Instant Settlements** use a different topology: a `settlement.ondemand` parent (`setlod_...`) can expose explicit `ondemand_payouts` with child IDs such as `setlodp_...` and payout-level UTR evidence.
-
-Therefore ReFlow does **not** treat multiple arbitrary bank rows under one standard `setl_...` UTR as a valid split settlement. True multi-credit Instant Settlement support will require an explicit future model:
+Razorpay **Instant Settlements** use a different topology: a `settlement.ondemand` parent (`setlod_...`) exposes explicit `ondemand_payouts` with child IDs such as `setlodp_...` and payout-level UTR evidence. Gate 51 now models that topology directly:
 
 ```text
 setlod parent
@@ -190,12 +188,14 @@ setlodp payout(s)
   ↓
 payout UTR(s)
   ↓
-bank transaction(s)
+exact bank transaction(s)
 ```
 
-The old synthetic `split_bank_credit` truth fixture was removed instead of teaching Gate 8 to reward an inaccurate provider model. The failure is preserved in `FAILURE_LOG.md`.
+Each processed payout must carry its own identity, processed timestamp, settled amount and UTR, and that UTR must resolve to exactly one post-processing bank credit for the exact payout `amount_settled`. A parent can therefore prove multiple bank credits only through multiple explicit provider payout identities. ReFlow still does **not** treat arbitrary bank rows under one standard `setl_...` UTR as a valid split settlement.
 
-See [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md) for the complete Gate 8 contract and source references.
+The old synthetic `split_bank_credit` truth fixture remains removed rather than teaching standard Gate 8 logic an inaccurate provider model. Standard-settlement proof semantics are unchanged; Instant Settlement proof lives in a separate Gate 51 boundary.
+
+See [`docs/21_GATE_8_CHECKPOINT.md`](docs/21_GATE_8_CHECKPOINT.md) for the historical Gate 8 decision and [`docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) for the current implementation.
 
 ---
 
@@ -624,7 +624,8 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [x] minimal durability/application service boundary
 - [x] provider-shaped Razorpay webhook / Settlement Recon / standard-settlement integration
 - [ ] authenticated real Test Mode settlement/recon corpus (none currently available in connected account)
-- [ ] Instant Settlement `setlod` / `setlodp` proof support
+- [x] explicit Instant Settlement `setlod` / `setlodp` payout-level bank proof support
+- [ ] authenticated real/Test Mode Instant Settlement corpus
 
 ### Production readiness
 

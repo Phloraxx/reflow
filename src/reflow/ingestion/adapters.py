@@ -12,6 +12,8 @@ from reflow.domain import (
     BankEntry,
     BankEntryId,
     Currency,
+    InstantSettlement,
+    InstantSettlementPayout,
     MerchantOrder,
     Money,
     OrderId,
@@ -105,6 +107,8 @@ def _canonical_compilation_sha256(
     recon_entries: tuple[SettlementReconEntry, ...],
     settlements: tuple[Settlement, ...],
     bank_entries: tuple[BankEntry, ...],
+    instant_settlements: tuple[InstantSettlement, ...],
+    instant_settlement_payouts: tuple[InstantSettlementPayout, ...],
     source_links: tuple[SourceLink, ...],
 ) -> str:
     digest = hashlib.sha256()
@@ -120,6 +124,20 @@ def _canonical_compilation_sha256(
     _feed_digest_rows(digest, "recon_entries", sorted(recon_entries, key=lambda row: str(row.id)))
     _feed_digest_rows(digest, "settlements", sorted(settlements, key=lambda row: str(row.id)))
     _feed_digest_rows(digest, "bank_entries", sorted(bank_entries, key=lambda row: str(row.id)))
+    # Preserve every existing compilation hash when the additive Instant Settlement
+    # collections are empty. Instant facts become part of the digest only when present.
+    if instant_settlements:
+        _feed_digest_rows(
+            digest,
+            "instant_settlements",
+            sorted(instant_settlements, key=lambda row: str(row.id)),
+        )
+    if instant_settlement_payouts:
+        _feed_digest_rows(
+            digest,
+            "instant_settlement_payouts",
+            sorted(instant_settlement_payouts, key=lambda row: str(row.id)),
+        )
     _feed_digest_rows(
         digest,
         "source_links",
@@ -143,6 +161,8 @@ class CanonicalBatch:
     recon_entries: tuple[SettlementReconEntry, ...]
     settlements: tuple[Settlement, ...]
     bank_entries: tuple[BankEntry, ...]
+    instant_settlements: tuple[InstantSettlement, ...] = ()
+    instant_settlement_payouts: tuple[InstantSettlementPayout, ...] = ()
     source_links: tuple[SourceLink, ...] = ()
     compilation_sha256: str | None = None
 
@@ -176,6 +196,14 @@ class CanonicalBatch:
         )
         expected.update((SourceKind.RAZORPAY_RECON, str(row.id)) for row in self.recon_entries)
         expected.update((SourceKind.RAZORPAY_SETTLEMENT, str(row.id)) for row in self.settlements)
+        expected.update(
+            (SourceKind.RAZORPAY_INSTANT_SETTLEMENT, str(row.id))
+            for row in self.instant_settlements
+        )
+        expected.update(
+            (SourceKind.RAZORPAY_INSTANT_SETTLEMENT, str(row.id))
+            for row in self.instant_settlement_payouts
+        )
         expected.update((SourceKind.BANK, str(row.id)) for row in self.bank_entries)
 
         canonical_count = (
@@ -184,6 +212,8 @@ class CanonicalBatch:
             + len(self.recon_entries)
             + len(self.settlements)
             + len(self.bank_entries)
+            + len(self.instant_settlements)
+            + len(self.instant_settlement_payouts)
         )
         if canonical_count != len(expected):
             raise ValueError("journal-backed canonical batch contains duplicate source identities")
@@ -223,6 +253,8 @@ class CanonicalBatch:
             recon_entries=self.recon_entries,
             settlements=self.settlements,
             bank_entries=self.bank_entries,
+            instant_settlements=self.instant_settlements,
+            instant_settlement_payouts=self.instant_settlement_payouts,
             source_links=self.source_links,
         )
         if self.compilation_sha256 != expected_digest:
@@ -243,6 +275,8 @@ class CanonicalBatch:
             recon_entries=self.recon_entries,
             settlements=self.settlements,
             bank_entries=self.bank_entries,
+            instant_settlements=self.instant_settlements,
+            instant_settlement_payouts=self.instant_settlement_payouts,
             source_links=source_links,
         )
         return CanonicalBatch(
@@ -251,6 +285,8 @@ class CanonicalBatch:
             recon_entries=self.recon_entries,
             settlements=self.settlements,
             bank_entries=self.bank_entries,
+            instant_settlements=self.instant_settlements,
+            instant_settlement_payouts=self.instant_settlement_payouts,
             source_links=source_links,
             compilation_sha256=digest,
         )
@@ -268,6 +304,12 @@ def merge_canonical_batches(*batches: CanonicalBatch) -> CanonicalBatch:
         recon_entries=tuple(row for batch in batches for row in batch.recon_entries),
         settlements=tuple(row for batch in batches for row in batch.settlements),
         bank_entries=tuple(row for batch in batches for row in batch.bank_entries),
+        instant_settlements=tuple(
+            row for batch in batches for row in batch.instant_settlements
+        ),
+        instant_settlement_payouts=tuple(
+            row for batch in batches for row in batch.instant_settlement_payouts
+        ),
     )
     links = tuple(link for batch in batches for link in batch.source_links)
     return merged._bind_source_links(links)

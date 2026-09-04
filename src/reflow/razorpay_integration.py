@@ -712,3 +712,304 @@ def compile_settlement_webhook(
         settlements=(settlement,),
         bank_entries=(),
     )._bind_source_links((link,))
+
+
+_INSTANT_SETTLEMENT_STATUSES = {
+    "created",
+    "initiated",
+    "partially_processed",
+    "processed",
+    "reversed",
+}
+_INSTANT_PAYOUT_STATUSES = {"created", "initiated", "processed", "reversed"}
+
+
+def _optional_timestamp(value: object, label: str) -> datetime | None:
+    if value is None:
+        return None
+    return _timestamp(value, label)
+
+
+def _instant_settlement_payload(
+    entity: Mapping[str, object], context: RazorpayAccountContext
+) -> dict[str, object]:
+    return {
+        "provider": "razorpay",
+        "evidence_origin": context.evidence_origin.value,
+        "account_id": context.account_id,
+        "settlement_currency": context.settlement_currency.value,
+        "entity": dict(entity),
+    }
+
+
+def _retained_instant_settlement_entity(
+    envelope: domain.SourceEnvelope,
+) -> Mapping[str, object]:
+    entity = envelope.payload.get("entity")
+    if not isinstance(entity, Mapping):
+        raise AssertionError("Instant Settlement envelope lost provider entity")
+    return entity
+
+
+def _instant_payout_payload(
+    *,
+    instant_settlement_id: str,
+    payout: Mapping[str, object],
+    context: RazorpayAccountContext,
+) -> dict[str, object]:
+    return {
+        "provider": "razorpay",
+        "evidence_origin": context.evidence_origin.value,
+        "account_id": context.account_id,
+        "instant_settlement_id": instant_settlement_id,
+        "payout": dict(payout),
+    }
+
+
+def _retained_instant_payout(envelope: domain.SourceEnvelope) -> Mapping[str, object]:
+    payout = envelope.payload.get("payout")
+    if not isinstance(payout, Mapping):
+        raise AssertionError("Instant Settlement payout envelope lost provider payout")
+    return payout
+
+
+def _normalize_instant_payout(
+    *,
+    payout: Mapping[str, object],
+    instant_settlement_id: domain.InstantSettlementId,
+    currency: domain.Currency,
+) -> domain.InstantSettlementPayout:
+    if payout.get("entity") != "settlement.ondemand_payout":
+        raise RazorpayIntegrationError(
+            "Instant Settlement payout entity must identify settlement.ondemand_payout"
+        )
+    try:
+        payout_id = domain.InstantSettlementPayoutId(
+            _non_empty_text(payout.get("id"), "instant payout id")
+        )
+    except (TypeError, ValueError) as exc:
+        raise RazorpayIntegrationError("Instant Settlement payout requires setlodp_ id") from exc
+    status = _non_empty_text(payout.get("status"), "instant payout status")
+    if status not in _INSTANT_PAYOUT_STATUSES:
+        raise RazorpayIntegrationError(f"unsupported Instant Settlement payout status {status!r}")
+    amount = _integer(payout.get("amount"), "instant payout amount")
+    if amount <= 0:
+        raise RazorpayIntegrationError("Instant Settlement payout amount must be positive")
+    amount_settled_raw = payout.get("amount_settled")
+    amount_settled = (
+        0
+        if amount_settled_raw is None
+        else _integer(amount_settled_raw, "instant payout amount_settled")
+    )
+    try:
+        return domain.InstantSettlementPayout(
+            id=payout_id,
+            instant_settlement_id=instant_settlement_id,
+            amount=domain.Money(amount, currency),
+            amount_settled=domain.Money(amount_settled, currency),
+            fees=domain.Money(
+                _integer(payout.get("fees"), "instant payout fees"), currency
+            ),
+            tax=domain.Money(_integer(payout.get("tax"), "instant payout tax"), currency),
+            status=status,
+            created_at=_timestamp(payout.get("created_at"), "instant payout created_at"),
+            initiated_at=_optional_timestamp(
+                payout.get("initiated_at"), "instant payout initiated_at"
+            ),
+            processed_at=_optional_timestamp(
+                payout.get("processed_at"), "instant payout processed_at"
+            ),
+            reversed_at=_optional_timestamp(
+                payout.get("reversed_at"), "instant payout reversed_at"
+            ),
+            utr=_optional_text(payout.get("utr"), "instant payout UTR"),
+        )
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise RazorpayIntegrationError(
+            "invalid Instant Settlement payout financial shape"
+        ) from exc
+
+
+def compile_instant_settlement_api_entity(
+    *,
+    entity: Mapping[str, object],
+    context: RazorpayAccountContext,
+    journal: Journal,
+    received_at: datetime,
+) -> CanonicalBatch:
+    """Retain and normalize one expanded Razorpay Instant Settlement entity."""
+    if not isinstance(context, RazorpayAccountContext):
+        raise TypeError("context must be RazorpayAccountContext")
+    if not isinstance(journal, Journal):
+        raise TypeError("journal must satisfy Journal")
+    if not isinstance(entity, Mapping):
+        raise TypeError("Instant Settlement API entity must be a provider object")
+    _aware(received_at, "received_at")
+
+    parent_text = _non_empty_text(entity.get("id"), "instant settlement id")
+    parent_source_record_id = f"{context.account_id}:api:{parent_text}"
+    parent_result = journal.append(
+        make_source_envelope(
+            source_kind=domain.SourceKind.RAZORPAY_INSTANT_SETTLEMENT,
+            source_record_id=parent_source_record_id,
+            occurred_at=_safe_timestamp(
+                entity.get("created_at"), "instant settlement created_at"
+            ),
+            received_at=received_at,
+            schema_version="razorpay-instant-settlement-api-entity-v1",
+            payload=_instant_settlement_payload(entity, context),
+        )
+    )
+    retained = _retained_instant_settlement_entity(parent_result.envelope)
+    if retained.get("entity") != "settlement.ondemand":
+        raise RazorpayIntegrationError(
+            "Instant Settlement entity must identify settlement.ondemand"
+        )
+    try:
+        parent_id = domain.InstantSettlementId(
+            _non_empty_text(retained.get("id"), "instant settlement id")
+        )
+    except (TypeError, ValueError) as exc:
+        raise RazorpayIntegrationError("Instant Settlement compiler requires setlod_ id") from exc
+    status = _non_empty_text(retained.get("status"), "instant settlement status")
+    if status not in _INSTANT_SETTLEMENT_STATUSES:
+        raise RazorpayIntegrationError(f"unsupported Instant Settlement status {status!r}")
+    currency = _settlement_currency(retained, context)
+    settle_full_balance = retained.get("settle_full_balance")
+    if not isinstance(settle_full_balance, bool):
+        raise RazorpayIntegrationError("Instant Settlement settle_full_balance must be boolean")
+
+    payout_collection = retained.get("ondemand_payouts")
+    if not isinstance(payout_collection, Mapping):
+        raise RazorpayIntegrationError(
+            "Instant Settlement proof requires expanded ondemand_payouts"
+        )
+    if payout_collection.get("entity") != "collection":
+        raise RazorpayIntegrationError("ondemand_payouts must be a collection")
+    payout_items = payout_collection.get("items")
+    if isinstance(payout_items, (str, bytes)) or not isinstance(payout_items, Sequence):
+        raise RazorpayIntegrationError("ondemand_payouts items must be an array")
+    payout_count = _integer(payout_collection.get("count"), "ondemand_payouts count")
+    if payout_count != len(payout_items):
+        raise RazorpayIntegrationError("ondemand_payouts count disagrees with items")
+
+    retained_payouts: list[tuple[str, str, domain.SourceEnvelope]] = []
+    first_failure: Exception | None = None
+    seen_payout_ids: set[str] = set()
+    for supplied in payout_items:
+        if not isinstance(supplied, Mapping):
+            if first_failure is None:
+                first_failure = RazorpayIntegrationError(
+                    "each Instant Settlement payout must be an object"
+                )
+            continue
+        try:
+            payout_text = _non_empty_text(supplied.get("id"), "instant payout id")
+        except RazorpayIntegrationError as exc:
+            if first_failure is None:
+                first_failure = exc
+            continue
+        if payout_text in seen_payout_ids and first_failure is None:
+            first_failure = RazorpayIntegrationError(
+                "Instant Settlement payout collection contains duplicate payout id"
+            )
+        seen_payout_ids.add(payout_text)
+        payout_source_record_id = f"{context.account_id}:api:{parent_id}:{payout_text}"
+        try:
+            payout_result = journal.append(
+                make_source_envelope(
+                    source_kind=domain.SourceKind.RAZORPAY_INSTANT_SETTLEMENT,
+                    source_record_id=payout_source_record_id,
+                    occurred_at=_safe_timestamp(
+                        supplied.get("created_at"), "instant payout created_at"
+                    ),
+                    received_at=received_at,
+                    schema_version="razorpay-instant-settlement-payout-v1",
+                    payload=_instant_payout_payload(
+                        instant_settlement_id=str(parent_id),
+                        payout=supplied,
+                        context=context,
+                    ),
+                )
+            )
+        except JournalConflictError as exc:
+            if first_failure is None:
+                first_failure = exc
+            continue
+        retained_payouts.append((payout_text, payout_source_record_id, payout_result.envelope))
+    if first_failure is not None:
+        raise first_failure
+
+    payouts: dict[domain.InstantSettlementPayoutId, domain.InstantSettlementPayout] = {}
+    payout_links: dict[domain.InstantSettlementPayoutId, SourceLink] = {}
+    for payout_text, source_record_id, envelope in retained_payouts:
+        payout = _normalize_instant_payout(
+            payout=_retained_instant_payout(envelope),
+            instant_settlement_id=parent_id,
+            currency=currency,
+        )
+        if str(payout.id) != payout_text:
+            raise AssertionError("retained Instant Settlement payout identity changed")
+        prior = payouts.get(payout.id)
+        if prior is not None and prior != payout:
+            raise RazorpayIntegrationError(
+                "Instant Settlement payout id produced conflicting canonical fact"
+            )
+        payouts[payout.id] = payout
+        payout_links[payout.id] = SourceLink(
+            source_kind=domain.SourceKind.RAZORPAY_INSTANT_SETTLEMENT,
+            source_record_id=source_record_id,
+            envelope_id=envelope.id,
+            canonical_record_id=str(payout.id),
+        )
+
+    ordered_payout_ids = tuple(sorted(payouts, key=str))
+    try:
+        parent = domain.InstantSettlement(
+            id=parent_id,
+            amount_requested=domain.Money(
+                _integer(retained.get("amount_requested"), "instant amount_requested"),
+                currency,
+            ),
+            amount_settled=domain.Money(
+                _integer(retained.get("amount_settled"), "instant amount_settled"),
+                currency,
+            ),
+            amount_pending=domain.Money(
+                _integer(retained.get("amount_pending"), "instant amount_pending"),
+                currency,
+            ),
+            amount_reversed=domain.Money(
+                _integer(retained.get("amount_reversed"), "instant amount_reversed"),
+                currency,
+            ),
+            fees=domain.Money(_integer(retained.get("fees"), "instant fees"), currency),
+            tax=domain.Money(_integer(retained.get("tax"), "instant tax"), currency),
+            settle_full_balance=settle_full_balance,
+            status=status,
+            created_at=_timestamp(
+                retained.get("created_at"), "instant settlement created_at"
+            ),
+            payout_ids=ordered_payout_ids,
+        )
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise RazorpayIntegrationError(
+            "invalid Instant Settlement parent financial shape"
+        ) from exc
+    parent_link = SourceLink(
+        source_kind=domain.SourceKind.RAZORPAY_INSTANT_SETTLEMENT,
+        source_record_id=parent_source_record_id,
+        envelope_id=parent_result.envelope.id,
+        canonical_record_id=str(parent.id),
+    )
+    return CanonicalBatch(
+        orders=(),
+        payment_events=(),
+        recon_entries=(),
+        settlements=(),
+        bank_entries=(),
+        instant_settlements=(parent,),
+        instant_settlement_payouts=tuple(payouts[value] for value in ordered_payout_ids),
+    )._bind_source_links(
+        (parent_link, *(payout_links[value] for value in ordered_payout_ids))
+    )

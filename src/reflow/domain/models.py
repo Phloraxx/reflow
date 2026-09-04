@@ -15,6 +15,8 @@ from .types import (
     EntityId,
     EvidenceEdgeId,
     EvidenceStrength,
+    InstantSettlementId,
+    InstantSettlementPayoutId,
     OrderId,
     PaymentEventKind,
     PaymentId,
@@ -288,6 +290,105 @@ class SettlementReconEntry:
                 f"{self.entity_kind.value} recon entry requires {expected.__name__}, "
                 f"got {type(self.entity_id).__name__}"
             )
+
+
+@dataclass(frozen=True, slots=True)
+class InstantSettlementPayout:
+    id: InstantSettlementPayoutId
+    instant_settlement_id: InstantSettlementId
+    amount: Money
+    amount_settled: Money
+    fees: Money
+    tax: Money
+    status: str
+    created_at: datetime
+    initiated_at: datetime | None
+    processed_at: datetime | None
+    reversed_at: datetime | None
+    utr: str | None
+
+    def __post_init__(self) -> None:
+        _aware(self.created_at, "created_at")
+        for label, value in (
+            ("initiated_at", self.initiated_at),
+            ("processed_at", self.processed_at),
+            ("reversed_at", self.reversed_at),
+        ):
+            if value is not None:
+                _aware(value, label)
+        currencies = {
+            self.amount.currency,
+            self.amount_settled.currency,
+            self.fees.currency,
+            self.tax.currency,
+        }
+        if len(currencies) != 1:
+            raise ValueError("instant settlement payout money fields must use one currency")
+        if self.amount.amount_paise <= 0:
+            raise ValueError("instant settlement payout amount must be positive")
+        for label, money in (
+            ("amount_settled", self.amount_settled),
+            ("fees", self.fees),
+            ("tax", self.tax),
+        ):
+            _non_negative(money.amount_paise, label)
+        if self.amount_settled.amount_paise > self.amount.amount_paise:
+            raise ValueError("instant settlement payout settled amount cannot exceed payout amount")
+        if (
+            self.amount_settled.amount_paise > 0
+            and self.amount_settled + self.fees != self.amount
+        ):
+            raise ValueError(
+                "instant settlement payout settled amount plus fees must equal payout amount"
+            )
+        if not isinstance(self.status, str) or not self.status.strip():
+            raise ValueError("instant settlement payout status cannot be blank")
+        if self.status != self.status.strip():
+            raise ValueError("instant settlement payout status must be trimmed")
+        if self.utr is not None and not self.utr.strip():
+            raise ValueError("instant settlement payout UTR cannot be blank")
+
+@dataclass(frozen=True, slots=True)
+class InstantSettlement:
+    id: InstantSettlementId
+    amount_requested: Money
+    amount_settled: Money
+    amount_pending: Money
+    amount_reversed: Money
+    fees: Money
+    tax: Money
+    settle_full_balance: bool
+    status: str
+    created_at: datetime
+    payout_ids: tuple[InstantSettlementPayoutId, ...]
+
+    def __post_init__(self) -> None:
+        _aware(self.created_at, "created_at")
+        currencies = {
+            self.amount_requested.currency,
+            self.amount_settled.currency,
+            self.amount_pending.currency,
+            self.amount_reversed.currency,
+            self.fees.currency,
+            self.tax.currency,
+        }
+        if len(currencies) != 1:
+            raise ValueError("instant settlement money fields must use one currency")
+        if self.amount_requested.amount_paise <= 0:
+            raise ValueError("instant settlement requested amount must be positive")
+        for label, money in (
+            ("amount_settled", self.amount_settled), ("amount_pending", self.amount_pending),
+            ("amount_reversed", self.amount_reversed), ("fees", self.fees), ("tax", self.tax),
+        ):
+            _non_negative(money.amount_paise, label)
+        if not isinstance(self.settle_full_balance, bool):
+            raise TypeError("settle_full_balance must be bool")
+        if not isinstance(self.status, str) or not self.status.strip():
+            raise ValueError("instant settlement status cannot be blank")
+        if self.status != self.status.strip():
+            raise ValueError("instant settlement status must be trimmed")
+        if len(set(self.payout_ids)) != len(self.payout_ids):
+            raise ValueError("instant settlement payout ids must be unique")
 
 
 @dataclass(frozen=True, slots=True)
