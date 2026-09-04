@@ -1,206 +1,301 @@
-# ReFlow — Final Five-Minute Pitch Script and Recording Runbook
+# ReFlow — Final Five-Minute Pitch and Recording Runbook
 
-## Recording rule
+## What the video must prove
 
-The video should demonstrate evidence, not narrate architecture for five minutes.
+Do not make this feel like a presentation about a reconciliation system. Show the system doing reconciliation.
 
-Target duration: **4:45–4:58** so upload/player timing does not push the submission over five minutes.
+The judge should remember four things:
 
-Use only synthetic/demo data. Do not expose local environment files, API keys, terminal history containing secrets or private merchant data.
+1. ReFlow can process a meaningful batch, not one hand-picked transaction.
+2. It only auto-reconciles what the evidence can prove.
+3. DeepSeek helps with messy finance operations, but cannot change reconciliation truth.
+4. The result is scored against hidden ground truth after the run.
 
-## Pre-recording setup
+Target duration: **4:45–4:58**.
 
-1. Start the synthetic Gate 18 demo PostgreSQL instance from README.
-2. Seed the deterministic demo and capture the printed `scope_id`.
-3. Build the frontend and run the same-origin FastAPI application.
-4. Open the app with the synthetic scope.
-5. Keep `EVALUATION.md`, `FAILURE_LOG.md` and the architecture diagram/README available in separate tabs.
-6. Pre-open one non-green Case File and Evaluation Lab to avoid dead time.
-7. Browser zoom should make proof arithmetic readable in the recording.
-8. Do not rely on a live OpenAI call. The final evaluation host had no model key and the submission makes no live-model quality claim.
+Record the product full-screen. Avoid terminal footage unless something genuinely cannot be shown in the UI.
 
-## 0:00–0:25 — Hook
+## Before recording
 
-### Screen
+Run `~/Developer/ReFlow Demo.command` and open:
 
-Start on the ReFlow overview or a settlement proof, not a terminal.
+`http://127.0.0.1:8000/demo?scope=scope_demo`
 
-### Script
+Confirm the page starts with no generated batch and DeepSeek shows as configured.
 
-> A payment processor can say a settlement was processed. Finance still has to prove exactly which payments, refunds and adjustments produced that amount, whether the bank actually received it, and what to do when the sources disagree. ReFlow turns that reconciliation into evidence you can audit.
+For the main take use:
 
-Then say:
+- Settlements: **500**
+- Profile: **Adversarial close**
+- World seed: **402**
+- Observation seed: **1402**
 
-> Every rupee gets a path, a proof, or an exception.
+Expected generated workload on the current build:
 
-## 0:25–0:50 — Product and safety boundary
+- **500 settlements**
+- **60,227 observed source records**
+- dataset SHA-256 beginning `1753fd1d0cdc…`
+- truth commitment beginning `508e7ee6ab2e…`
 
-### Screen
+The exact run time will vary by machine. Do not rehearse a fake duration.
 
-Show Run / Close Overview and the `READ ONLY` product authority.
+Keep browser zoom around 100–110% and close unrelated tabs, bookmarks and extensions that could expose private information.
 
-### Script
+If Razorpay Test Mode credentials are not configured, do not record the final take yet. The final video should show the connector as configured rather than a red/unconfigured state.
 
-> ReFlow compiles merchant, Razorpay-shaped and bank evidence into deterministic money proofs. The LLM never decides whether money reconciles. AI is limited to understanding unfamiliar source schemas and investigating an already-created exception through bounded read-only tools.
-
-Point briefly to proven/pending/exception state.
-
-## 0:50–1:35 — Exact settlement proof
+## 0:00–0:20 — Start with the problem
 
 ### Screen
 
-Open Settlement Proof.
+Start on the clean Live Run page before generating anything.
 
-### Script
+### Say
 
-> This is the core loop. ReFlow first proves settlement composition: the signed underlying movements must equal the authoritative settlement amount. Bank receipt is a separate proof: a processed settlement alone is never treated as bank credit. The full reconciliation proof becomes green only when both exact fragments agree.
+> Razorpay can tell a merchant that a settlement was processed. Finance still has to answer a different question: which payments and refunds produced that settlement, and did that money actually reach the bank?
+
+> I built ReFlow to close that loop without turning approximate matches into accounting facts.
+
+Do not introduce architecture yet. Do not say a slogan.
+
+## 0:20–0:50 — Generate the workload live
+
+### Screen
+
+Select the 500-settlement adversarial profile and click **Generate batch**.
+
+Point briefly to the record count, source counts, dataset hash and locked truth commitment.
+
+### Say
+
+> This is a synthetic month-end close generated now: 500 settlements and just over 60,000 observed records across merchant, Razorpay payment, settlement-recon and bank sources.
+
+> The seeds and dataset hash are visible. The simulator knows the real answer, but ReFlow does not get that ground truth until after the reconciliation run.
+
+This is the answer to “is the data premade?” It is synthetic by design, reproducible and scored later—not four hand-written examples.
+
+## 0:50–1:15 — Run ReFlow
+
+### Screen
+
+Click **Run reconciliation** and let the real progress stream play.
+
+Do not talk over every stage. Let the counters be visible.
+
+### Say
+
+> It is actually processing the batch now. Evidence is journaled and normalized, the Money Graph is built, settlement composition is proved, and bank receipt is checked independently by identity and amount.
+
+On the current Mac this run is roughly four to five seconds. The UI reports the actual measured duration; there is no artificial stage delay.
+
+Expected result for the fixed seeds:
+
+- **317 proven reconciled**
+- **140 pending bank credit**
+- **42 residual**
+- **1 contradicted**
+- **183 explicit exceptions**
+
+## 1:15–1:55 — Open something ReFlow refused to reconcile
+
+### Screen
+
+Filter to **pending bank credit** and open `setl_000004` or the first pending result.
+
+For the current seed this settlement is about **₹3,158.62**. Its composition is exact, but the bank credit is not observed.
+
+### Say
+
+> This is the part I care about. ReFlow can fully explain the settlement amount, but there is no authoritative bank receipt yet. So it stays pending instead of treating “processed” as “received.”
 
 Point to:
 
 - settlement amount;
-- composition equation;
-- bank-proof state;
-- proof/reason IDs;
-- evidence/provenance references.
+- observed composition;
+- zero bank credit;
+- bank residual;
+- `BANK_RECEIPT_NOT_OBSERVED`.
 
-Then say:
+Do not call this an “AI decision.” The proof engine created this state before DeepSeek is involved.
 
-> Same amount and approximate date are not enough. Stable identity and exact arithmetic outrank fuzzy similarity.
-
-## 1:35–2:15 — Exception and bounded investigation
+## 1:55–2:30 — Use DeepSeek on the real exception
 
 ### Screen
 
-Open the deterministic synthetic case with pending bank evidence.
+Click **Ask DeepSeek to investigate**.
 
-### Script
+The currently validated path takes about 2–3 seconds and records the bounded evidence accesses.
 
-> When evidence is missing or contradictory, ReFlow does not force a match. It creates a stable exception case that survives across runs, tracks workflow separately from financial truth, and keeps every historical proof version.
+### Say
 
-Show the case chronology and source blocker.
+> Now the model can help with the operational question, not the accounting answer.
 
-> The investigation agent can inspect only the case, its exact proof and proof-cited source evidence. It can propose actions like request source or human review. A hallucinated evidence ID, unsupported financial number or unsafe action is rejected by deterministic validation.
+> ReFlow gives DeepSeek only this exception, its proof and the source envelopes already cited by that proof. In this case it recommends requesting the bank source. It cannot mark the settlement reconciled.
 
-If the demo case contains the deterministic investigation result, show it. Do **not** imply it is a live model response.
+Point to the trace:
 
-## 2:15–2:50 — Product surface / operations loop
+- `CASE_SNAPSHOT`
+- `PROOF_SNAPSHOT`
+- `SOURCE_EVIDENCE`
 
-### Screen
+The final proposal is still validated by ReFlow. If the model invents an evidence ID, amount or unsupported action, the result is rejected or becomes `ABSTAIN`.
 
-Move quickly through Exception Queue, Source Lab and back to overview.
-
-### Script
-
-> The UI is a control tower over immutable finance state, not another reconciliation engine. Source Lab shows whether required feeds are complete or late without exposing raw source payloads. The exception queue ranks what remains non-green. Scope is explicit on every finance read.
-
-Mention that the current public/reference UI is read-only and not an authenticated production finance app.
-
-## 2:50–3:45 — Frozen held-out evaluation
+## 2:30–3:05 — Show where AI is genuinely useful: schema drift
 
 ### Screen
 
-Open `EVALUATION.md` or Evaluation Lab with the final metrics visible.
+Scroll to **Bank export changed** and click **Ask DeepSeek to map columns**.
 
-### Script
+The sample export deliberately uses vendor-style columns such as `Txn`, `Credit`, `Date`, `Reference` and an explicit `Asia/Kolkata` timezone.
 
-> Before the final run, I committed the held-out seeds and hashes of the scorer and candidate systems. Then I ran the first v1 result once and preserved it unchanged.
+### Say
 
-> The primary corpus has 768 settlements and 87,364 observed records. ReFlow auto-reconciled 512 of 768 settlements. All 512 automatic matches were correct: 100 percent auto-match precision, zero silent false auto-matches. Against the 624 settlements that are reconciled in hidden truth, recall is 82.05 percent.
+> A second place models are useful is when a finance source changes shape. Instead of asking an engineer to hard-code another parser, DeepSeek proposes a constrained mapping.
 
-Pause before the nuance:
+> Here it identifies the rupee amount, transaction reference, Indian date format and timezone. ReFlow then parses the sample rows itself and verifies the exact control total before the adapter can even reach review.
 
-> The 66.67 percent number is coverage, not accuracy. I deliberately keep those terms separate.
+Point to:
 
-Then compare the baseline:
+- `Credit → amount_paise` with `rupees_to_paise`;
+- `Date → occurred_at` with `%d/%m/%Y`;
+- timezone offset `+330` minutes;
+- the verified **₹4,666.64** financial control;
+- the final `needs_review` state.
 
-> A strong grouped-exact baseline ties ReFlow's auto-match recall. I do not claim otherwise. A fuzzy baseline made nine more automatic decisions, but nine of its matches were wrong. ReFlow left those cases unresolved instead of buying coverage with false financial truth.
+Say plainly:
 
-## 3:45–4:15 — Honest exceptions + failure campaign
+> The model suggests the adapter. It does not activate it.
 
-### Screen
-
-Show exception section of `EVALUATION.md`, then `FAILURE_LOG.md` around F-0081 or F-0084.
-
-### Script
-
-> The same held-out run leaves 256 explicit non-green decisions: 170 unresolved, 78 residual and 8 contradicted. The full machine-readable exception list is checked in; none were manually removed.
-
-> I also ran a separate final failure campaign: 12 of 12 representative safety regressions passed, including late-source semantics, case supersession, model outage, prompt injection, hallucinated citations, PostgreSQL restart/idempotency and SPA/API routing.
-
-For the development challenge, prefer F-0081:
-
-> One real failure was performance: Gate 7 repeatedly rescanned provenance edges. The old 1,000-settlement benchmark was still running after more than 20 minutes. Profiling showed the exact hotspot; a batch-local provenance index fixed the algorithm without weakening proof semantics.
-
-## 4:15–4:35 — Scale
+## 3:05–3:45 — Unlock the answer only after ReFlow finishes
 
 ### Screen
 
-Show the verified Gate 17 10k metric in EVALUATION/README.
+Click **Unlock hidden ground truth**.
 
-### Script
+For the fixed 500-settlement adversarial batch the current expected comparison is:
 
-> On the disclosed four-vCPU ARM Oracle VM, the verified 10,000-settlement clean benchmark processed 1.2 million raw rows and sustained 206.97 settlement proofs per second in the proof pipeline. I do not extrapolate that to a production SLO or a 100k/1M claim.
+- ReFlow: **317 automatic, 317 correct, 0 wrong**;
+- fuzzy matcher: **323 automatic, 317 correct, 6 wrong**;
+- ReFlow precision: **100%** on its automatic decisions;
+- ReFlow truth-reconciled recall: **79.25%**.
 
-## 4:35–4:55 — Close
+### Say
+
+> Only now do I reveal the simulator truth and score the decisions.
+
+> ReFlow automatically closed 317 settlements and all 317 were correct. A fuzzy matcher closed six more. Every one of those extra six was wrong.
+
+Then add:
+
+> I am not optimizing for the smallest exception queue. I am optimizing for the smallest number of incorrect financial decisions.
+
+Do not call 63.4% coverage “accuracy.” If asked, it is 317 automatic decisions out of 500 requested settlements.
+
+## 3:45–4:10 — Prove the Razorpay integration is real
 
 ### Screen
 
-Return to the proof/case product view.
+Use **Check Razorpay API** only when Test Mode credentials are configured.
 
-### Script
+Show aggregate counts from:
 
-> ReFlow turns reconciliation from a plausible match into an auditable control: every amount is either proven, pending for a specific evidence reason, or explicitly unresolved. AI helps with the messy edges, but deterministic evidence remains the authority.
+- `/v1/payments`
+- `/v1/settlements`
+- `/v1/settlements/recon/combined`
 
-> Every rupee gets a path, a proof, or an exception.
+### Say
+
+> The scored workload is synthetic so I can know the answer and measure it. Separately, this is the actual Razorpay API connector in Test Mode. ReFlow uses the same payments, settlement and settlement-recon contracts rather than a made-up provider schema.
+
+Keep this distinction explicit. Do not imply the 500-settlement benchmark came from the connected Razorpay account.
+
+## 4:10–4:40 — Show the checked-in evidence briefly
+
+### Screen
+
+Open the Evaluation page or checked-in evaluation artifact for only long enough to establish that the live demo is not the only test.
+
+### Say
+
+> I also kept a separate frozen held-out evaluation in the repository: 768 settlements and 87,364 observed records. ReFlow made 512 automatic decisions, all 512 were correct, and the fuzzy baseline made nine false automatic matches.
+
+If there is time, mention the disclosed scale benchmark:
+
+> On a separate 10,000-settlement clean benchmark, the proof pipeline sustained 206.97 settlement proofs per second on a four-vCPU ARM VM. That is a proof-pipeline measurement, not a production SLO.
+
+Do not spend time scrolling through README tables.
+
+## 4:40–4:58 — Close
+
+### Screen
+
+Return to the settlement results or the pending proof.
+
+### Say
+
+> The point is not to automate every settlement. It is to automate the ones we can actually prove, and make the rest impossible to hide.
+
+> ReFlow uses AI where finance data is messy, and deterministic evidence where the answer affects money.
 
 Stop recording.
 
-## What not to say
+## If a live model call fails during recording
+
+Retake the shot. Do not replace a rejected/abstained result with a hard-coded success state.
+
+Current local repeatability checks before this runbook was written:
+
+- pending-settlement investigation: **3/3 validated**, 2.39–2.95 seconds;
+- bank-schema mapping after prompt hardening: **5/5 passed deterministic financial controls**, 2.18–2.70 seconds.
+
+A provider outage is safe: ReFlow reconciliation is already complete and the investigation result fails closed to abstention/provider error.
+
+## Claims to keep precise
+
+Say:
+
+- “synthetic adversarial workload,” not “real merchant month”;
+- “automatic coverage” or “automatic decisions,” not “accuracy,” for the fraction automatically reconciled;
+- “100% precision on automatic decisions” only with its denominator;
+- “proof-pipeline throughput” for the 206.97/s scale metric;
+- “Razorpay Test Mode API connector” when showing the live connector.
 
 Do not say:
 
-- “66.67% accuracy.” It is the all-requested-settlement automatic match rate.
-- “AI achieved X% investigation accuracy.” No live-model Gate 16 benchmark was run.
-- “Validated on real Razorpay settlements.” No real settlement/recon corpus was available for the final benchmark.
-- “Production ready.” Authentication, RBAC, HA, secret management and production connector service are not implemented.
-- “ReFlow beats all baselines.” B1 grouped-exact ties ReFlow's held-out auto-match recall.
-- “206.97 settlements/s end to end.” That is the measured Gate 17 **proof-pipeline** rate; total 10k runtime was 267.56 seconds.
+- ReFlow beats the grouped-exact baseline on recall;
+- the synthetic 500-settlement run came from Razorpay;
+- DeepSeek decides whether a settlement reconciles;
+- the schema adapter is automatically activated;
+- the system is fully production-ready.
 
-## Judge Q&A short answers
+## Judge Q&A
 
-### Why use AI at all if the finance core is deterministic?
+### Why synthetic data?
 
-> Because financial truth should be deterministic when evidence is sufficient. AI is useful before and after that core: mapping unfamiliar source schemas into a constrained adapter, and deciding which read-only evidence to inspect for an exception. The model has no authority to mark money reconciled.
+> Because I need ground truth to measure false reconciliation decisions. The workload is generated from fixed seeds, hashed before the run, and the truth is withheld until scoring. The live Razorpay connector is shown separately.
 
-### Why does the grouped-exact baseline tie your recall?
+### Why use AI if reconciliation is deterministic?
 
-> Because exact grouping and exact UTR matching already solve a large part of this synthetic corpus. I kept that baseline intentionally strong. ReFlow's contribution is the audited evidence/provenance layer, conservative contradiction handling, immutable proof lifecycle, run/close controls, persistent cases, bounded investigation and operator workflow around that exact matching core.
+> The hard part is not only arithmetic. Real finance exports change shape and exceptions need investigation. DeepSeek handles those ambiguous interfaces; ReFlow still validates the adapter and the financial evidence deterministically.
 
-### Why not use fuzzy matching to increase match rate?
+### Why not fuzzy-match more settlements?
 
-> On the frozen held-out corpus it increased automatic decisions from 512 to 521, but all nine extra automatic decisions were wrong. In finance, an explicit exception is safer than a confident false match.
+> On this 500-settlement run it closes six more, but all six additional decisions are wrong. On the separate frozen 768-settlement benchmark it makes nine false automatic matches.
 
-### Is the data real?
+### What happens when DeepSeek is wrong or unavailable?
 
-> The final measured corpus is synthetic and adversarial, matching the Track 04 requirement. Provider-shaped Razorpay fixtures validate integration semantics, but I do not claim a real Test Mode settlement accuracy number because no settlement/recon corpus was available in the connected account.
+> The model result is rejected or abstains. The reconciliation proof does not change.
 
-### What happens if the model is unavailable?
+## Final checklist
 
-> Reconciliation, proofs, close controls and exception creation still run deterministically. Investigation falls back to abstention; financial truth is unchanged.
-
-### Biggest current limitation?
-
-> The reference product is not an authenticated multi-tenant production finance application. It still needs first-party connector authentication, RBAC/SSO, production secret management and real de-identified settlement/bank corpora for production calibration.
-
-## Final recording checklist
-
+- demo reset to `phase=ready` before recording;
+- 500 / adversarial / seeds 402 and 1402;
+- DeepSeek configured;
+- Razorpay **Test Mode** connector configured before the final take;
+- no API keys, terminals, private payer data or `.env` files visible;
+- actual run counters visible;
+- one pending proof opened;
+- one live DeepSeek investigation shown;
+- one live schema mapping shown;
+- hidden truth unlocked only after the run;
 - under five minutes;
-- no private data or keys visible;
-- synthetic/demo label visible where useful;
-- exact 512/768, 512/512 and 512/624 denominators spoken correctly;
-- mention the strong B1 tie honestly;
-- mention nine false fuzzy matches;
-- show at least one real development failure/fix;
-- show the read-only safety boundary;
-- end on the one-sentence product thesis;
-- upload the video publicly/unlisted as required and test the link in a logged-out browser before submitting.
+- test the final video link logged out before submitting.
