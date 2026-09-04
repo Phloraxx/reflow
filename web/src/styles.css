@@ -509,3 +509,38 @@ a.table-row:hover { background: var(--panel-2); color: var(--text); }
 .tool-trace code { font-size: 9px; }
 .investigation-result > small { color: var(--quiet); font: 9px var(--mono); }
 @media (max-width: 760px) { .investigation-head { flex-direction: column; } .tool-trace > div { grid-template-columns: 24px 1fr; } .tool-trace > div > :nth-child(n+3) { grid-column: 2; } }
+
+/* Recording presentation mode: browser-only capture at 16:9. */
+.recording-shell { grid-template-columns: minmax(0,1fr); }
+.recording-shell .sidebar { display: none; }
+.recording-shell .topbar {
+  position: static;
+  min-height: 58px;
+  grid-template-columns: 1fr auto;
+  padding: 10px 34px;
+  background: #0b0d0f;
+}
+.recording-shell .content { max-width: 1780px; padding: 26px 42px 80px; }
+.recording-shell .pitch-page { gap: 22px; }
+.recording-shell .pitch-header h1 { font-size: clamp(42px,4.2vw,68px); max-width: 1180px; }
+.recording-shell .pitch-header p { font-size: 14px; max-width: 760px; }
+.recording-shell .dataset-builder,
+.recording-shell .razorpay-connector,
+.recording-shell .run-console,
+.recording-shell .proof-inspector,
+.recording-shell .schema-lab { padding: 20px; }
+.recording-shell .dataset-builder strong,
+.recording-shell .connector-head strong,
+.recording-shell .console-head strong,
+.recording-shell .investigation-head strong { font-size: 15px; }
+.recording-shell .dataset-builder small,
+.recording-shell .connector-head small,
+.recording-shell .investigation-head small { font-size: 11px; }
+.recording-shell .endpoint-row code,
+.recording-shell .endpoint-row button,
+.recording-shell .connector-results p { font-size: 10px; }
+.recording-shell .pitch-result-head,
+.recording-shell .pitch-result-row { min-height: 42px; }
+.recording-shell .pitch-result-row { font-size: 11px; }
+.recording-shell .component-head,
+.recording-shell .component-row { min-height: 38px; font-size: 11px; }

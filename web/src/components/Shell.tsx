@@ -18,6 +18,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const demoMode = location.pathname === "/demo"
+  const recordingMode = demoMode && new URLSearchParams(location.search).get("recording") === "1"
 
   function apply(event: FormEvent) {
     event.preventDefault()
@@ -29,7 +30,7 @@ export function Shell({ children }: { children: ReactNode }) {
     navigate(`${location.pathname}?${params.toString()}`, { replace: true })
   }
 
-  return <div className="app-shell">
+  return <div className={recordingMode ? "app-shell recording-shell" : "app-shell"}>
     <aside className="sidebar">
       <div className="brand-lockup">
         <div className="brand-mark">RF</div>
@@ -43,12 +44,12 @@ export function Shell({ children }: { children: ReactNode }) {
     </aside>
     <div className="workspace">
       <header className="topbar">
-        <div className="topbar-title"><span className="eyebrow">{demoMode ? "Finance close" : "Operator Control Tower"}</span><strong>{demoMode ? "Settlement verification workspace" : "Evidence, proofs, exceptions"}</strong></div>
+        <div className="topbar-title"><span className="eyebrow">{recordingMode ? "ReFlow / Finance close" : demoMode ? "Finance close" : "Operator Control Tower"}</span><strong>{demoMode ? "Settlement verification workspace" : "Evidence, proofs, exceptions"}</strong></div>
         {!demoMode && <form className="scope-form" onSubmit={apply}>
           <label htmlFor="scope-id">Active scope</label>
           <div className="scope-input-wrap"><input id="scope-id" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck={false} /><button type="submit">Apply</button></div>
         </form>}
-        <div className="mode-badge"><span className="pulse-dot" />{demoMode ? "EVALUATION" : "READ ONLY"}</div>
+        <div className="mode-badge"><span className="pulse-dot" />{recordingMode ? "TEST MODE · SYNTHETIC" : demoMode ? "EVALUATION" : "READ ONLY"}</div>
       </header>
       <main className="content">{children}</main>
     </div>

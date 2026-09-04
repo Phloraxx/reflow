@@ -122,9 +122,13 @@ describe('ReFlow control tower', () => {
       },
       '/api/v1/demo/ai-status': { provider: 'deepseek', configured: false, model: 'deepseek-v4-flash' },
       '/api/v1/demo/razorpay-status': { configured: false, mode: 'test', api: 'https://api.razorpay.com/v1' },
+      '/api/v1/demo/settlements': [{ settlement_id: 'setl_reload', status: 'proven_reconciled', amount: { display: '₹123.45' }, composition_status: 'composition_proven', bank_status: 'bank_receipt_proven', composition_components: 3, reason_codes: [] }],
     })
-    renderAt('/demo?scope=scope_ui')
+    renderAt('/demo?scope=scope_ui&recording=1')
     expect(await screen.findByText('Reconcile a month of settlement evidence')).toBeInTheDocument()
+    expect(screen.getByText('TEST MODE · SYNTHETIC')).toBeInTheDocument()
+    expect(document.querySelector('.app-shell')).toHaveClass('recording-shell')
+    expect(await screen.findByText('setl_reload')).toBeInTheDocument()
     expect(screen.getByText('60,227')).toBeInTheDocument()
     expect(screen.getByText('317 automatic')).toBeInTheDocument()
     expect(screen.getByText('323 automatic')).toBeInTheDocument()

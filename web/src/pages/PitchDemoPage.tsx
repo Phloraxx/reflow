@@ -203,11 +203,17 @@ export function PitchDemoPage() {
   const [investigationRunning, setInvestigationRunning] = useState(false)
 
   async function refreshStatus() {
-    setStatus(await json<DemoStatus>('/api/v1/demo/status'))
+    const next = await json<DemoStatus>("/api/v1/demo/status")
+    setStatus(next)
+    return next
   }
 
   useEffect(() => {
-    void refreshStatus().catch(() => undefined)
+    void refreshStatus().then(async (next) => {
+      if (next.run && !next.run.source_rejection) {
+        setRows(await json<SettlementRow[]>("/api/v1/demo/settlements"))
+      }
+    }).catch(() => undefined)
     void json<AiStatus>('/api/v1/demo/ai-status').then(setAiStatus).catch(() => undefined)
     void json<RazorpayStatus>('/api/v1/demo/razorpay-status').then(setRazorpayStatus).catch(() => undefined)
   }, [])
