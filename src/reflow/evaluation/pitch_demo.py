@@ -595,20 +595,28 @@ class PitchDemoService:
             method = payment.get("method")
             if isinstance(method, str):
                 payment_methods[method] = payment_methods.get(method, 0) + 1
+        payments_count = len(payments)
+        settlements_count = len(settlements)
+        recon_count = len(recon)
+        sandbox_empty = mode == "test" and not any(
+            (payments_count, settlements_count, recon_count)
+        )
         return {
             "configured": True,
+            "authenticated": True,
             "mode": mode,
+            "sandbox_state": "empty" if sandbox_empty else "has_data",
             "account_fingerprint": hashlib.sha256(account_id.encode()).hexdigest()[:16],
-            "payments": len(payments),
+            "payments": payments_count,
             "payment_statuses": payment_statuses,
             "payment_methods": payment_methods,
-            "settlements": len(settlements),
-            "recon_rows": len(recon),
-            "endpoints": [
-                "/v1/payments",
-                "/v1/settlements",
-                "/v1/settlements/recon/combined",
-            ],
+            "settlements": settlements_count,
+            "recon_rows": recon_count,
+            "endpoint_checks": {
+                "/v1/payments": "ok",
+                "/v1/settlements": "ok",
+                "/v1/settlements/recon/combined": "ok",
+            },
             "privacy": "aggregate counts only; payer fields are not returned to the demo UI",
         }
 

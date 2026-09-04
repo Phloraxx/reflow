@@ -86,3 +86,33 @@ def test_exception_context_uses_indexed_manifest_membership(monkeypatch) -> None
     assert result["next_action"] == "REQUEST_SOURCE"
     # The old tuple-membership scans exceeded fifty million comparisons here.
     assert comparisons < 100_000
+
+def test_razorpay_probe_distinguishes_authenticated_empty_test_sandbox(monkeypatch) -> None:
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def fetch_payments(self):
+            return ()
+
+        def fetch_settlements(self):
+            return ()
+
+        def fetch_recon(self, *, year: int, month: int):
+            assert (year, month) == (2026, 9)
+            return ()
+
+    monkeypatch.setenv("RAZORPAY_KEY_ID", "rzp_test_example")
+    monkeypatch.setenv("RAZORPAY_KEY_SECRET", "secret")
+    monkeypatch.setenv("REFLOW_RAZORPAY_ACCOUNT_ID", "acct_demo")
+    monkeypatch.setenv("REFLOW_RAZORPAY_MODE", "test")
+    monkeypatch.setattr(pitch_demo_module, "RazorpayAcceptanceClient", FakeClient)
+
+    result = PitchDemoService().probe_razorpay()
+
+    assert result["authenticated"] is True
+    assert result["sandbox_state"] == "empty"
+    assert result["payments"] == 0
+    assert result["settlements"] == 0
+    assert result["recon_rows"] == 0
+    assert set(result["endpoint_checks"].values()) == {"ok"}

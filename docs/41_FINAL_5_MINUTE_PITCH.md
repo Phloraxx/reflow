@@ -41,7 +41,9 @@ The exact run time will vary by machine. Do not rehearse a fake duration.
 
 Keep browser zoom around 100–110% and close unrelated tabs, bookmarks and extensions that could expose private information.
 
-If Razorpay Test Mode credentials are not configured, do not record the final take yet. The final video should show the connector as configured rather than a red/unconfigured state.
+Razorpay Test Mode credentials are configured locally. The current sandbox authenticates successfully but contains no test payments, settlements or recon rows. That is acceptable for the connector check: the UI now shows all three endpoints as reachable and labels the sandbox as empty instead of treating zero rows as a failure.
+
+Optional before the final take: complete one Razorpay mock Checkout in Test Mode if you want a genuine test payment count above zero. Do not delay the scored demo waiting for sandbox settlement/recon rows.
 
 ## 0:00–0:20 — Start with the problem
 
@@ -204,9 +206,9 @@ Show aggregate counts from:
 
 ### Say
 
-> The scored workload is synthetic so I can know the answer and measure it. Separately, this is the actual Razorpay API connector in Test Mode. ReFlow uses the same payments, settlement and settlement-recon contracts rather than a made-up provider schema.
+> The scored workload is synthetic so I can know the answer and measure it. Separately, this is the actual Razorpay API connector in Test Mode. The credentials authenticate and all three endpoints are reachable. This sandbox is empty right now, so I am not pretending its zero rows are an accuracy benchmark.
 
-Keep this distinction explicit. Do not imply the 500-settlement benchmark came from the connected Razorpay account.
+If you completed a mock Checkout before recording, mention the genuine test payment count briefly. Either way, keep the distinction explicit: the 500-settlement benchmark did not come from the connected Razorpay account.
 
 ## 4:10–4:40 — Show the checked-in evidence briefly
 

@@ -99,14 +99,16 @@ type ProofDetail = {
 type RazorpayStatus = { configured: boolean; mode: string; api: string }
 type RazorpayProbe = {
   configured: boolean
+  authenticated: boolean
   mode: string
+  sandbox_state: 'empty' | 'has_data'
   account_fingerprint: string
   payments: number
   payment_statuses: Record<string, number>
   payment_methods: Record<string, number>
   settlements: number
   recon_rows: number
-  endpoints: string[]
+  endpoint_checks: Record<string, string>
   privacy: string
 }
 
@@ -311,9 +313,9 @@ export function PitchDemoPage() {
     </section>
 
     <section className="razorpay-connector">
-      <div className="connector-head"><div><span className="eyebrow">Razorpay API</span><strong>Live connector check</strong><small>This is separate from the scored synthetic workload.</small></div><div className={`connector-state ${razorpayStatus?.configured ? 'connector-ready' : ''}`}><span>{razorpayStatus?.mode ?? 'test'} mode</span><strong>{razorpayStatus?.configured ? 'Credentials configured' : 'Credentials not configured'}</strong></div></div>
-      <div className="endpoint-row"><code>/v1/payments</code><code>/v1/settlements</code><code>/v1/settlements/recon/combined</code><button disabled={!razorpayStatus?.configured || razorpayRunning} onClick={() => void probeRazorpay()}>{razorpayRunning ? 'Checking…' : 'Check Razorpay API'}</button></div>
-      {razorpayProbe && <div className="connector-results"><div><span>Payments</span><strong>{razorpayProbe.payments}</strong></div><div><span>Settlements</span><strong>{razorpayProbe.settlements}</strong></div><div><span>Recon rows</span><strong>{razorpayProbe.recon_rows}</strong></div><div><span>Account</span><code>{razorpayProbe.account_fingerprint}</code></div><p>{razorpayProbe.privacy}</p></div>}
+      <div className="connector-head"><div><span className="eyebrow">Razorpay API</span><strong>Test Mode connector</strong><small>Live API compatibility check. The scored workload below stays reproducible and separate.</small></div><div className={`connector-state ${razorpayStatus?.configured ? 'connector-ready' : ''}`}><span>{razorpayStatus?.mode ?? 'test'} mode</span><strong>{razorpayProbe?.authenticated ? 'Authenticated' : razorpayStatus?.configured ? 'Ready to check' : 'Credentials not configured'}</strong></div></div>
+      <div className="endpoint-row"><code>/v1/payments</code><code>/v1/settlements</code><code>/v1/settlements/recon/combined</code><button disabled={!razorpayStatus?.configured || razorpayRunning} onClick={() => void probeRazorpay()}>{razorpayRunning ? 'Checking…' : razorpayProbe ? 'Check again' : 'Check Razorpay API'}</button></div>
+      {razorpayProbe && <div className="connector-results"><div><span>Payments</span><strong>{razorpayProbe.payments}</strong></div><div><span>Settlements</span><strong>{razorpayProbe.settlements}</strong></div><div><span>Recon rows</span><strong>{razorpayProbe.recon_rows}</strong></div><div><span>Account</span><code>{razorpayProbe.account_fingerprint}</code></div><div className="endpoint-health">{Object.entries(razorpayProbe.endpoint_checks).map(([endpoint, state]) => <span key={endpoint}><CheckCircle2 size={12} /><code>{endpoint}</code><b>{state}</b></span>)}</div>{razorpayProbe.sandbox_state === 'empty' && <p className="sandbox-note"><strong>Authenticated sandbox · no test transactions yet.</strong> Complete one Razorpay mock Checkout if you want a genuine test payment to appear here. Settlement/recon counts can remain empty in a sandbox.</p>}<p>{razorpayProbe.privacy}</p></div>}
     </section>
 
     {status.dataset && <>
