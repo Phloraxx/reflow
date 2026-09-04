@@ -25,6 +25,7 @@ from .control_tower import (
     ControlTowerNotFound,
     ControlTowerReader,
 )
+from .evaluation.judge_demo import JudgeDemoError, JudgeDemoService
 from .exception_cases import DispositionKind
 from .observability import (
     EventSink,
@@ -72,11 +73,14 @@ def create_control_tower_app(
     metrics_token: str | None = None,
     event_sink: EventSink | None = None,
     case_workflow: OperatorCaseWorkflowService | None = None,
+    judge_demo: JudgeDemoService | None = None,
 ) -> FastAPI:
     if auth_boundary is not None and operator_audit is None:
         raise RuntimeError("authenticated control tower requires operator audit persistence")
     if case_workflow is not None and auth_boundary is None:
         raise RuntimeError("case workflow writes require authenticated control tower mode")
+    if judge_demo is not None and auth_boundary is not None:
+        raise RuntimeError("judge demo mode cannot run behind authenticated production mode")
 
     metrics_token = normalize_metrics_token(metrics_token)
 
@@ -133,6 +137,13 @@ def create_control_tower_app(
             content={"detail": str(exc), "error": "invalid_case_workflow_command"},
         )
 
+    @app.exception_handler(JudgeDemoError)
+    async def judge_demo_error(_request: Request, exc: JudgeDemoError) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={"detail": str(exc), "error": "judge_demo_invalid_phase"},
+        )
+
     @app.get("/api/v1/health")
     def health() -> dict[str, object]:
         return {
@@ -147,6 +158,7 @@ def create_control_tower_app(
             if operator_audit is not None
             else "disabled",
             "metrics": "token_gated" if metrics_token is not None else "disabled",
+            "judge_demo": judge_demo is not None,
         }
 
     def authenticated_principal(request: Request) -> AuthenticatedPrincipal | None:
@@ -355,6 +367,24 @@ def create_control_tower_app(
     def internal_metrics(request: Request) -> PlainTextResponse:
         return metrics_response(request, metrics=metrics_registry, token=metrics_token)
 
+    if judge_demo is not None:
+
+        @app.get("/api/v1/demo/status")
+        def demo_status() -> dict[str, object]:
+            return judge_demo.status()
+
+        @app.post("/api/v1/demo/run")
+        def demo_run() -> dict[str, object]:
+            return asdict(judge_demo.run_initial())
+
+        @app.post("/api/v1/demo/bank-arrival")
+        def demo_bank_arrival() -> dict[str, object]:
+            return asdict(judge_demo.add_bank_evidence())
+
+        @app.post("/api/v1/demo/rerun")
+        def demo_rerun() -> dict[str, object]:
+            return asdict(judge_demo.rerun_affected())
+
     @app.get("/api/v1/scopes/{scope_id}/overview")
     def overview(request: Request, scope_id: str) -> dict[str, object]:
         scope = authorized_scope(
@@ -362,6 +392,20 @@ def create_control_tower_app(
             scope_id,
             action=OperatorAuditAction.VIEW_SCOPE_OVERVIEW,
         )
+        if (
+            judge_demo is not None
+            and scope == judge_demo.scope_id
+            and judge_demo.status()["phase"] == "ready"
+        ):
+            return {
+                "scope_id": str(scope),
+                "has_current_run": False,
+                "run": None,
+                "proof_status": [],
+                "sources": [],
+                "active_exception_count": 0,
+                "active_exception_value": None,
+            }
         return asdict(reader.overview(scope))
 
     @app.get("/api/v1/scopes/{scope_id}/proofs")
@@ -565,6 +609,17 @@ def app_from_env() -> FastAPI:
             raise RuntimeError("case workflow writes require Cloudflare Access authentication")
         case_workflow = OperatorCaseWorkflowService(reader, service)
 
+    judge_demo_mode = os.getenv("REFLOW_JUDGE_DEMO", "disabled")
+    if judge_demo_mode not in {"disabled", "enabled"}:
+        raise RuntimeError("REFLOW_JUDGE_DEMO must be 'disabled' or 'enabled'")
+    judge_demo = None
+    if judge_demo_mode == "enabled":
+        if auth_boundary is not None:
+            raise RuntimeError("judge demo mode requires REFLOW_AUTH_MODE=disabled")
+        if case_workflow is not None:
+            raise RuntimeError("judge demo mode cannot enable operator case writes")
+        judge_demo = JudgeDemoService(service)
+
     return create_control_tower_app(
         reader,
         web_dist=web_dist,
@@ -573,4 +628,5 @@ def app_from_env() -> FastAPI:
         operator_audit=operator_audit,
         metrics_token=metrics_token,
         case_workflow=case_workflow,
+        judge_demo=judge_demo,
     )
