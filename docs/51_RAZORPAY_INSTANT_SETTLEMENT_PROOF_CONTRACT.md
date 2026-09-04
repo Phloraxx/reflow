@@ -3,7 +3,7 @@
 **Started:** 2026-09-04
 **Base `main`:** `20a754be4aeb6ed85a13150918f2a43d2cc00dbb`
 **Working branch:** `hardening/instant-settlement-proof`
-**Status:** active; implementation locally validated, merge evidence pending
+**Status:** merged and closed
 
 ## Purpose
 
@@ -171,7 +171,15 @@ Before the final documentation/security pass, the exact Gate 51 tree passed:
 - production source hygiene scan: no TODO/FIXME/HACK, `eval`, `exec`, or `shell=True`;
 - `git diff --check`: clean.
 
-This is local validation, not merge evidence. Required PR CI and exact merge-triggered `main` CI remain pending.
+The local validation was followed by required repository closure:
+
+- implementation commit: `fff20cf81f7e4cd1ba58a22469422b0331c168f4`;
+- PR: **#42**;
+- exact PR CI: **33848215642**, success with **552 tests**, strict mypy across **77 source files**, frontend **6/6**, production build, recovery drills and frozen Gate 17/19 verification;
+- merge commit: `be0fcec57386f132452ba9d255b9cabee4a5bfbb`;
+- exact merge-triggered `main` CI: **33850178698**, success with the same **552-test** recovery-enabled submission gate and frozen evidence checks.
+
+No PR/main CI failure occurred in Gate 51.
 
 ## Explicit non-claims
 
@@ -188,4 +196,4 @@ Gate 51 does not claim:
 
 ## Merge rule
 
-Gate 51 is not closed until the exact implementation head passes required PR CI, is merged without head movement, and the exact merge-triggered `main` CI is green. Any PR/main failure must be recorded rather than hidden by a rerun.
+The exact implementation head passed required PR CI, PR #42 merged without head movement, and the exact merge-triggered `main` CI passed. Gate 51 is closed.

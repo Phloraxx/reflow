@@ -6,7 +6,7 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) — active explicit Razorpay Instant Settlement parent/payout ingestion and payout-level bank-proof gate; merge closure pending.
+1. [`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) — merged explicit Razorpay Instant Settlement parent/payout ingestion and payout-level bank-proof gate with exact PR/main CI closure evidence.
 2. [`50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`](50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md) — merged Control Tower keyset/cursor pagination and long-history scalability gate with exact PR/main CI closure evidence.
 3. [`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — merged request telemetry, bounded metrics and durable operator-access audit gate with exact PR/main CI closure evidence.
 4. [`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — merged single-host deployment and real PostgreSQL PITR mechanics gate with PR/main CI closure evidence.
@@ -81,7 +81,7 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — merged production deployment/PITR contract with real recovery-drill and failed-main/fix evidence.
 - [`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — merged production observability/operator-audit contract.
 - [`50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`](50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md) — merged Control Tower long-history pagination contract.
-- [`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) — active explicit Razorpay Instant Settlement payout-proof contract.
+- [`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) — merged explicit Razorpay Instant Settlement payout-proof contract.
 
 ## Execution and submission
 
@@ -97,7 +97,7 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. active Razorpay Instant Settlement payout-proof contract (`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`)
+2. merged Razorpay Instant Settlement payout-proof contract (`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`)
 3. merged Control Tower long-history pagination contract (`50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`)
 4. merged production observability/operator-audit contract (`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`)
 5. merged production deployment/PITR contract (`48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`)
