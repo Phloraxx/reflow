@@ -3,7 +3,7 @@
 **Started:** 2026-09-04
 **Base `main`:** `e423b383f5e90c30a3b6d4aa2378ae6890e18182`
 **Working branch:** `hardening/operator-case-workflow`
-**Status:** implementation locally validated; repository closure pending
+**Status:** merged and closed
 
 ## Purpose
 
@@ -156,6 +156,20 @@ The exact pre-commit Gate 52 tree passed:
 
 The npm advisory endpoint did not return within repeated bounded production-audit attempts on the Oracle VM. `web/package.json` and `web/package-lock.json` are unchanged from the exact green Gate 51 base, and the locked frontend still passes TypeScript, Vitest 6/6 and the production build. This registry-availability limitation is recorded rather than converted into a clean audit claim.
 
+## Repository closure evidence
+
+The exact locally validated implementation was committed as `3e1349ac2b74109987321ca4df972c0512e47340` and pushed without rebasing or head movement.
+
+- implementation PR: **#44**;
+- exact PR head: `3e1349ac2b74109987321ca4df972c0512e47340`;
+- exact PR CI: **33861028158**, success;
+- PR CI evidence: Ruff clean, strict mypy across **78 source files**, **560 Python/PostgreSQL tests**, frontend **6/6**, production build, PostgreSQL recovery drill, and frozen Gate 17/19 verification;
+- merge commit: `d270013341c9fb84e1f9dd182541cd08a1d6bc38`;
+- exact merge-triggered `main` CI: **33861851182**, success at that merge SHA;
+- `main` CI evidence: the same **560-test** recovery-enabled submission gate, strict mypy across **78 source files**, frontend **6/6**, production build and frozen evidence verification.
+
+The CI frontend-install phase was slower than usual but completed successfully in both required runs. No Gate 52 PR or merge-triggered `main` test failure occurred.
+
 ## Explicit non-claims
 
 Gate 52 does not claim:
@@ -171,4 +185,4 @@ Gate 52 does not claim:
 
 ## Merge rule
 
-Gate 52 is not closed until the exact implementation head passes required PR CI, merges without head movement, the exact merge-triggered `main` CI passes, and the follow-up documentation record captures those immutable commit/PR/run identities.
+The merge rule is satisfied: the exact implementation head passed required PR CI, PR #44 merged without head movement, the exact merge-triggered `main` CI passed, and this documentation closure records the immutable implementation commit, merge commit and CI run identities. Gate 52 is closed.

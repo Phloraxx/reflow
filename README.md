@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Gate 52 authenticated operator case-workflow implementation is locally validated on `hardening/operator-case-workflow` from final green Gate 51 `main`. The candidate adds one opt-in exact-scope `case_operator` write: append an immutable Gate 14 case disposition with bounded idempotency, PostgreSQL generation/CAS, and pseudonymous operator audit. It does not grant authority over proofs, raw evidence, reconciliation runs, payouts, refunds, transfers, balances, adapters, or other financial truth. The exact local submission gate passed 560 Python/PostgreSQL tests, strict mypy across 78 source files, frontend 6/6, production build and recovery/evaluation verification; repository PR/main closure is still pending. See `docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`.**
+> **Current phase: Gate 52 authenticated operator case workflow is merged green on `main` as `d270013341c9fb84e1f9dd182541cd08a1d6bc38` via PR #44. Exact PR CI `33861028158` and merge-triggered `main` CI `33861851182` each passed the full 560-test recovery-enabled gate, strict mypy across 78 source files, frontend 6/6, production build, and frozen Gate 17/19 verification. Gate 52 adds one opt-in exact-scope `case_operator` disposition write with immutable PostgreSQL generation/CAS state and pseudonymous audit; it grants no authority over proofs, raw evidence, reconciliation runs, payouts, refunds, transfers, balances, adapters, or other financial truth. See `docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -592,7 +592,7 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [`docs/49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](docs/49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — merged production observability and pseudonymous operator-audit contract
 - [`docs/50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`](docs/50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md) — merged Control Tower long-history pagination contract
 - [`docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) — merged explicit Razorpay Instant Settlement payout-proof contract
-- [`docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`](docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md) — authenticated exact-scope exception-case disposition workflow; repository closure pending
+- [`docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`](docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md) — merged authenticated exact-scope exception-case disposition workflow contract
 
 ---
 
