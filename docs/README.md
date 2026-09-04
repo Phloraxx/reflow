@@ -6,7 +6,7 @@ If you are reviewing the project for the first time, **do not read the files str
 
 ## Start here
 
-1. [`52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`](52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md) — locally validated exact-scope authenticated exception-case disposition workflow; repository closure pending.
+1. [`52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`](52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md) — merged exact-scope authenticated exception-case disposition workflow with exact PR/main CI closure evidence.
 2. [`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) — merged explicit Razorpay Instant Settlement parent/payout ingestion and payout-level bank-proof gate with exact PR/main CI closure evidence.
 3. [`50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`](50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md) — merged Control Tower keyset/cursor pagination and long-history scalability gate with exact PR/main CI closure evidence.
 4. [`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — merged request telemetry, bounded metrics and durable operator-access audit gate with exact PR/main CI closure evidence.
@@ -82,7 +82,7 @@ If you are reviewing the project for the first time, **do not read the files str
 - [`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — merged production observability/operator-audit contract.
 - [`50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`](50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md) — merged Control Tower long-history pagination contract.
 - [`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) — merged explicit Razorpay Instant Settlement payout-proof contract.
-- [`52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`](52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md) — authenticated exact-scope exception-case disposition workflow contract; local validation complete, repository closure pending.
+- [`52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`](52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md) — merged authenticated exact-scope exception-case disposition workflow contract.
 
 ## Execution and submission
 
@@ -98,7 +98,7 @@ If you are reviewing the project for the first time, **do not read the files str
 If two planning documents conflict, use this order:
 
 1. implementation + tests
-2. Gate 52 authenticated operator case-workflow contract (`52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`) while repository closure is pending
+2. merged Gate 52 authenticated operator case-workflow contract (`52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`)
 3. merged Razorpay Instant Settlement payout-proof contract (`51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`)
 4. merged Control Tower long-history pagination contract (`50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`)
 5. merged production observability/operator-audit contract (`49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`)
