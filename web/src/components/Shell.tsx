@@ -33,7 +33,7 @@ export function Shell({ children }: { children: ReactNode }) {
     <aside className="sidebar">
       <div className="brand-lockup">
         <div className="brand-mark">RF</div>
-        <div><strong>ReFlow</strong><span>Finance truth compiler</span></div>
+        <div><strong>ReFlow</strong><span>Settlement reconciliation</span></div>
       </div>
       <nav className="primary-nav" aria-label="Primary navigation">
         {nav.map(([label, path, Icon]) => <NavLink key={path} to={`${path}?scope=${encodeURIComponent(scopeId)}`} end={path === '/'} className={({ isActive }) => isActive ? 'nav-link nav-active' : 'nav-link'}><Icon size={17} /><span>{label}</span></NavLink>)}
@@ -43,7 +43,7 @@ export function Shell({ children }: { children: ReactNode }) {
     </aside>
     <div className="workspace">
       <header className="topbar">
-        <div className="topbar-title"><span className="eyebrow">{demoMode ? "Finance close" : "Operator Control Tower"}</span><strong>{demoMode ? "Synthetic workload · real proof engine" : "Evidence, proofs, exceptions"}</strong></div>
+        <div className="topbar-title"><span className="eyebrow">{demoMode ? "Finance close" : "Operator Control Tower"}</span><strong>{demoMode ? "Settlement verification workspace" : "Evidence, proofs, exceptions"}</strong></div>
         {!demoMode && <form className="scope-form" onSubmit={apply}>
           <label htmlFor="scope-id">Active scope</label>
           <div className="scope-input-wrap"><input id="scope-id" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck={false} /><button type="submit">Apply</button></div>

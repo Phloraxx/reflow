@@ -91,6 +91,7 @@ type ProofDetail = {
     narration: string
   }>
   source_envelope_count: number
+  ai_investigatable: boolean
 }
 
 
@@ -110,6 +111,21 @@ type RazorpayProbe = {
 }
 
 type AiStatus = { provider: string; configured: boolean; model: string | null }
+type InvestigationResult = {
+  provider: AiStatus
+  settlement_id: string
+  case_id: string
+  result_id: string
+  status: string
+  next_action: string
+  hypothesis: string | null
+  request_source_kind: string | null
+  citations: string[]
+  financial_claims: Array<{ fact: string; amount: { display: string } }>
+  trace: Array<{ sequence: number; tool: string; outcome: string; returned_refs: string[] }>
+  rejection_reason: string | null
+  authority: string
+}
 type SchemaAdapterResult = {
   provider: AiStatus
   source_columns: string[]
@@ -181,6 +197,8 @@ export function PitchDemoPage() {
   const [razorpayStatus, setRazorpayStatus] = useState<RazorpayStatus | null>(null)
   const [razorpayProbe, setRazorpayProbe] = useState<RazorpayProbe | null>(null)
   const [razorpayRunning, setRazorpayRunning] = useState(false)
+  const [investigation, setInvestigation] = useState<InvestigationResult | null>(null)
+  const [investigationRunning, setInvestigationRunning] = useState(false)
 
   async function refreshStatus() {
     setStatus(await json<DemoStatus>('/api/v1/demo/status'))
@@ -193,7 +211,7 @@ export function PitchDemoPage() {
   }, [])
 
   async function generate() {
-    setError(null); setRows([]); setSelected(null); setEvents([])
+    setError(null); setRows([]); setSelected(null); setEvents([]); setInvestigation(null)
     const next = await json<DemoStatus>('/api/v1/demo/generate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ settlement_count: count, profile, world_seed: worldSeed, observation_seed: observationSeed }),
@@ -227,11 +245,24 @@ export function PitchDemoPage() {
 
   async function reset() {
     await json('/api/v1/demo/reset', { method: 'POST' })
-    setStatus(defaultStatus); setRows([]); setSelected(null); setEvents([]); setError(null)
+    setStatus(defaultStatus); setRows([]); setSelected(null); setEvents([]); setError(null); setInvestigation(null)
   }
 
   async function openProof(settlementId: string) {
+    setInvestigation(null)
     setSelected(await json<ProofDetail>(`/api/v1/demo/settlements/${encodeURIComponent(settlementId)}`))
+  }
+
+  async function investigate() {
+    if (!selected) return
+    setInvestigationRunning(true); setError(null)
+    try {
+      setInvestigation(await json<InvestigationResult>(`/api/v1/demo/investigate/${encodeURIComponent(selected.settlement_id)}`, { method: 'POST' }))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Exception investigation failed')
+    } finally {
+      setInvestigationRunning(false)
+    }
   }
 
   async function probeRazorpay() {
@@ -264,14 +295,14 @@ export function PitchDemoPage() {
 
   return <section className="pitch-page">
     <header className="pitch-header">
-      <div><span className="eyebrow">Reconciliation run</span><h1>Close a Razorpay-shaped settlement batch</h1><p>Generate a reproducible workload, reconcile it, inspect the exceptions, then unlock ground truth.</p></div>
+      <div><span className="eyebrow">Reconciliation run</span><h1>Reconcile a month of settlement evidence</h1><p>Generate a reproducible workload, reconcile it, inspect the exceptions, then unlock ground truth.</p></div>
       <button className="ghost-action" onClick={() => void reset()} disabled={running}><RotateCcw size={15} /> Reset</button>
     </header>
 
     {error && <div className="pitch-error"><ShieldAlert size={16} />{error}</div>}
 
     <section className="dataset-builder">
-      <div className="builder-copy"><span className="eyebrow">Workload</span><strong>Synthetic, reproducible, scored after the run</strong><small>Ground truth is never passed to the reconciliation engine.</small></div>
+      <div className="builder-copy"><span className="eyebrow">Workload</span><strong>Reproducible evaluation batch</strong><small>Ground truth stays sealed until the run is complete.</small></div>
       <label>Settlements<select value={count} onChange={(e) => setCount(Number(e.target.value))} disabled={running}><option value={100}>100</option><option value={250}>250</option><option value={500}>500</option><option value={1000}>1,000</option></select></label>
       <label>Profile<select value={profile} onChange={(e) => setProfile(e.target.value)} disabled={running}><option value="clean">Normal month</option><option value="reconciliation_adversarial">Adversarial close</option><option value="source_schema_adversarial">Schema drift</option></select></label>
       <label>World seed<input type="number" value={worldSeed} onChange={(e) => setWorldSeed(Number(e.target.value))} disabled={running} /></label>
@@ -289,7 +320,7 @@ export function PitchDemoPage() {
       <section className="dataset-proofbar">
         <div><span>Observed records</span><strong>{status.dataset.observed_record_count.toLocaleString()}</strong></div>
         <div><span>Settlements</span><strong>{status.dataset.settlement_count.toLocaleString()}</strong></div>
-        <div><span>Injected corruptions</span><strong>{status.dataset.corruption_count.toLocaleString()}</strong></div>
+        <div><span>Observed source anomalies</span><strong>{status.dataset.corruption_count.toLocaleString()}</strong></div>
         <div className="hash-cell"><span>Dataset SHA-256</span><code title={status.dataset.dataset_sha256}>{compactHash(status.dataset.dataset_sha256)}</code></div>
         <div className="hash-cell truth-lock"><span><LockKeyhole size={12} /> Truth commitment</span><code title={status.dataset.truth_commitment_sha256}>{compactHash(status.dataset.truth_commitment_sha256)}</code></div>
       </section>
@@ -329,13 +360,18 @@ export function PitchDemoPage() {
       <div className="proof-meta"><span>UTR <code>{selected.settlement_utr ?? 'missing'}</code></span><span>{selected.components.length} recon components</span><span>{selected.source_envelope_count} source envelopes cited</span></div>
       <div className="component-table"><div className="component-head"><span>Entity</span><span>Gross</span><span>Fee</span><span>Tax</span><span>Settlement effect</span></div>{selected.components.slice(0, 12).map((item) => <div className="component-row" key={item.recon_id}><span><b>{item.entity_kind}</b><code>{item.entity_id}</code></span><strong>{item.gross.display}</strong><span>{item.fee.display}</span><span>{item.tax.display}</span><strong>{item.settlement_effect.display}</strong></div>)}</div>
       {selected.reason_codes.length > 0 && <div className="reason-list">{selected.reason_codes.map((reason) => <code key={reason}>{reason}</code>)}</div>}
+      {selected.ai_investigatable && <div className="investigation-panel">
+        <div className="investigation-head"><div><span className="eyebrow">Exception investigation</span><strong>Investigate this exception</strong><small>DeepSeek can read this case, its proof and cited source records. It cannot mark a settlement reconciled.</small></div><div className={`ai-provider-state ${aiStatus?.configured ? 'ai-ready' : ''}`}><span>{aiStatus?.provider ?? 'deepseek'}</span><strong>{aiStatus?.configured ? aiStatus.model : 'API key not configured'}</strong></div></div>
+        <button className="schema-action" disabled={!aiStatus?.configured || investigationRunning} onClick={() => void investigate()}>{investigationRunning ? 'Investigating…' : 'Ask DeepSeek to investigate'}</button>
+        {investigation && <div className="investigation-result"><div className="investigation-verdict"><div><span className="eyebrow">Validated proposal</span><strong>{investigation.next_action.replaceAll('_', ' ')}</strong></div><StatusPill status={investigation.status} /></div>{investigation.hypothesis && <p>{investigation.hypothesis}</p>}<div className="investigation-meta"><span>Case <code>{investigation.case_id}</code></span><span>Requested source <strong>{investigation.request_source_kind ?? '—'}</strong></span><span>{investigation.citations.length} cited envelope{investigation.citations.length === 1 ? '' : 's'}</span></div><div className="tool-trace">{investigation.trace.map((item) => <div key={`${item.sequence}-${item.tool}`}><b>{item.sequence}</b><code>{item.tool}</code><StatusPill status={item.outcome} /><span>{item.returned_refs.length} refs</span></div>)}</div><small>{investigation.authority}</small>{investigation.rejection_reason && <p className="pitch-error">{investigation.rejection_reason}</p>}</div>}
+      </div>}
     </section>}
 
     {status.run && !status.run.source_rejection && <section className="schema-lab">
       <div className="schema-head"><div><span className="eyebrow">Schema drift</span><h2>Bank export changed</h2><p>Raw rows are retained first. The model can propose a declarative mapping; deterministic checks still decide whether it is safe enough for review.</p></div><div className={`ai-provider-state ${aiStatus?.configured ? 'ai-ready' : ''}`}><span>{aiStatus?.provider ?? 'deepseek'}</span><strong>{aiStatus?.configured ? aiStatus.model : 'API key not configured'}</strong></div></div>
-      <div className="schema-columns"><div><span>Incoming columns</span><code>Txn · Credit · Date · Memo · Reference</code></div><div><span>Canonical target</span><code>bank_entry_id · amount_paise · occurred_at · narration · utr</code></div></div>
-      <button className="schema-action" disabled={!aiStatus?.configured || schemaRunning} onClick={() => void runSchemaAdapter()}>{schemaRunning ? 'Asking model…' : 'Propose adapter with AI'}</button>
-      {schemaResult && <div className="schema-result"><div className="schema-verdict"><div><span className="eyebrow">Model proposal</span><strong>{schemaResult.mappings.length} constrained mappings</strong></div><div><StatusPill status={schemaResult.validation_state ?? 'unknown'} /><span className={schemaResult.financial_control_verified ? 'control-ok' : 'control-bad'}>{schemaResult.financial_control_verified ? `Financial control verified: ${schemaResult.expected_total.display}` : 'Financial control not verified'}</span></div></div><div className="mapping-table">{schemaResult.mappings.map((mapping) => <div key={mapping.target_field}><code>{mapping.source_column ?? String(mapping.constant)}</code><span>→</span><strong>{mapping.target_field}</strong><small>{mapping.transform}</small></div>)}</div><p>{schemaResult.rejection_reason ?? 'Proposal passed deterministic validation.'}</p></div>}
+      <div className="schema-columns"><div><span>Incoming columns</span><code>Txn · Credit · Date · Memo · Reference · Timezone</code></div><div><span>Canonical target</span><code>bank_entry_id · amount_paise · occurred_at · narration · utr</code></div></div>
+      <button className="schema-action" disabled={!aiStatus?.configured || schemaRunning} onClick={() => void runSchemaAdapter()}>{schemaRunning ? 'Asking DeepSeek…' : 'Ask DeepSeek to map columns'}</button>
+      {schemaResult && <div className="schema-result"><div className="schema-verdict"><div><span className="eyebrow">Suggested mapping</span><strong>{schemaResult.mappings.length} constrained mappings</strong></div><div><StatusPill status={schemaResult.validation_state ?? 'unknown'} /><span className={schemaResult.financial_control_verified ? 'control-ok' : 'control-bad'}>{schemaResult.financial_control_verified ? `Financial control verified: ${schemaResult.expected_total.display}` : 'Financial control not verified'}</span></div></div><div className="mapping-table">{schemaResult.mappings.map((mapping) => <div key={mapping.target_field}><code>{mapping.source_column ?? String(mapping.constant)}</code><span>→</span><strong>{mapping.target_field}</strong><small>{mapping.transform}</small></div>)}</div><p>{schemaResult.rejection_reason ?? 'Proposal passed deterministic validation.'}</p></div>}
     </section>}
 
     {status.can_unlock && <button className="truth-button" onClick={() => void unlock()}><Unlock size={18} /><span><strong>Unlock hidden ground truth</strong><small>Score the completed run only now.</small></span></button>}

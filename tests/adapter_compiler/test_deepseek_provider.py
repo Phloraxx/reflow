@@ -91,3 +91,6 @@ def test_deepseek_responses_schema_proposal_is_still_deterministically_validated
     assert isinstance(schema_format, Mapping)
     assert schema_format["type"] == "json_schema"
     assert "strict" not in schema_format
+    assert request["reasoning"] == {"effort": "none"}
+    assert request["max_output_tokens"] == 1200
+    assert "Python strptime directives" in str(request["instructions"])

@@ -17,8 +17,24 @@ from reflow.adapter_compiler.model_provider import (
     adapter_provider_status,
 )
 from reflow.adapter_compiler.proposal_pipeline import propose_and_validate_journaled
-from reflow.bank_proof import BankReceiptProof, iter_bank_receipts
+from reflow.bank_proof import BankReceiptProof, BankReceiptStatus, iter_bank_receipts
+from reflow.control_plane import (
+    DeliveryMode,
+    build_balance_control,
+    build_close_readiness,
+    build_evidence_coverage,
+    build_reconciliation_run,
+    make_reconciliation_policy_version,
+    make_reconciliation_scope,
+    make_source_delivery_manifest,
+)
+from reflow.exception_cases import InMemoryExceptionCaseLedger
 from reflow.ingestion import AdapterError, CanonicalBatch, ObservedBatch, ingest_observed_batch
+from reflow.investigation import run_investigation
+from reflow.investigation_model_provider import (
+    investigation_provider_from_environment,
+    investigation_provider_status,
+)
 from reflow.journal import InMemoryJournal, JournalConflictError
 from reflow.money_graph import MoneyGraph, build_money_graph
 from reflow.razorpay_acceptance import RazorpayAcceptanceClient, RazorpayAcceptanceError
@@ -523,6 +539,10 @@ class PitchDemoService:
             "components": components,
             "bank_entries": bank_rows,
             "source_envelope_count": len(proof.source_envelope_ids),
+            "ai_investigatable": (
+                proof.status is not ReconciliationStatus.PROVEN_RECONCILED
+                and len(proof.source_envelope_ids) <= 64
+            ),
         }
 
     def razorpay_status(self) -> dict[str, object]:
@@ -595,22 +615,200 @@ class PitchDemoService:
     def ai_status(self) -> dict[str, object]:
         return adapter_provider_status()
 
+    def investigate_settlement(self, settlement_id: str) -> dict[str, object]:
+        if self._batch is None or self._journal is None:
+            raise RuntimeError("run reconciliation before investigating an exception")
+        proof = next(
+            (item for item in self._proofs if str(item.settlement_id) == settlement_id),
+            None,
+        )
+        if proof is None:
+            raise KeyError(settlement_id)
+        if proof.status is ReconciliationStatus.PROVEN_RECONCILED:
+            raise RuntimeError("proven settlements do not require exception investigation")
+        if len(proof.source_envelope_ids) > 64:
+            raise RuntimeError("selected proof exceeds the bounded AI evidence budget")
+
+        scope = make_reconciliation_scope(
+            merchant_account_id="merchant_pitch_demo",
+            provider="razorpay",
+            provider_account_id="rzp_pitch_demo",
+            bank_account_id="bank_pitch_demo",
+            currency=domain.Currency.INR,
+            channel="payments",
+        )
+        policy = make_reconciliation_policy_version(
+            version_label="pitch-demo-v1",
+            required_source_kinds=tuple(domain.SourceKind),
+            reporting_timezone="UTC",
+            bank_wait_sla_seconds=3600,
+            materiality_thresholds_paise=(50_000, 500_000, 1_000_000),
+        )
+        period_start = min(item.processed_at for item in self._batch.settlements) - timedelta(
+            days=2
+        )
+        period_end = max(item.processed_at for item in self._batch.settlements) + timedelta(days=2)
+        evaluated_at = max(
+            period_end,
+            max(item.knowledge_cutoff for item in self._proofs),
+        ) + timedelta(days=1)
+        bank_complete = proof.status is not ReconciliationStatus.PENDING_BANK_CREDIT
+        manifests = []
+        for source_kind in domain.SourceKind:
+            envelope_ids = tuple(
+                link.envelope_id
+                for link in self._batch.source_links
+                if link.source_kind is source_kind
+            )
+            complete = bank_complete if source_kind is domain.SourceKind.BANK else True
+            manifests.append(
+                make_source_delivery_manifest(
+                    scope=scope,
+                    source_kind=source_kind,
+                    source_account_id=scope.account_for(source_kind),
+                    delivery_mode=DeliveryMode.SNAPSHOT,
+                    period_start=period_start,
+                    period_end=period_end,
+                    reporting_timezone="UTC",
+                    expected_by=period_end,
+                    evaluated_at=evaluated_at,
+                    received_at=evaluated_at,
+                    watermark_at=period_end if complete else None,
+                    is_complete=complete,
+                    delivered_envelope_ids=envelope_ids,
+                    adapter_version="pitch-normalized-v1",
+                    schema_fingerprint=f"pitch-{source_kind.value}-v1",
+                )
+            )
+        manifest_tuple = tuple(manifests)
+        coverage = build_evidence_coverage(
+            scope=scope,
+            batch=self._batch,
+            manifests=manifest_tuple,
+            proof_versions=self._proofs,
+            assignments=(),
+        )
+        provider_activity = domain.Money(
+            sum(item.composition.settlement_amount.amount_paise for item in self._proofs)
+        )
+        bank_proven = domain.Money(
+            sum(
+                item.bank.observed_bank_credit.amount_paise
+                for item in self._proofs
+                if item.bank.status is BankReceiptStatus.PROVEN
+            )
+        )
+        balance = build_balance_control(
+            scope=scope,
+            policy=policy,
+            period_start=period_start,
+            period_end=period_end,
+            reporting_timezone="UTC",
+            opening_as_of=period_start,
+            closing_as_of=period_end,
+            opening_position=domain.Money.zero(),
+            provider_activity=provider_activity,
+            bank_proven_payouts=bank_proven,
+            authoritative_adjustments=domain.Money.zero(),
+            observed_closing_position=provider_activity - bank_proven,
+        )
+        close = build_close_readiness(
+            policy=policy,
+            manifests=manifest_tuple,
+            proof_versions=self._proofs,
+            coverage=coverage,
+            balance=balance,
+        )
+        run = build_reconciliation_run(
+            scope=scope,
+            policy=policy,
+            manifests=manifest_tuple,
+            batch=self._batch,
+            proof_versions=self._proofs,
+            coverage=coverage,
+            balance=balance,
+            close_readiness=close,
+            knowledge_cutoff=evaluated_at,
+            started_at=evaluated_at + timedelta(seconds=1),
+            completed_at=evaluated_at + timedelta(seconds=2),
+            code_build_sha="pitch-demo",
+        )
+        case_ledger = InMemoryExceptionCaseLedger()
+        case_update = case_ledger.apply_run(
+            run=run,
+            policy=policy,
+            manifests=manifest_tuple,
+            proof_versions=self._proofs,
+        )
+        observation = next(
+            (
+                case_ledger.observation_by_id(observation_id)
+                for observation_id in case_update.created_observation_ids
+                if case_ledger.observation_by_id(observation_id).settlement_id
+                == proof.settlement_id
+            ),
+            None,
+        )
+        if observation is None:
+            raise RuntimeError("selected non-green proof did not produce an exception case")
+        result = run_investigation(
+            investigation_provider_from_environment(),
+            case_state=case_ledger.state(observation.case_id),
+            observation=observation,
+            proof=proof,
+            journal=self._journal,
+            as_of=run.completed_at + timedelta(seconds=3),
+        )
+        return {
+            "provider": investigation_provider_status(),
+            "settlement_id": settlement_id,
+            "case_id": str(result.case_id),
+            "result_id": str(result.id),
+            "status": result.status.value,
+            "next_action": result.next_action.value,
+            "hypothesis": result.hypothesis,
+            "request_source_kind": (
+                None if result.request_source_kind is None else result.request_source_kind.value
+            ),
+            "citations": [str(value) for value in result.citations],
+            "financial_claims": [
+                {
+                    "fact": claim.fact.value,
+                    "amount": _money(claim.amount),
+                }
+                for claim in result.financial_claims
+            ],
+            "trace": [
+                {
+                    "sequence": item.sequence,
+                    "tool": item.tool.value,
+                    "outcome": item.outcome.value,
+                    "returned_refs": list(item.returned_refs),
+                }
+                for item in result.trace
+            ],
+            "rejection_reason": result.rejection_reason,
+            "authority": "read_only_evidence; no financial-truth mutation",
+        }
+
     def propose_bank_schema_adapter(self) -> dict[str, object]:
         provider = adapter_provider_from_environment()
         rows = (
             {
                 "Txn": "bank_export_001",
                 "Credit": "2417.82",
-                "Date": "04/09/2026",
+                "Date": "31/08/2026",
                 "Memo": "RAZORPAY SETTLEMENT",
                 "Reference": "UTR-DEMO-001",
+                "Timezone": "Asia/Kolkata",
             },
             {
                 "Txn": "bank_export_002",
                 "Credit": "998.82",
-                "Date": "04/09/2026",
+                "Date": "02/09/2026",
                 "Memo": "RAZORPAY SETTLEMENT",
                 "Reference": "UTR-DEMO-002",
+                "Timezone": "Asia/Kolkata",
             },
             {
                 "Txn": "bank_export_003",
@@ -618,6 +816,7 @@ class PitchDemoService:
                 "Date": "04/09/2026",
                 "Memo": "RAZORPAY SETTLEMENT",
                 "Reference": "UTR-DEMO-003",
+                "Timezone": "Asia/Kolkata",
             },
         )
         control_total = 241_782 + 99_882 + 125_000

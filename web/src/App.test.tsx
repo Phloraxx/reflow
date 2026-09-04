@@ -124,7 +124,7 @@ describe('ReFlow control tower', () => {
       '/api/v1/demo/razorpay-status': { configured: false, mode: 'test', api: 'https://api.razorpay.com/v1' },
     })
     renderAt('/demo?scope=scope_ui')
-    expect(await screen.findByText('Close a Razorpay-shaped settlement batch')).toBeInTheDocument()
+    expect(await screen.findByText('Reconcile a month of settlement evidence')).toBeInTheDocument()
     expect(screen.getByText('60,227')).toBeInTheDocument()
     expect(screen.getByText('317 automatic')).toBeInTheDocument()
     expect(screen.getByText('323 automatic')).toBeInTheDocument()

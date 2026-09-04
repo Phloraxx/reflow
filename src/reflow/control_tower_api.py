@@ -457,6 +457,15 @@ def create_control_tower_app(
             except (ValueError, RuntimeError) as exc:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+        @app.post("/api/v1/demo/investigate/{settlement_id}")
+        def demo_investigate(settlement_id: str) -> dict[str, object]:
+            try:
+                return pitch_demo.investigate_settlement(settlement_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="demo settlement not found") from exc
+            except (ValueError, RuntimeError) as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
     @app.get("/api/v1/scopes/{scope_id}/overview")
     def overview(request: Request, scope_id: str) -> dict[str, object]:
         scope = authorized_scope(

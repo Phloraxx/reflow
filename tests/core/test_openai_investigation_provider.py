@@ -7,6 +7,7 @@ import pytest
 from test_investigation import AS_OF, _fixture
 
 import reflow.openai_investigation_provider as provider_module
+from reflow.deepseek_investigation_provider import DeepSeekInvestigationProvider
 from reflow.domain import SourceEnvelopeId, SourceKind
 from reflow.investigation import (
     MAX_UNTRUSTED_TEXT_VALUE_CHARS,
@@ -72,6 +73,45 @@ def _proposal(fixture, *, citation: str, amount: int):
         "next_action": "REQUEST_HUMAN_REVIEW",
         "request_source_kind": None,
     }
+
+
+def test_deepseek_uses_one_shot_bounded_read_only_evidence_packet() -> None:
+    fixture = _fixture(bank_amount=90_000)
+    source_id = fixture.proof.source_envelope_ids[0]
+    transport = ScriptedTransport(
+        _final("resp_1", _proposal(fixture, citation=str(source_id), amount=7_100))
+    )
+    provider = DeepSeekInvestigationProvider(api_key="test-key", transport=transport)
+    result = run_investigation(
+        provider,
+        case_state=fixture.case_state,
+        observation=fixture.observation,
+        proof=fixture.proof,
+        journal=fixture.journal,
+        as_of=AS_OF,
+    )
+    assert result.next_action is InvestigationAction.REQUEST_HUMAN_REVIEW
+    assert len(result.trace) == 2 + len(fixture.proof.source_envelope_ids)
+    assert {item.tool.value for item in result.trace} == {
+        "CASE_SNAPSHOT",
+        "PROOF_SNAPSHOT",
+        "SOURCE_EVIDENCE",
+    }
+    assert len(transport.calls) == 1
+    payload = transport.calls[0][2]
+    assert payload["model"] == "deepseek-v4-flash"
+    assert payload["reasoning"] == {"effort": "none"}
+    assert payload["max_output_tokens"] == 1800
+    assert "tools" not in payload
+    assert "tool_choice" not in payload
+    assert "store" not in payload
+    assert "parallel_tool_calls" not in payload
+    assert "include" not in payload
+    assert payload["text"]["format"]["type"] == "json_schema"
+    assert "strict" not in payload["text"]["format"]
+    packet = json.loads(payload["input"])
+    assert packet["context"]["case_id"] == str(fixture.case_state.case_id)
+    assert len(packet["source_evidence"]) == len(fixture.proof.source_envelope_ids)
 
 
 def test_provider_requires_secure_absolute_base_url() -> None:

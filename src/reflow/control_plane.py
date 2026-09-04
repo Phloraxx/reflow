@@ -1015,7 +1015,7 @@ def build_evidence_coverage(
             raise ControlPlaneError(
                 f"canonical evidence has no source manifest for {link.source_kind.value}"
             )
-        if link.envelope_id not in link_manifest.effective_envelope_ids:
+        if expected.get(link.envelope_id) != link.source_kind:
             raise ControlPlaneError("canonical evidence is outside its source delivery manifest")
 
     amounts = _canonical_amounts(batch, scope)
@@ -1716,11 +1716,15 @@ def build_reconciliation_run(
     proof_index = _index_proof_versions(batch, proof_versions)
     proof_ids = tuple(sorted((proof.id for proof in proof_index.values()), key=str))
 
+    effective_envelopes = {
+        source_kind: frozenset(manifest.effective_envelope_ids)
+        for source_kind, manifest in manifest_index.items()
+    }
     for link in batch.source_links:
         link_manifest = manifest_index.get(link.source_kind)
         if (
             link_manifest is None
-            or link.envelope_id not in link_manifest.effective_envelope_ids
+            or link.envelope_id not in effective_envelopes[link.source_kind]
         ):
             raise ControlPlaneError("run canonical evidence is outside source delivery manifests")
 
