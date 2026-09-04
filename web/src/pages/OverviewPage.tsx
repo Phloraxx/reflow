@@ -1,9 +1,7 @@
 import { AlertOctagon, ArrowRight, CheckCircle2, Database, Scale } from 'lucide-react'
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { scopedPath, useApi } from '../api'
 import { ArtifactId } from '../components/ArtifactId'
-import { JudgeDemoPanel } from '../components/JudgeDemoPanel'
 import { DataState } from '../components/StateView'
 import { StatusPill } from '../components/StatusPill'
 import { useScope } from '../scope'
@@ -11,10 +9,8 @@ import type { Overview } from '../types'
 
 export function OverviewPage() {
   const { scopeId } = useScope()
-  const [demoEpoch, setDemoEpoch] = useState(0)
-  const state = useApi<Overview>(scopedPath(scopeId, `/overview?demo_epoch=${demoEpoch}`))
+  const state = useApi<Overview>(scopedPath(scopeId, '/overview'))
   return <section className="page-stack">
-    <JudgeDemoPanel onChanged={() => setDemoEpoch((value) => value + 1)} />
     <div className="page-heading"><div><span className="eyebrow">Run / Close Overview</span><h1>Can finance close this scope?</h1></div><p>Every number below is a projection of immutable proof/control artifacts.</p></div>
     <DataState state={state}>{(data) => data.has_current_run && data.run ? <>
       <div className={`close-hero close-${data.run.close_status === 'ready' ? 'ready' : 'blocked'}`}>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -13,6 +14,7 @@ __all__ = [
     "BankReceiptProof",
     "BankReceiptProofError",
     "BankReceiptStatus",
+    "iter_bank_receipts",
     "prove_all_bank_receipts",
 ]
 
@@ -151,11 +153,7 @@ def _prove_from_candidates(
     )
     early_entries = tuple(
         sorted(
-            (
-                entry
-                for entry in exact_utr_entries
-                if entry.occurred_at < settlement.processed_at
-            ),
+            (entry for entry in exact_utr_entries if entry.occurred_at < settlement.processed_at),
             key=lambda row: str(row.id),
         )
     )
@@ -165,9 +163,7 @@ def _prove_from_candidates(
         ()
         if identity_ambiguous
         else tuple(
-            entry
-            for entry in exact_utr_entries
-            if entry.occurred_at >= settlement.processed_at
+            entry for entry in exact_utr_entries if entry.occurred_at >= settlement.processed_at
         )
     )
 
@@ -248,8 +244,8 @@ def _prove_bank_receipt(
     )
 
 
-def prove_all_bank_receipts(batch: CanonicalBatch) -> tuple[BankReceiptProof, ...]:
-    """Prove all standard settlements with batch-global UTR identity guarantees."""
+def iter_bank_receipts(batch: CanonicalBatch) -> Iterator[BankReceiptProof]:
+    """Yield standard settlement proofs with batch-global UTR identity guarantees."""
     if not batch.source_links:
         raise BankReceiptProofError("bank proof requires journal-backed source provenance")
     source_index = batch.source_index()
@@ -276,21 +272,15 @@ def prove_all_bank_receipts(batch: CanonicalBatch) -> tuple[BankReceiptProof, ..
         key = _amount_key(entry.amount)
         bank_amount_counts[key] = bank_amount_counts.get(key, 0) + 1
 
-    proofs: list[BankReceiptProof] = []
     for settlement_id in sorted(settlements, key=str):
         settlement = settlements[settlement_id]
-        exact_entries = (
-            ()
-            if settlement.utr is None
-            else tuple(bank_by_utr.get(settlement.utr, ()))
-        )
+        exact_entries = () if settlement.utr is None else tuple(bank_by_utr.get(settlement.utr, ()))
         exact_same_amount_count = sum(
             1 for entry in exact_entries if entry.amount == settlement.amount
         )
         same_amount_nonidentity_count = max(
             0,
-            bank_amount_counts.get(_amount_key(settlement.amount), 0)
-            - exact_same_amount_count,
+            bank_amount_counts.get(_amount_key(settlement.amount), 0) - exact_same_amount_count,
         )
         conflicting_settlement_source_ids: tuple[domain.SourceEnvelopeId, ...] = ()
         if settlement.utr is not None and settlement.utr in reused_utrs:
@@ -308,14 +298,15 @@ def prove_all_bank_receipts(batch: CanonicalBatch) -> tuple[BankReceiptProof, ..
                     key=str,
                 )
             )
-        proofs.append(
-            _prove_from_candidates(
-                settlement,
-                exact_entries,
-                same_amount_nonidentity_count=same_amount_nonidentity_count,
-                source_index=source_index,
-                conflicting_settlement_source_ids=conflicting_settlement_source_ids,
-            )
+        yield _prove_from_candidates(
+            settlement,
+            exact_entries,
+            same_amount_nonidentity_count=same_amount_nonidentity_count,
+            source_index=source_index,
+            conflicting_settlement_source_ids=conflicting_settlement_source_ids,
         )
 
-    return tuple(proofs)
+
+def prove_all_bank_receipts(batch: CanonicalBatch) -> tuple[BankReceiptProof, ...]:
+    """Prove all standard settlements with batch-global UTR identity guarantees."""
+    return tuple(iter_bank_receipts(batch))

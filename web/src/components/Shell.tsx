@@ -1,9 +1,10 @@
-import { Activity, FlaskConical, Layers3, ListChecks, ReceiptText, ShieldCheck } from 'lucide-react'
+import { Activity, FlaskConical, Layers3, ListChecks, PlayCircle, ReceiptText, ShieldCheck } from 'lucide-react'
 import { FormEvent, ReactNode, useState } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useScope } from '../scope'
 
 const nav = [
+  ['Live Run', '/demo', PlayCircle],
   ['Overview', '/', Activity],
   ['Proofs', '/proofs', ReceiptText],
   ['Exceptions', '/exceptions', ListChecks],
@@ -16,6 +17,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState(scopeId)
   const navigate = useNavigate()
   const location = useLocation()
+  const demoMode = location.pathname === "/demo"
 
   function apply(event: FormEvent) {
     event.preventDefault()
@@ -41,12 +43,12 @@ export function Shell({ children }: { children: ReactNode }) {
     </aside>
     <div className="workspace">
       <header className="topbar">
-        <div className="topbar-title"><span className="eyebrow">Operator Control Tower</span><strong>Evidence, proofs, exceptions</strong></div>
-        <form className="scope-form" onSubmit={apply}>
+        <div className="topbar-title"><span className="eyebrow">{demoMode ? "Finance close" : "Operator Control Tower"}</span><strong>{demoMode ? "Synthetic workload · real proof engine" : "Evidence, proofs, exceptions"}</strong></div>
+        {!demoMode && <form className="scope-form" onSubmit={apply}>
           <label htmlFor="scope-id">Active scope</label>
           <div className="scope-input-wrap"><input id="scope-id" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck={false} /><button type="submit">Apply</button></div>
-        </form>
-        <div className="mode-badge"><span className="pulse-dot" />READ ONLY</div>
+        </form>}
+        <div className="mode-badge"><span className="pulse-dot" />{demoMode ? "EVALUATION" : "READ ONLY"}</div>
       </header>
       <main className="content">{children}</main>
     </div>

@@ -24,6 +24,7 @@ from .razorpay_integration import (
 )
 
 RAZORPAY_API_ROOT = "https://api.razorpay.com/v1"
+PAYMENT_PAGE_SIZE = 100
 SETTLEMENT_PAGE_SIZE = 100
 INSTANT_SETTLEMENT_PAGE_SIZE = 100
 RECON_PAGE_SIZE = 1000
@@ -73,9 +74,7 @@ def _default_transport(
         with opener.open(request, timeout=timeout_seconds) as response:  # nosec B310
             body = response.read(max_bytes + 1)
     except (urllib.error.URLError, TimeoutError) as exc:
-        raise RazorpayAcceptanceError(
-            f"Razorpay API request failed: {type(exc).__name__}"
-        ) from exc
+        raise RazorpayAcceptanceError(f"Razorpay API request failed: {type(exc).__name__}") from exc
     if not isinstance(body, bytes):
         raise RazorpayAcceptanceError("Razorpay API response body must be bytes")
     if len(body) > max_bytes:
@@ -115,13 +114,12 @@ class RazorpayAcceptanceClient:
             raise RazorpayAcceptanceError("Razorpay key secret must be non-empty")
         if not self.account_id or self.account_id != self.account_id.strip():
             raise RazorpayAcceptanceError("Razorpay account id must be non-empty and trimmed")
-        if (
-            not isinstance(self.evidence_origin, RazorpayEvidenceOrigin)
-            or self.evidence_origin not in {
-                RazorpayEvidenceOrigin.REAL_TEST_MODE,
-                RazorpayEvidenceOrigin.REAL_LIVE,
-            }
-        ):
+        if not isinstance(
+            self.evidence_origin, RazorpayEvidenceOrigin
+        ) or self.evidence_origin not in {
+            RazorpayEvidenceOrigin.REAL_TEST_MODE,
+            RazorpayEvidenceOrigin.REAL_LIVE,
+        }:
             raise RazorpayAcceptanceError("acceptance client requires a real evidence origin")
         expected_prefix = (
             "rzp_test_"
@@ -195,9 +193,7 @@ class RazorpayAcceptanceClient:
                 raise RazorpayAcceptanceError("Razorpay collection count does not match items")
             normalized: list[Mapping[str, object]] = []
             for item in items:
-                if not isinstance(item, Mapping) or not all(
-                    isinstance(key, str) for key in item
-                ):
+                if not isinstance(item, Mapping) or not all(isinstance(key, str) for key in item):
                     raise RazorpayAcceptanceError("Razorpay collection item must be an object")
                 normalized.append(dict(item))
             if len(rows) + len(normalized) > self.max_records:
@@ -219,6 +215,33 @@ class RazorpayAcceptanceClient:
                 raise RazorpayAcceptanceError("Razorpay pagination did not advance")
             skip += len(normalized)
         raise RazorpayAcceptanceError("Razorpay acceptance page limit exceeded")
+
+    def fetch_payments(
+        self,
+        *,
+        from_timestamp: int | None = None,
+        to_timestamp: int | None = None,
+    ) -> tuple[Mapping[str, object], ...]:
+        params: dict[str, int] = {}
+        if from_timestamp is not None:
+            if isinstance(from_timestamp, bool) or from_timestamp < 0:
+                raise RazorpayAcceptanceError("payment from timestamp is invalid")
+            params["from"] = from_timestamp
+        if to_timestamp is not None:
+            if isinstance(to_timestamp, bool) or to_timestamp < 0:
+                raise RazorpayAcceptanceError("payment to timestamp is invalid")
+            params["to"] = to_timestamp
+        if (
+            from_timestamp is not None
+            and to_timestamp is not None
+            and from_timestamp > to_timestamp
+        ):
+            raise RazorpayAcceptanceError("payment time range is inverted")
+        return self._fetch_collection(
+            path="/payments",
+            params=params,
+            page_size=PAYMENT_PAGE_SIZE,
+        )
 
     def fetch_settlements(
         self,

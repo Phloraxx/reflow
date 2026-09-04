@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -14,6 +15,7 @@ __all__ = [
     "CompositionProofError",
     "CompositionStatus",
     "SettlementCompositionProof",
+    "iter_settlement_compositions",
     "prove_all_settlement_compositions",
 ]
 
@@ -370,10 +372,10 @@ def _prove_settlement_composition(
     )
 
 
-def prove_all_settlement_compositions(
+def iter_settlement_compositions(
     batch: CanonicalBatch,
     graph: MoneyGraph,
-) -> tuple[SettlementCompositionProof, ...]:
+) -> Iterator[SettlementCompositionProof]:
     if not batch.source_links:
         raise CompositionProofError("settlement proof requires journal-backed source provenance")
     source_index = batch.source_index()
@@ -404,8 +406,8 @@ def prove_all_settlement_compositions(
     cross_settlement_claims = frozenset(cross_settlement_evidence)
     provenance_edge_index = _provenance_edge_index(graph)
 
-    return tuple(
-        _prove_settlement_composition(
+    for settlement_id in sorted(settlements, key=str):
+        yield _prove_settlement_composition(
             settlements[settlement_id],
             tuple(rows_by_settlement[settlement_id]),
             graph,
@@ -414,5 +416,10 @@ def prove_all_settlement_compositions(
             cross_settlement_evidence=cross_settlement_evidence,
             provenance_edge_index=provenance_edge_index,
         )
-        for settlement_id in sorted(settlements, key=str)
-    )
+
+
+def prove_all_settlement_compositions(
+    batch: CanonicalBatch,
+    graph: MoneyGraph,
+) -> tuple[SettlementCompositionProof, ...]:
+    return tuple(iter_settlement_compositions(batch, graph))

@@ -111,61 +111,25 @@ describe('ReFlow control tower', () => {
     expect(screen.getByText('12/12')).toBeInTheDocument()
   })
 
-  it('runs the local judge reconciliation action and renders engine outcomes', async () => {
-    let phase = 'ready'
-    const readyStatus = () => ({
-      enabled: true,
-      phase,
-      scope_id: 'scope_ui',
-      focus_case_id: phase === 'ready' ? null : 'case_pending',
-      focus_proof_id: phase === 'ready' ? null : 'proof_pending',
-      raw_record_count: 20,
-      settlement_count: 4,
-      outcomes: phase === 'ready' ? [] : [{
-        settlement_id: 'setl_demo_green',
-        label: 'Exact match',
-        amount_paise: 1000000,
-        amount_display: '₹10,000.00',
-        status: 'proven_reconciled',
-        composition_status: 'composition_proven',
-        bank_status: 'bank_receipt_proven',
-        residual_paise: 0,
-        residual_display: '₹0.00',
-        proof_id: 'proof_green',
-        version: 1,
-      }],
-      can_run: phase === 'ready',
-      can_add_bank: phase === 'initial_run',
-      can_rerun: false,
+  it('renders the large-run evaluation surface with locked-workload evidence and comparison', async () => {
+    mockFetch({
+      '/api/v1/demo/status': {
+        phase: 'truth_unlocked',
+        dataset: { settlement_count: 500, profile: 'reconciliation_adversarial', world_seed: 402, observation_seed: 1402, observed_record_count: 60227, source_counts: { merchant: 14779, razorpay_payments: 29559, razorpay_recon: 15029, razorpay_settlements: 500, bank: 360 }, dataset_sha256: 'a'.repeat(64), truth_commitment_sha256: 'b'.repeat(64), corruption_count: 14 },
+        run: { elapsed_seconds: 4.6, proof_pipeline_seconds: 0.46, settlements_per_second: 1087.31, graph_edges: 44837, proof_count: 500, status_counts: { proven_reconciled: 317, pending_bank_credit: 140, residual: 42, incomplete: 0, contradicted: 1 }, exception_count: 183, source_rejection: null },
+        truth_unlocked: true, can_generate: true, can_run: false, can_unlock: false,
+        evaluation: { truth_settlement_count: 500, truth_reconciled: 400, reflow: { system_name: 'ReFlow_Core', auto_reconciled: 317, true_auto_reconciled: 317, false_auto_reconciled: 0, unresolved: 183, precision: 1, recall: .7925, silent_false_match_rate: 0, status_counts: {} }, fuzzy: { system_name: 'B2_fuzzy_threshold', auto_reconciled: 323, true_auto_reconciled: 317, false_auto_reconciled: 6, unresolved: 177, precision: .9814, recall: .7925, silent_false_match_rate: .0186, status_counts: {} } },
+      },
+      '/api/v1/demo/ai-status': { provider: 'deepseek', configured: false, model: 'deepseek-v4-flash' },
+      '/api/v1/demo/razorpay-status': { configured: false, mode: 'test', api: 'https://api.razorpay.com/v1' },
     })
-    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input)
-      if (path.includes('/api/v1/demo/status')) {
-        return Promise.resolve(new Response(JSON.stringify(readyStatus()), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      }
-      if (path.includes('/api/v1/demo/run') && init?.method === 'POST') {
-        phase = 'initial_run'
-        return Promise.resolve(new Response(JSON.stringify({
-          phase,
-          scope_id: 'scope_ui',
-          stages: [],
-          outcomes: readyStatus().outcomes,
-          focus_case_id: 'case_pending',
-          focus_proof_id: 'proof_pending',
-          message: 'Reconciliation complete.',
-        }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      }
-      if (path.includes('/overview')) {
-        return Promise.resolve(new Response(JSON.stringify({ ...overview, has_current_run: false, run: null, proof_status: [], sources: [], active_exception_count: 0, active_exception_value: null }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      }
-      return Promise.resolve(new Response(JSON.stringify({ detail: 'not mocked' }), { status: 404, headers: { 'Content-Type': 'application/json' } }))
-    }))
-
-    renderAt('/?scope=scope_ui')
-    expect(await screen.findByText('Watch ReFlow build the financial proof')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Run reconciliation' }))
-    expect(await screen.findByText('₹10,000.00')).toBeInTheDocument()
-    expect(screen.getByText('proven reconciled')).toBeInTheDocument()
+    renderAt('/demo?scope=scope_ui')
+    expect(await screen.findByText('Close a Razorpay-shaped settlement batch')).toBeInTheDocument()
+    expect(screen.getByText('60,227')).toBeInTheDocument()
+    expect(screen.getByText('317 automatic')).toBeInTheDocument()
+    expect(screen.getByText('323 automatic')).toBeInTheDocument()
+    expect(screen.getByText('API key not configured')).toBeInTheDocument()
+    expect(screen.getByText('Credentials not configured')).toBeInTheDocument()
   })
 
   it('renders an explicit integrity/API error state', async () => {
