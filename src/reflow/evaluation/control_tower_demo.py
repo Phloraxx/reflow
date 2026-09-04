@@ -400,6 +400,32 @@ def seed_demo(dsn: str) -> DemoBundle:
             scope_id=bundle.scope.id,
             observed_at=disposition.occurred_at,
         )
+    if bundle.dispositions:
+        case_id = str(bundle.dispositions[0].case_id)
+        pointer = service.current(
+            kind=PointerKind.LATEST_CASE_DISPOSITION, stream_key=case_id
+        )
+        if pointer is None:
+            for disposition in bundle.dispositions:
+                service.publish_current(
+                    artifact_kind=ArtifactKind.CASE_DISPOSITION,
+                    artifact_id=str(disposition.id),
+                    payload=disposition,
+                    scope_id=bundle.scope.id,
+                    observed_at=disposition.occurred_at,
+                    pointer_kind=PointerKind.LATEST_CASE_DISPOSITION,
+                    stream_key=case_id,
+                    expected_generation=disposition.sequence - 1,
+                )
+        else:
+            latest = bundle.dispositions[-1]
+            if (
+                pointer.generation != latest.sequence
+                or pointer.artifact_id != str(latest.id)
+            ):
+                raise RuntimeError(
+                    "Gate 18 demo case disposition pointer disagrees with history"
+                )
     for cluster in bundle.clusters:
         service.persist_artifact(
             kind=ArtifactKind.INCIDENT_CLUSTER,

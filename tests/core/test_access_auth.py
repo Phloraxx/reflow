@@ -13,6 +13,7 @@ from jwt.algorithms import RSAAlgorithm
 from reflow.access_auth import (
     AccessAuthenticationError,
     AccessAuthorizationError,
+    AuthenticatedPrincipal,
     AuthorizationPolicy,
     CloudflareAccessVerifier,
     ControlTowerRole,
@@ -306,4 +307,51 @@ def test_jwks_transport_refuses_redirect_and_oversized_response(monkeypatch) -> 
 
 def test_checked_in_authorization_policy_example_is_valid() -> None:
     policy = AuthorizationPolicy.from_file(Path("config/authz.example.json"))
-    assert policy.principal_count == 2
+    assert policy.principal_count == 3
+
+
+def test_case_operator_role_is_scope_bound_and_separate_from_viewer() -> None:
+    principal = AuthenticatedPrincipal(subject="subject-operator", email="operator@example.com")
+    policy = AuthorizationPolicy.from_mapping(
+        {
+            "schema_version": 1,
+            "principals": [
+                {
+                    "email": "operator@example.com",
+                    "roles": ["case_operator"],
+                    "scopes": [str(SCOPE_A)],
+                }
+            ],
+        }
+    )
+    grant = policy.require_case_operator(principal, SCOPE_A)
+    assert ControlTowerRole.CASE_OPERATOR in grant.roles
+    with pytest.raises(AccessAuthorizationError):
+        policy.require_case_operator(principal, SCOPE_B)
+    with pytest.raises(AccessAuthorizationError):
+        policy.require_scope(principal, SCOPE_A)
+
+
+def test_scoped_roles_require_scope_and_non_scoped_roles_cannot_receive_scope() -> None:
+    with pytest.raises(AccessAuthorizationError, match="requires at least one scope"):
+        AuthorizationPolicy.from_mapping(
+            {
+                "schema_version": 1,
+                "principals": [
+                    {"email": "operator@example.com", "roles": ["case_operator"], "scopes": []}
+                ],
+            }
+        )
+    with pytest.raises(AccessAuthorizationError, match="require a scoped role"):
+        AuthorizationPolicy.from_mapping(
+            {
+                "schema_version": 1,
+                "principals": [
+                    {
+                        "email": "reviewer@example.com",
+                        "roles": ["evaluation_reviewer"],
+                        "scopes": [str(SCOPE_A)],
+                    }
+                ],
+            }
+        )

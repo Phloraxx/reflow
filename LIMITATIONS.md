@@ -6,7 +6,7 @@ This file must stay current as implementation progresses. A finance system shoul
 
 ## Current state
 
-ReFlow implementation scope now reaches **Gate 19**:
+ReFlow deterministic implementation reaches **Gate 19**, with production-hardening work through **Gate 52**:
 
 - engineering constitution and CI;
 - typed financial contracts;
@@ -29,8 +29,16 @@ ReFlow implementation scope now reaches **Gate 19**:
 - a Gate 17 measured one-process scale path plus PostgreSQL 16 durability/application boundary for append-only raw evidence, immutable product/audit artifacts and optimistic operational current pointers.
 - a Gate 18 scoped read-only FastAPI + React Operator Control Tower over immutable run/proof/case/source/evaluation state, including a deterministic synthetic demo path.
 - a Gate 19 frozen held-out evaluation/failure-campaign layer with precommitted seeds/scorer hashes, preserved first-run evidence, generated final metrics and submission reproducibility checks.
+- Gate 45 Cloudflare Access authentication with exact-scope read authorization;
+- Gate 46 restore-tested PostgreSQL logical backup/recovery;
+- Gate 47 durable Razorpay webhook ingress and bounded replay;
+- Gate 48 tested PostgreSQL PITR mechanics plus single-host deployment templates;
+- Gate 49 generated request correlation, bounded telemetry and append-only pseudonymous operator authorization audit;
+- Gate 50 bounded keyset/cursor pagination beyond 10,000 scoped artifacts;
+- Gate 51 explicit Razorpay Instant Settlement parent/payout proof support;
+- Gate 52 one opt-in exact-scope authenticated `case_operator` disposition write with immutable PostgreSQL command/CAS state.
 
-Gate 19 now adds the first frozen held-out reconciliation result and a final representative failure campaign. Live-model adapter/investigation benchmarks, an authenticated real settlement/recon corpus, and a public authenticated production deployment are **not complete**.
+The frozen Gate 19 evidence remains the evaluation authority while Gates 44–52 harden production boundaries. Live-model adapter/investigation benchmarks, an authenticated real settlement/recon corpus, tenant/role self-service, managed HA/telemetry, and a public authenticated production deployment are **not complete**.
 
 The repository may publish only the checked-in final evidence with its exact denominators:
 
@@ -79,7 +87,7 @@ The compilation digest is an integrity binding, not a digital signature. Gate 47
 
 Gate 17 adds `PostgresApplicationStore`, which implements the structural journal contract with immutable PostgreSQL rows, exact duplicate replay, retained conflicting evidence, deterministic reads and restart/reconnect survival. The in-memory journal remains the fast deterministic test/evaluation implementation.
 
-This is not a complete production ingestion service: there is still no connector scheduler, pooled/batched bulk loader, automated retention policy, tenant onboarding/provisioning, or authenticated operator write API. Gates 46–48 add restore-tested logical backup, durable webhook ingress, and a real physical PITR mechanics drill plus deployment templates, but no off-host WAL archive has been provisioned and no production RPO/RTO is claimed. The measured reference PostgreSQL path is intentionally fine-grained and much slower than the in-memory proof-scale benchmark.
+This is not a complete production ingestion service: there is still no connector scheduler, pooled/batched bulk loader, automated retention policy, or tenant onboarding/provisioning. Gate 52 later adds one narrow authenticated exception-case disposition write, not a generic finance mutation API. Gates 46–48 add restore-tested logical backup, durable webhook ingress, and a real physical PITR mechanics drill plus deployment templates, but no off-host WAL archive has been provisioned and no production RPO/RTO is claimed. The measured reference PostgreSQL path is intentionally fine-grained and much slower than the in-memory proof-scale benchmark.
 
 ### 5. Settlement Composition Proof is not full reconciliation
 
@@ -222,11 +230,11 @@ Likewise, the balance control proves the exact integer equation over supplied op
 
 Materiality bands are workflow metadata only and never weaken exact Gate 7/8/9 proof or Gate 13 balance residuals.
 
-### 24. Application persistence is implemented as immutable audit state; authenticated workflow is not
+### 24. Application persistence remains immutable financial state; Gate 52 adds only a narrow authenticated case workflow
 
 Gate 17 adds a PostgreSQL 16 application store for append-only raw evidence, immutable canonical JSON artifacts and optimistic current pointers, plus a minimal `ReflowApplicationService`. It can durably retain Gate 13 run/control artifacts, Gate 9 proofs, Gate 14 case/disposition/incident artifacts, approved adapters and Gate 16 result/trace artifacts. Real PostgreSQL tests cover reconnect survival, conflict retention, tamper detection, scope isolation and compare-and-swap behavior.
 
-The existing `InMemoryProofLedger`, `InMemoryExceptionCaseLedger` and adapter lifecycle stores are still deterministic derivation/reference components; Gate 17 does not silently replace them with a new database-authoritative financial engine. Persisting an artifact does not bypass the originating domain object's self-validation. Authenticated operator identity, tenant authorization, RBAC/SSO and durable job/queue workflow remain unimplemented.
+The existing `InMemoryProofLedger`, `InMemoryExceptionCaseLedger` and adapter lifecycle stores are still deterministic derivation/reference components; Gate 17 does not silently replace them with a new database-authoritative financial engine. Persisting an artifact does not bypass the originating domain object's self-validation. Gate 45 later adds Cloudflare Access identity/exact-scope authorization and Gate 52 adds only the authenticated `case_operator` disposition path. Tenant onboarding/role administration and durable job/queue workflow remain unimplemented.
 
 
 ### 25. Gate 14 case lifecycle is deterministic but not durable/authenticated
@@ -263,12 +271,12 @@ A 100k/1M run was not attempted. The 10k tier already satisfied the frozen Gate 
 
 The isolated PostgreSQL 16.15 cold/warm benchmark measured roughly 76 source writes/s and 87–90 immutable-artifact writes/s for 1,000 fine-grained operations. This proves the reference persistence/idempotency path and also exposes its current bottleneck: it is not a bulk loader and has no connection pool/batched ingestion API. In-memory core throughput and PostgreSQL durability throughput must not be conflated.
 
-Gate 17 itself does not provide HA/replication, recovery orchestration, retention/archival automation, authenticated tenant isolation, authenticated operator write APIs or a distributed queue. Later production-hardening gates add logical backup/restore verification, a physical PITR mechanics drill, Cloudflare Access read authorization, durable webhook ingress and single-host deployment templates; they still do not provide HA/failover, a provisioned off-host WAL archive, automated migrations, tenant onboarding or a distributed queue. None of Kafka, Kubernetes, Celery, Redis or sharding was introduced because the measured proof-core bottleneck was fixed algorithmically instead.
+Gate 17 itself does not provide HA/replication, recovery orchestration, retention/archival automation, authenticated tenant isolation, authenticated operator write APIs or a distributed queue. Later production-hardening gates add logical backup/restore verification, a physical PITR mechanics drill, Cloudflare Access authorization, durable webhook ingress, single-host deployment templates and Gate 52's narrow authenticated case-disposition workflow; they still do not provide HA/failover, a provisioned off-host WAL archive, automated migrations, tenant onboarding/role administration or a distributed queue. None of Kafka, Kubernetes, Celery, Redis or sharding was introduced because the measured proof-core bottleneck was fixed algorithmically instead.
 ### 29. Gate 18 is a read-only reviewer/control-tower surface, not an authenticated production finance application
 
 Gate 18 exposes scoped read models and a same-origin FastAPI/React application. It has no POST/PUT/PATCH/DELETE product routes and cannot mark a proof reconciled, issue money movement, execute Gate 16 recommendations or run generic SQL. That is an intentional authority boundary, not a claim that the web application is production-secure.
 
-Gate 45 subsequently adds Cloudflare Access JWT authentication and exact-scope read authorization for the Control Tower, while preserving `scope_id` as a routing identifier rather than an authorization credential. The product still lacks tenant self-service/onboarding, authenticated operator write permissions, a production rate-limit/WAF policy, an external penetration test and a completed public real-data deployment. Real merchant evidence must not be exposed through a deployment that bypasses that authenticated application boundary.
+Gate 45 subsequently adds Cloudflare Access JWT authentication and exact-scope read authorization for the Control Tower, while preserving `scope_id` as a routing identifier rather than an authorization credential. Gate 52 later adds one opt-in exact-scope `case_operator` disposition write. The product still lacks tenant self-service/onboarding and role administration, a production rate-limit/WAF policy, an external penetration test and a completed public real-data deployment. Real merchant evidence must not be exposed through a deployment that bypasses that authenticated application boundary.
 
 Source Lab intentionally omits raw source payloads and exposes delivery/schema/adapter metadata only. Case File exposes bounded investigation summaries/citations and immutable artifact identities, but the default product surface is not a raw secret/data explorer. These reductions lower accidental exposure risk but are not a DLP/privacy guarantee.
 
@@ -294,7 +302,7 @@ The repository is public, but a public authenticated ReFlow finance deployment i
 
 The post-final whole-codebase audit hardened the reference implementation substantially: public durable writes now require typed/self-validating artifacts, current pointers are identity-coherent, proof browsing is tied to scoped run/manifests rather than storage labels, the public journal is a narrow façade, final evidence verification is required in CI, Python/CI bootstrap dependencies are constrained/pinned, optional OpenAI transport is HTTPS-only/no-redirect with a 1 MiB response ceiling, and Gate 12 model-facing profiles have explicit finite bounds.
 
-Those audit changes alone did not add an application security/deployment boundary. Subsequent gates now add Cloudflare Access authentication, exact-scope read authorization, current/previous Razorpay webhook-secret rotation, logical backup/restore verification, durable webhook ingress, and tested PITR/deployment templates. Remaining gaps include production connector identity/onboarding, authenticated operator write permissions, HA/failover, provisioned off-host WAL archival, centralized/off-host telemetry with alerting/SLOs, and a public real-data deployment. `scope_id` is still never treated as authorization by itself.
+Those audit changes alone did not add an application security/deployment boundary. Subsequent gates now add Cloudflare Access authentication, exact-scope read authorization, current/previous Razorpay webhook-secret rotation, logical backup/restore verification, durable webhook ingress, tested PITR/deployment templates, and Gate 52's narrowly scoped authenticated case-disposition workflow. Remaining gaps include production connector identity/onboarding, tenant/role self-service, HA/failover, provisioned off-host WAL archival, centralized/off-host telemetry with alerting/SLOs, and a public real-data deployment. `scope_id` is still never treated as authorization by itself.
 
 Independent branch-aware coverage is 79% on the repaired audit tree. Several proof/control validators remain intentionally complex and the Gate 13 control plane has the largest fail-closed branch-coverage debt at 73%. Gate 50 removes the Control Tower's former 10,000-artifact history ceiling with keyset traversal and bounded product pages. Long-history projection reconstruction can still scan complete historical state, and cross-request UI cursors are live navigation rather than snapshot transactions; materialized/snapshot-pinned read models remain a separate scalability option.
 
@@ -305,7 +313,7 @@ The 46.91 MiB Gate 19 first-run held-out artifact remains checked in unchanged b
 
 Gate 49 emits generated request IDs, one-line JSON request/security events, bounded process-local Prometheus metrics and append-only PostgreSQL operator authorization records. Generic telemetry intentionally omits raw URLs/query strings, bodies, authentication headers, email addresses, client IPs, DSNs and finance payloads. The operator table stores a SHA-256 pseudonym of the immutable Access subject so authorization decisions remain correlatable without retaining the raw human identity in this audit surface.
 
-Process-local counters reset on restart. The supported deployment does not yet provision Prometheus, Grafana, an OpenTelemetry collector, off-host log shipping, retention policy, alert paging or measured SLI/SLO/error-budget targets. `/internal/metrics` is optional, bearer-gated and explicitly blocked by the checked-in Cloudflare Tunnel config. The durable audit currently covers authenticated Control Tower read authorization only because no authenticated operator write API exists.
+Process-local counters reset on restart. The supported deployment does not yet provision Prometheus, Grafana, an OpenTelemetry collector, off-host log shipping, retention policy, alert paging or measured SLI/SLO/error-budget targets. `/internal/metrics` is optional, bearer-gated and explicitly blocked by the checked-in Cloudflare Tunnel config. Gate 52 extends the same durable pseudonymous audit boundary to allowed and denied case-disposition authorization; it does not make the audit record a financial approval signature.
 
 
 ### 33. Gate 50 bounds history/page transport but does not materialize Control Tower projections
@@ -320,3 +328,12 @@ This is not a claim that long-history projection CPU/database work is proportion
 Gate 51 models the current Razorpay `settlement.ondemand` / `settlement.ondemand_payout` API shape and proves processed payout receipts using explicit `setlodp_...` identities, payout UTRs and exact bank credits. It does not infer payout identities from narration, amount or timing, and it does not relax the standard `setl_...` proof rules.
 
 The implementation has no authenticated real/Test Mode Instant Settlement accuracy result because no such corpus has been supplied or observed. Instant Settlement webhooks, provider recon-composition semantics, Smart Settlement/RTGS-specific behavior, production merchant enablement and any provider behavior not represented by explicit payout evidence remain unclaimed.
+
+
+### 35. Gate 52 authenticates one case-workflow mutation, not financial truth
+
+Gate 52 introduces a dedicated exact-scope `case_operator` role and one opt-in POST route that appends a validated Gate 14 disposition to an existing exception case. The route is absent by default and cannot be enabled without the existing Cloudflare Access authentication boundary. Authorization is derived from the verified Access subject and configured scope grant; caller-supplied `scope_id`, email headers or shared bearer tokens do not grant write authority.
+
+Each accepted command is bounded by an idempotency key, pseudonymous principal digest, canonical request digest and expected per-case disposition generation. PostgreSQL persists one immutable `CASE_DISPOSITION`, advances `LATEST_CASE_DISPOSITION` through compare-and-swap and stores a bounded command record for replay/conflict checks. Logical restore verification covers that new durable state. This is not distributed locking, a queue, a bulk workflow API or a generic mutation service.
+
+Case dispositions remain workflow metadata. They cannot rewrite raw evidence, proofs, reconciliation runs, balances, provider facts, payouts, refunds, transfers or adapter authority, and they cannot turn unsupported financial evidence green. Operator subject hashes are pseudonymous, not anonymous against an attacker who already knows candidate subjects.

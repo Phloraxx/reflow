@@ -43,7 +43,8 @@ def store():
     with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
-                TRUNCATE reflow_current_pointers,
+                TRUNCATE reflow_case_workflow_commands,
+                         reflow_current_pointers,
                          reflow_artifacts,
                          reflow_source_identity,
                          reflow_source_envelopes

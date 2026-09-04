@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Razorpay Instant Settlement payout-proof Gate 51 is merged green on `main` as `be0fcec57386f132452ba9d255b9cabee4a5bfbb` via PR #42; exact merge-triggered CI `33850178698` passed the full 552-test recovery-enabled gate. ReFlow models documented `setlod_...` parents and explicit `setlodp_...` payouts separately from standard `setl_...` settlements, retains provider evidence journal-first, and proves each processed payout to exactly one payout-UTR bank credit before a multi-credit parent can become green. Authenticated real Instant Settlement acceptance, Instant Settlement webhooks/recon composition, a public production deployment, and the still-empty standard settlement/recon real corpus remain unclaimed. See `docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`.**
+> **Current phase: Gate 52 authenticated operator case-workflow implementation is locally validated on `hardening/operator-case-workflow` from final green Gate 51 `main`. The candidate adds one opt-in exact-scope `case_operator` write: append an immutable Gate 14 case disposition with bounded idempotency, PostgreSQL generation/CAS, and pseudonymous operator audit. It does not grant authority over proofs, raw evidence, reconciliation runs, payouts, refunds, transfers, balances, adapters, or other financial truth. The exact local submission gate passed 560 Python/PostgreSQL tests, strict mypy across 78 source files, frontend 6/6, production build and recovery/evaluation verification; repository PR/main closure is still pending. See `docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
@@ -407,6 +407,14 @@ The submission evidence includes a fresh-clone validation, a high-confidence cur
 
 See [`docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md`](docs/39_GATE_19_CONTRACT_AND_HELDOUT_PLAN.md), [`docs/40_GATE_19_CHECKPOINT.md`](docs/40_GATE_19_CHECKPOINT.md), [`docs/41_FINAL_5_MINUTE_PITCH.md`](docs/41_FINAL_5_MINUTE_PITCH.md) and [`EVALUATION.md`](EVALUATION.md).
 
+### Gate 52 — Authenticated Operator Case Workflow
+
+Gate 52 adds one deliberately narrow mutation to the authenticated Control Tower: an exact-scope `case_operator` may append the next Gate 14 disposition to an existing exception case. The route is absent unless `REFLOW_CASE_WORKFLOW_WRITES=enabled`, and enabling it requires the existing Cloudflare Access boundary. `scope_id` remains routing context rather than authorization.
+
+The command is bounded by an `Idempotency-Key`, pseudonymous Access-subject identity, a canonical request digest and an expected latest-disposition generation. PostgreSQL commits exactly one immutable `CASE_DISPOSITION`, advances the per-case current pointer with compare-and-swap, and retains a command record for replay/conflict detection. The workflow reuses Gate 14 transition validation instead of implementing a second state machine in FastAPI.
+
+This is workflow metadata authority only. There are no write routes for proofs, source evidence, reconciliation runs, provider state, balances, payouts, refunds, transfers, adapters, or generic SQL. See [`docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`](docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md).
+
 ---
 
 ## Commands
@@ -581,6 +589,10 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [`docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md`](docs/46_POSTGRES_BACKUP_AND_RECOVERY_CONTRACT.md) — merged logical backup/restore verification contract
 - [`docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md`](docs/47_RAZORPAY_WEBHOOK_INGRESS_CONTRACT.md) — merged durable Razorpay webhook ingress and replay contract
 - [`docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md`](docs/48_PRODUCTION_DEPLOYMENT_AND_PITR_CONTRACT.md) — merged production deployment/PITR acceptance gate with failed-main/fix closure evidence
+- [`docs/49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md`](docs/49_PRODUCTION_OBSERVABILITY_AND_OPERATOR_AUDIT_CONTRACT.md) — merged production observability and pseudonymous operator-audit contract
+- [`docs/50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md`](docs/50_CONTROL_TOWER_LONG_HISTORY_PAGINATION_CONTRACT.md) — merged Control Tower long-history pagination contract
+- [`docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`](docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md) — merged explicit Razorpay Instant Settlement payout-proof contract
+- [`docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md`](docs/52_AUTHENTICATED_OPERATOR_CASE_WORKFLOW_CONTRACT.md) — authenticated exact-scope exception-case disposition workflow; repository closure pending
 
 ---
 
@@ -635,7 +647,8 @@ CI runs Python/PostgreSQL and frontend validation together.
 - [ ] non-empty authenticated Test Mode settlement/recon corpus
 - [x] public webhook HTTP ingress with durable retained failure outcomes and privileged local replay/inspection
 - [x] Cloudflare Access human authentication + exact-scope read authorization/RBAC
-- [ ] tenant onboarding/provisioning and authenticated operator write permissions
+- [ ] tenant onboarding/provisioning and role-management self-service
+- [x] exact-scope authenticated `case_operator` exception-disposition writes
 - [x] restore-tested PostgreSQL logical backup/recovery drill
 - [x] tested PostgreSQL PITR mechanics + single-host systemd/Cloudflare deployment runbook/templates
 - [x] generated request correlation + secret-minimized JSON HTTP telemetry

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -10,6 +11,11 @@ from pathlib import Path
 import pytest
 
 from reflow import domain
+from reflow.exception_cases import (
+    CaseWorkflowStatus,
+    DispositionKind,
+    build_exception_case_disposition,
+)
 from reflow.journal import make_source_envelope
 from reflow.persistence import ArtifactKind, PointerKind, PostgresApplicationStore
 from reflow.postgres_recovery import (
@@ -297,7 +303,8 @@ def test_restored_database_integrity_inventory_uses_public_readback() -> None:
     with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
         cursor.execute(
             """
-            TRUNCATE reflow_current_pointers,
+            TRUNCATE reflow_case_workflow_commands,
+                         reflow_current_pointers,
                      reflow_artifacts,
                      reflow_source_identity,
                      reflow_source_envelopes
@@ -331,3 +338,44 @@ def test_restored_database_integrity_inventory_uses_public_readback() -> None:
     assert result == RestoreVerification(1, 1, 1)
     with pytest.raises(PostgresRecoveryError, match="zero user tables"):
         require_empty_restore_database(dsn)
+def test_restored_database_integrity_rejects_invalid_case_workflow_request_id() -> None:
+    dsn = _require_dsn()
+    psycopg = pytest.importorskip("psycopg")
+    store = PostgresApplicationStore(dsn)
+    with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "TRUNCATE reflow_case_workflow_commands, reflow_current_pointers, reflow_artifacts"
+        )
+
+    scope_id = domain.ReconciliationScopeId("scope_recovery_command_probe")
+    case_id = domain.ExceptionCaseId("case_recovery_command_probe")
+    actor_digest = hashlib.sha256(b"recovery-command-operator").hexdigest()
+    disposition = build_exception_case_disposition(
+        case_id=case_id,
+        sequence=1,
+        actor_id=actor_digest,
+        occurred_at=NOW,
+        kind=DispositionKind.ACKNOWLEDGE,
+        case_first_seen_at=NOW,
+        current_workflow_status=CaseWorkflowStatus.OPEN,
+        current_resolution=None,
+        prior_disposition_count=0,
+        prior_disposition_at=None,
+    )
+    store.publish_case_disposition_command(
+        disposition=disposition,
+        scope_id=scope_id,
+        principal_subject_sha256=actor_digest,
+        command_key_sha256=hashlib.sha256(b"recovery-command-key").hexdigest(),
+        request_sha256=hashlib.sha256(b"recovery-command-request").hexdigest(),
+        request_id="a" * 32,
+        expected_generation=0,
+    )
+    with psycopg.connect(dsn) as connection, connection.cursor() as cursor:
+        cursor.execute(
+            "UPDATE reflow_case_workflow_commands SET request_id = %s",
+            ("Z" * 32,),
+        )
+
+    with pytest.raises(PostgresRecoveryError, match="request id"):
+        inspect_restored_database(dsn)
