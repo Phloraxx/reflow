@@ -4,7 +4,7 @@
 
 > Razorpay AI Buildathon 2026 · Track 04 — AI Finance Controller
 >
-> **Current phase: Razorpay Instant Settlement payout-proof Gate 51 is active on `hardening/instant-settlement-proof` from green `main` `20a754be4aeb6ed85a13150918f2a43d2cc00dbb`. The branch models documented `setlod_...` parents and explicit `setlodp_...` payouts separately from standard `setl_...` settlements, retains provider evidence journal-first, and proves each processed payout to exactly one payout-UTR bank credit before a multi-credit parent can become green. Authenticated real Instant Settlement acceptance, Instant Settlement webhooks/recon composition, a public production deployment, and the still-empty standard settlement/recon real corpus remain unclaimed. See `docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`.**
+> **Current phase: Razorpay Instant Settlement payout-proof Gate 51 is merged green on `main` as `be0fcec57386f132452ba9d255b9cabee4a5bfbb` via PR #42; exact merge-triggered CI `33850178698` passed the full 552-test recovery-enabled gate. ReFlow models documented `setlod_...` parents and explicit `setlodp_...` payouts separately from standard `setl_...` settlements, retains provider evidence journal-first, and proves each processed payout to exactly one payout-UTR bank credit before a multi-credit parent can become green. Authenticated real Instant Settlement acceptance, Instant Settlement webhooks/recon composition, a public production deployment, and the still-empty standard settlement/recon real corpus remain unclaimed. See `docs/51_RAZORPAY_INSTANT_SETTLEMENT_PROOF_CONTRACT.md`.**
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
