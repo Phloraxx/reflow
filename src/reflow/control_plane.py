@@ -209,6 +209,7 @@ class ReconciliationScope:
             domain.SourceKind.RAZORPAY_EVENT,
             domain.SourceKind.RAZORPAY_RECON,
             domain.SourceKind.RAZORPAY_SETTLEMENT,
+            domain.SourceKind.RAZORPAY_INSTANT_SETTLEMENT,
         }:
             return self.provider_account_id
         if source_kind is domain.SourceKind.BANK:

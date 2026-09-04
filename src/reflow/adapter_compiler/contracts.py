@@ -14,6 +14,15 @@ class CanonicalRecordKind(StrEnum):
     BANK_ENTRY = "bank_entry"
 
 
+GENERIC_ADAPTER_SOURCE_KINDS: tuple[SourceKind, ...] = (
+    SourceKind.MERCHANT,
+    SourceKind.RAZORPAY_EVENT,
+    SourceKind.RAZORPAY_RECON,
+    SourceKind.RAZORPAY_SETTLEMENT,
+    SourceKind.BANK,
+)
+
+
 class TransformKind(StrEnum):
     TEXT = "text"
     OPTIONAL_TEXT = "optional_text"
@@ -129,6 +138,8 @@ class AdapterSpec:
     mappings: tuple[FieldMapping, ...]
 
     def __post_init__(self) -> None:
+        if self.source_kind not in GENERIC_ADAPTER_SOURCE_KINDS:
+            raise ValueError("source kind is not supported by the generic adapter compiler")
         if not self.adapter_id or self.adapter_id != self.adapter_id.strip():
             raise ValueError("adapter id must be non-empty and trimmed")
         if self.version < 1:

@@ -53,6 +53,14 @@ class SettlementId(EntityId):
     prefix = "setl_"
 
 
+class InstantSettlementId(EntityId):
+    prefix = "setlod_"
+
+
+class InstantSettlementPayoutId(EntityId):
+    prefix = "setlodp_"
+
+
 class ReconEntryId(EntityId):
     prefix = "recon_"
 
@@ -150,6 +158,7 @@ class SourceKind(StrEnum):
     RAZORPAY_EVENT = "razorpay_event"
     RAZORPAY_RECON = "razorpay_recon"
     RAZORPAY_SETTLEMENT = "razorpay_settlement"
+    RAZORPAY_INSTANT_SETTLEMENT = "razorpay_instant_settlement"
     BANK = "bank"
 
 

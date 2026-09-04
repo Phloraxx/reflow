@@ -165,3 +165,22 @@ def test_model_cannot_invent_financial_identity_or_money_with_constants() -> Non
         )
         with pytest.raises(AdapterCompileError, match="constant transform"):
             compile_adapter(replace(_bank_spec(), mappings=mappings), profile_rows(rows))
+
+
+def test_provider_only_instant_settlement_source_is_not_generic_adapter_input() -> None:
+    from reflow.adapter_compiler.spec_io import adapter_spec_json_schema
+
+    schema = adapter_spec_json_schema()
+    properties = schema["properties"]
+    assert isinstance(properties, dict)
+    source_schema = properties["source_kind"]
+    assert isinstance(source_schema, dict)
+    values = source_schema["enum"]
+    assert isinstance(values, list)
+    assert SourceKind.RAZORPAY_INSTANT_SETTLEMENT.value not in values
+
+    with pytest.raises(ValueError, match="generic adapter compiler"):
+        replace(
+            _bank_spec(),
+            source_kind=SourceKind.RAZORPAY_INSTANT_SETTLEMENT,
+        )

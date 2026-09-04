@@ -114,13 +114,11 @@ Such rows may be preserved as investigation evidence, but they do not establish 
 
 ### 8. Standard settlements and Instant Settlements are not conflated
 
-The current Gate 8 implementation supports the standard `setl_...` settlement shape.
+Gate 8 still supports the standard `setl_...` settlement shape with its existing one-settlement-UTR bank-proof semantics. Gate 51 adds a separate provider-specific topology for Razorpay Instant Settlements: a `settlement.ondemand` parent (`setlod_...`) plus explicit `settlement.ondemand_payout` children (`setlodp_...`) carrying payout-level amounts, statuses, timestamps and UTRs.
 
-Razorpay Instant Settlements use a different topology: a `settlement.ondemand` parent (`setlod_...`) can contain explicit `settlement.ondemand_payout` children (`setlodp_...`) with payout-level evidence and UTRs.
+Multi-credit proof is allowed only when each bank credit is independently bound to a distinct explicit processed payout identity and payout UTR. Multiple arbitrary bank transactions reusing one standard settlement UTR remain contradictory and are never reinterpreted as an Instant Settlement.
 
-ReFlow does **not** yet implement that topology. It therefore does not claim support for proving multi-credit Instant Settlements. Multiple distinct bank transactions reusing one standard settlement UTR are treated as a contradiction rather than guessed as a split settlement.
-
-A later Instant Settlement adapter/proof must model the parent and payout identities explicitly before multi-credit proof is allowed.
+Gate 51 is provider-doc/synthetic validated only. No authenticated real/Test Mode Instant Settlement corpus has been observed, and Instant Settlement webhook/recon-composition semantics are not implemented. The new payout receipt proof is intentionally separate from the standard Gate 9 settlement-composition proof.
 
 ### 9. No arbitrary maximum bank-delay cutoff
 
@@ -315,3 +313,10 @@ Process-local counters reset on restart. The supported deployment does not yet p
 Gate 50 adds PostgreSQL keyset traversal over the existing `(artifact_kind, scope_id, observed_at, artifact_id)` index and removes the reader's former hard failure above 10,000 matching artifacts. Internal complete-history scans use fixed 1,000-row pages and fail closed if before/after history counts disagree. Proofs, Exceptions and Sources also expose bounded cursor routes used by the React UI, with a 50-item default and 100-item maximum. Legacy array routes remain for compatibility.
 
 This is not a claim that long-history projection CPU/database work is proportional only to the requested UI page. Exception lifecycle reconstruction still validates historical observations/dispositions/incidents, and proof/source projections retain their existing deterministic dependency checks. Product cursors are live navigation tokens rather than snapshot transactions across multiple HTTP requests. A materialized read model, snapshot-pinned cursor contract and server-side long-history filtering/search remain future optimizations if measured production workloads require them.
+
+
+### 34. Gate 51 proves explicit Instant Settlement payouts, not every Instant/Smart Settlement behavior
+
+Gate 51 models the current Razorpay `settlement.ondemand` / `settlement.ondemand_payout` API shape and proves processed payout receipts using explicit `setlodp_...` identities, payout UTRs and exact bank credits. It does not infer payout identities from narration, amount or timing, and it does not relax the standard `setl_...` proof rules.
+
+The implementation has no authenticated real/Test Mode Instant Settlement accuracy result because no such corpus has been supplied or observed. Instant Settlement webhooks, provider recon-composition semantics, Smart Settlement/RTGS-specific behavior, production merchant enablement and any provider behavior not represented by explicit payout evidence remain unclaimed.

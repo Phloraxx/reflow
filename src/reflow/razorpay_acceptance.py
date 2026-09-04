@@ -25,6 +25,7 @@ from .razorpay_integration import (
 
 RAZORPAY_API_ROOT = "https://api.razorpay.com/v1"
 SETTLEMENT_PAGE_SIZE = 100
+INSTANT_SETTLEMENT_PAGE_SIZE = 100
 RECON_PAGE_SIZE = 1000
 DEFAULT_TIMEOUT_SECONDS = 30.0
 MAX_TIMEOUT_SECONDS = 300.0
@@ -169,7 +170,7 @@ class RazorpayAcceptanceClient:
         self,
         *,
         path: str,
-        params: Mapping[str, int],
+        params: Mapping[str, int | str],
         page_size: int,
     ) -> tuple[Mapping[str, object], ...]:
         rows: list[Mapping[str, object]] = []
@@ -244,6 +245,33 @@ class RazorpayAcceptanceClient:
             path="/settlements/",
             params=params,
             page_size=SETTLEMENT_PAGE_SIZE,
+        )
+
+    def fetch_instant_settlements(
+        self,
+        *,
+        from_timestamp: int | None = None,
+        to_timestamp: int | None = None,
+    ) -> tuple[Mapping[str, object], ...]:
+        params: dict[str, int | str] = {"expand[]": "ondemand_payouts"}
+        if from_timestamp is not None:
+            if isinstance(from_timestamp, bool) or from_timestamp < 0:
+                raise RazorpayAcceptanceError("Instant Settlement from timestamp is invalid")
+            params["from"] = from_timestamp
+        if to_timestamp is not None:
+            if isinstance(to_timestamp, bool) or to_timestamp < 0:
+                raise RazorpayAcceptanceError("Instant Settlement to timestamp is invalid")
+            params["to"] = to_timestamp
+        if (
+            from_timestamp is not None
+            and to_timestamp is not None
+            and from_timestamp > to_timestamp
+        ):
+            raise RazorpayAcceptanceError("Instant Settlement time range is inverted")
+        return self._fetch_collection(
+            path="/settlements/ondemand/",
+            params=params,
+            page_size=INSTANT_SETTLEMENT_PAGE_SIZE,
         )
 
     def fetch_recon(

@@ -4,7 +4,13 @@ from collections.abc import Mapping
 
 from reflow.domain import SourceKind
 
-from .contracts import AdapterSpec, CanonicalRecordKind, FieldMapping, TransformKind
+from .contracts import (
+    GENERIC_ADAPTER_SOURCE_KINDS,
+    AdapterSpec,
+    CanonicalRecordKind,
+    FieldMapping,
+    TransformKind,
+)
 
 
 class AdapterSpecParseError(ValueError):
@@ -39,7 +45,10 @@ def adapter_spec_json_schema() -> dict[str, object]:
         "properties": {
             "adapter_id": {"type": "string"},
             "version": {"type": "integer", "minimum": 1},
-            "source_kind": {"type": "string", "enum": [item.value for item in SourceKind]},
+            "source_kind": {
+                "type": "string",
+                "enum": [item.value for item in GENERIC_ADAPTER_SOURCE_KINDS],
+            },
             "record_kind": {
                 "type": "string",
                 "enum": [item.value for item in CanonicalRecordKind],
@@ -102,6 +111,10 @@ def parse_adapter_spec_payload(payload: object) -> AdapterSpec:
         )
     try:
         source_kind = SourceKind(_string(root.get("source_kind"), "source kind"))
+        if source_kind not in GENERIC_ADAPTER_SOURCE_KINDS:
+            raise AdapterSpecParseError(
+                "source kind is not supported by the generic adapter compiler"
+            )
         record_kind = CanonicalRecordKind(_string(root.get("record_kind"), "record kind"))
     except ValueError as exc:
         raise AdapterSpecParseError(str(exc)) from exc

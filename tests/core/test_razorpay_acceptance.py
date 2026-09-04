@@ -234,3 +234,55 @@ def test_acceptance_origin_must_match_api_key_mode() -> None:
             evidence_origin=RazorpayEvidenceOrigin.REAL_LIVE,
             transport=transport,
         )
+
+
+def test_instant_settlement_fetch_expands_payouts_and_paginates() -> None:
+    seen: list[str] = []
+
+    def transport(url: str, _headers, _timeout: float, _max_bytes: int):
+        seen.append(url)
+        query = parse_qs(urlsplit(url).query)
+        skip = int(query["skip"][0])
+        if skip == 0:
+            items = [
+                {
+                    "id": f"setlod_page_{index}",
+                    "entity": "settlement.ondemand",
+                    "ondemand_payouts": {
+                        "entity": "collection",
+                        "count": 0,
+                        "items": [],
+                    },
+                }
+                for index in range(100)
+            ]
+        else:
+            items = [
+                {
+                    "id": "setlod_page_last",
+                    "entity": "settlement.ondemand",
+                    "ondemand_payouts": {
+                        "entity": "collection",
+                        "count": 0,
+                        "items": [],
+                    },
+                }
+            ]
+        return {"entity": "collection", "count": len(items), "items": items}
+
+    rows = _client(transport).fetch_instant_settlements()
+    assert len(rows) == 101
+    assert urlsplit(seen[0]).path == "/v1/settlements/ondemand/"
+    first = parse_qs(urlsplit(seen[0]).query)
+    second = parse_qs(urlsplit(seen[1]).query)
+    assert first == {
+        "expand[]": ["ondemand_payouts"],
+        "count": ["100"],
+        "skip": ["0"],
+    }
+    assert second == {
+        "expand[]": ["ondemand_payouts"],
+        "count": ["100"],
+        "skip": ["100"],
+    }
+    assert "ondemand_payouts" in rows[-1]
