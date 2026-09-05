@@ -8,6 +8,16 @@
 
 ReFlow is an evidence-first **finance controller** built around a deterministic financial truth compiler for payment settlement reconciliation.
 
+## 5-minute pitch
+
+**[Watch the 5-minute Razorpay Buildathon pitch →](https://youtu.be/71gKqiu8v4I)**
+
+**[Download the final pitch from the GitHub Release →](https://github.com/Phloraxx/reflow/releases/tag/buildathon-2026)**
+
+The pitch runs a reproducible 500-settlement adversarial workload live: **60,227 observed records, 317/317 automatic decisions correct, and 0 silent false matches**. A fuzzy baseline makes six additional automatic decisions; all six are wrong.
+
+The same build also demonstrates Razorpay Test Mode API connectivity, bounded DeepSeek exception investigation, schema-drift mapping, and hidden-truth evaluation.
+
 It compiles messy merchant, Razorpay and bank evidence into a temporal **Money Graph**, proves how payments/refunds/transfers/adjustments compose into settlements, proves bank receipt independently, and ultimately emits a versioned machine-verifiable **Reconciliation Proof**. Anything the deterministic engine cannot prove becomes a residual, contradiction, ambiguity or exception.
 
 AI has two bounded jobs:

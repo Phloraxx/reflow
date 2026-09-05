@@ -111,6 +111,31 @@ describe('ReFlow control tower', () => {
     expect(screen.getByText('12/12')).toBeInTheDocument()
   })
 
+  it('renders the large-run evaluation surface with locked-workload evidence and comparison', async () => {
+    mockFetch({
+      '/api/v1/demo/status': {
+        phase: 'truth_unlocked',
+        dataset: { settlement_count: 500, profile: 'reconciliation_adversarial', world_seed: 402, observation_seed: 1402, observed_record_count: 60227, source_counts: { merchant: 14779, razorpay_payments: 29559, razorpay_recon: 15029, razorpay_settlements: 500, bank: 360 }, dataset_sha256: 'a'.repeat(64), truth_commitment_sha256: 'b'.repeat(64), corruption_count: 14 },
+        run: { elapsed_seconds: 4.6, proof_pipeline_seconds: 0.46, settlements_per_second: 1087.31, graph_edges: 44837, proof_count: 500, status_counts: { proven_reconciled: 317, pending_bank_credit: 140, residual: 42, incomplete: 0, contradicted: 1 }, exception_count: 183, source_rejection: null },
+        truth_unlocked: true, can_generate: true, can_run: false, can_unlock: false,
+        evaluation: { truth_settlement_count: 500, truth_reconciled: 400, reflow: { system_name: 'ReFlow_Core', auto_reconciled: 317, true_auto_reconciled: 317, false_auto_reconciled: 0, unresolved: 183, precision: 1, recall: .7925, silent_false_match_rate: 0, status_counts: {} }, fuzzy: { system_name: 'B2_fuzzy_threshold', auto_reconciled: 323, true_auto_reconciled: 317, false_auto_reconciled: 6, unresolved: 177, precision: .9814, recall: .7925, silent_false_match_rate: .0186, status_counts: {} } },
+      },
+      '/api/v1/demo/ai-status': { provider: 'deepseek', configured: false, model: 'deepseek-v4-flash' },
+      '/api/v1/demo/razorpay-status': { configured: false, mode: 'test', api: 'https://api.razorpay.com/v1' },
+      '/api/v1/demo/settlements': [{ settlement_id: 'setl_reload', status: 'proven_reconciled', amount: { display: '₹123.45' }, composition_status: 'composition_proven', bank_status: 'bank_receipt_proven', composition_components: 3, reason_codes: [] }],
+    })
+    renderAt('/demo?scope=scope_ui&recording=1')
+    expect(await screen.findByText('Reconcile a month of settlement evidence')).toBeInTheDocument()
+    expect(screen.getByText('TEST MODE · SYNTHETIC')).toBeInTheDocument()
+    expect(document.querySelector('.app-shell')).toHaveClass('recording-shell')
+    expect(await screen.findByText('setl_reload')).toBeInTheDocument()
+    expect(screen.getByText('60,227')).toBeInTheDocument()
+    expect(screen.getByText('317 automatic')).toBeInTheDocument()
+    expect(screen.getByText('323 automatic')).toBeInTheDocument()
+    expect(screen.getByText('API key not configured')).toBeInTheDocument()
+    expect(screen.getByText('Credentials not configured')).toBeInTheDocument()
+  })
+
   it('renders an explicit integrity/API error state', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(JSON.stringify({ detail: 'artifact digest mismatch' }), { status: 409, headers: { 'Content-Type': 'application/json' } }))))
     renderAt('/?scope=scope_ui')

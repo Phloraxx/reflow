@@ -60,6 +60,35 @@ def _client(transport):
     )
 
 
+def test_payment_fetch_uses_documented_100_row_pages() -> None:
+    seen: list[str] = []
+
+    def transport(url: str, _headers, _timeout: float, _max_bytes: int):
+        seen.append(url)
+        query = parse_qs(urlsplit(url).query)
+        skip = int(query["skip"][0])
+        if skip == 0:
+            items = [
+                {
+                    "id": f"pay_page_{index}",
+                    "entity": "payment",
+                    "amount": 10000,
+                    "currency": "INR",
+                    "status": "captured",
+                }
+                for index in range(100)
+            ]
+        else:
+            items = []
+        return {"entity": "collection", "count": len(items), "items": items}
+
+    rows = _client(transport).fetch_payments()
+    assert len(rows) == 100
+    assert urlsplit(seen[0]).path == "/v1/payments"
+    assert parse_qs(urlsplit(seen[0]).query) == {"count": ["100"], "skip": ["0"]}
+    assert parse_qs(urlsplit(seen[1]).query) == {"count": ["100"], "skip": ["100"]}
+
+
 def test_settlement_fetch_paginates_with_documented_page_size() -> None:
     seen: list[str] = []
 

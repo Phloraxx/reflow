@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import domain
@@ -25,6 +25,8 @@ from .control_tower import (
     ControlTowerNotFound,
     ControlTowerReader,
 )
+from .evaluation.pitch_demo import PitchDatasetConfig, PitchDemoService
+from .evaluation.profiles import EvaluationProfile
 from .exception_cases import DispositionKind
 from .observability import (
     EventSink,
@@ -72,11 +74,14 @@ def create_control_tower_app(
     metrics_token: str | None = None,
     event_sink: EventSink | None = None,
     case_workflow: OperatorCaseWorkflowService | None = None,
+    pitch_demo: PitchDemoService | None = None,
 ) -> FastAPI:
     if auth_boundary is not None and operator_audit is None:
         raise RuntimeError("authenticated control tower requires operator audit persistence")
     if case_workflow is not None and auth_boundary is None:
         raise RuntimeError("case workflow writes require authenticated control tower mode")
+    if pitch_demo is not None and auth_boundary is not None:
+        raise RuntimeError("demo mode cannot run behind authenticated production mode")
 
     metrics_token = normalize_metrics_token(metrics_token)
 
@@ -147,6 +152,7 @@ def create_control_tower_app(
             if operator_audit is not None
             else "disabled",
             "metrics": "token_gated" if metrics_token is not None else "disabled",
+            "demo_mode": pitch_demo is not None,
         }
 
     def authenticated_principal(request: Request) -> AuthenticatedPrincipal | None:
@@ -354,6 +360,111 @@ def create_control_tower_app(
     @app.get("/internal/metrics", include_in_schema=False)
     def internal_metrics(request: Request) -> PlainTextResponse:
         return metrics_response(request, metrics=metrics_registry, token=metrics_token)
+
+    if pitch_demo is not None:
+
+        @app.get("/api/v1/demo/status")
+        def demo_status() -> dict[str, object]:
+            return pitch_demo.status()
+
+        @app.post("/api/v1/demo/reset")
+        def demo_reset() -> dict[str, object]:
+            pitch_demo.reset()
+            return pitch_demo.status()
+
+        @app.post("/api/v1/demo/generate")
+        async def demo_generate(request: Request) -> dict[str, object]:
+            try:
+                payload = await request.json()
+                if not isinstance(payload, Mapping):
+                    raise ValueError("dataset configuration must be an object")
+                count = payload.get("settlement_count", 500)
+                world_seed = payload.get("world_seed", 402)
+                observation_seed = payload.get("observation_seed", 1402)
+                profile_value = payload.get(
+                    "profile", EvaluationProfile.RECONCILIATION_ADVERSARIAL.value
+                )
+                if isinstance(count, bool) or not isinstance(count, int):
+                    raise ValueError("settlement_count must be integer")
+                if isinstance(world_seed, bool) or not isinstance(world_seed, int):
+                    raise ValueError("world_seed must be integer")
+                if isinstance(observation_seed, bool) or not isinstance(observation_seed, int):
+                    raise ValueError("observation_seed must be integer")
+                if not isinstance(profile_value, str):
+                    raise ValueError("profile must be string")
+                config = PitchDatasetConfig(
+                    settlement_count=count,
+                    profile=EvaluationProfile(profile_value),
+                    world_seed=world_seed,
+                    observation_seed=observation_seed,
+                )
+                return pitch_demo.generate(config)
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        @app.get("/api/v1/demo/run-stream")
+        def demo_run_stream() -> StreamingResponse:
+            def events() -> Iterator[str]:
+                try:
+                    for event in pitch_demo.run_stream():
+                        encoded = json.dumps(event, separators=(",", ":"))
+                        yield f"data: {encoded}\n\n"
+                except RuntimeError as exc:
+                    encoded = json.dumps({"event": "error", "detail": str(exc)})
+                    yield f"data: {encoded}\n\n"
+
+            return StreamingResponse(events(), media_type="text/event-stream")
+
+        @app.get("/api/v1/demo/settlements")
+        def demo_settlements(status: str | None = None) -> list[dict[str, object]]:
+            return pitch_demo.settlements(status=status)
+
+        @app.get("/api/v1/demo/settlements/{settlement_id}")
+        def demo_settlement_detail(settlement_id: str) -> dict[str, object]:
+            try:
+                return pitch_demo.settlement_detail(settlement_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="demo settlement not found") from exc
+            except RuntimeError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        @app.post("/api/v1/demo/unlock-truth")
+        def demo_unlock_truth() -> dict[str, object]:
+            try:
+                return pitch_demo.unlock_truth()
+            except RuntimeError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        @app.get("/api/v1/demo/razorpay-status")
+        def demo_razorpay_status() -> dict[str, object]:
+            return pitch_demo.razorpay_status()
+
+        @app.post("/api/v1/demo/razorpay-probe")
+        def demo_razorpay_probe() -> dict[str, object]:
+            try:
+                return pitch_demo.probe_razorpay()
+            except RuntimeError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        @app.get("/api/v1/demo/ai-status")
+        def demo_ai_status() -> dict[str, object]:
+            return pitch_demo.ai_status()
+
+        @app.post("/api/v1/demo/schema-adapter")
+        def demo_schema_adapter() -> dict[str, object]:
+            try:
+                return pitch_demo.propose_bank_schema_adapter()
+            except (ValueError, RuntimeError) as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        @app.post("/api/v1/demo/investigate/{settlement_id}")
+        def demo_investigate(settlement_id: str) -> dict[str, object]:
+            try:
+                return pitch_demo.investigate_settlement(settlement_id)
+            except KeyError as exc:
+                raise HTTPException(status_code=404, detail="demo settlement not found") from exc
+            except (ValueError, RuntimeError) as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     @app.get("/api/v1/scopes/{scope_id}/overview")
     def overview(request: Request, scope_id: str) -> dict[str, object]:
@@ -565,6 +676,17 @@ def app_from_env() -> FastAPI:
             raise RuntimeError("case workflow writes require Cloudflare Access authentication")
         case_workflow = OperatorCaseWorkflowService(reader, service)
 
+    demo_mode = os.getenv("REFLOW_JUDGE_DEMO", "disabled")
+    if demo_mode not in {"disabled", "enabled"}:
+        raise RuntimeError("REFLOW_JUDGE_DEMO must be 'disabled' or 'enabled'")
+    pitch_demo = None
+    if demo_mode == "enabled":
+        if auth_boundary is not None:
+            raise RuntimeError("demo mode requires REFLOW_AUTH_MODE=disabled")
+        if case_workflow is not None:
+            raise RuntimeError("demo mode cannot enable operator case writes")
+        pitch_demo = PitchDemoService()
+
     return create_control_tower_app(
         reader,
         web_dist=web_dist,
@@ -573,4 +695,5 @@ def app_from_env() -> FastAPI:
         operator_audit=operator_audit,
         metrics_token=metrics_token,
         case_workflow=case_workflow,
+        pitch_demo=pitch_demo,
     )
