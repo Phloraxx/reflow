@@ -10,7 +10,9 @@ ReFlow is an evidence-first **finance controller** built around a deterministic 
 
 ## 5-minute pitch
 
-**[Watch / download the final Razorpay Buildathon pitch →](https://github.com/Phloraxx/reflow/releases/tag/buildathon-2026)**
+**[Watch the 5-minute Razorpay Buildathon pitch →](https://youtu.be/71gKqiu8v4I)**
+
+**[Download the final pitch from the GitHub Release →](https://github.com/Phloraxx/reflow/releases/tag/buildathon-2026)**
 
 The pitch runs a reproducible 500-settlement adversarial workload live: **60,227 observed records, 317/317 automatic decisions correct, and 0 silent false matches**. A fuzzy baseline makes six additional automatic decisions; all six are wrong.
 
